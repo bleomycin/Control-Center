@@ -32,5 +32,9 @@ staticfiles/
 # Environment
 .env
 
+# Tailwind standalone CLI
+bin/
+static/css/tailwind.css
+
 # Claude Code
 .claude/

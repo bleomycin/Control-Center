@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Framework | Django 6.0.2 |
 | Database | SQLite |
 | Frontend | Django Templates + HTMX 2.0.4 |
-| CSS | Tailwind CSS (CDN) |
+| CSS | Tailwind CSS 3.4 (standalone CLI) |
 | Charts | Chart.js 4.x (CDN) |
 | PDF Export | reportlab 4.4.9 (platypus engine) |
 | Background Jobs | Django-Q2 (ORM broker) |
@@ -75,6 +75,11 @@ python manage.py test <app_name>.tests.<TestClass>
 
 # Make migrations after model changes
 python manage.py makemigrations
+
+# Tailwind CSS (standalone CLI — no Node.js required)
+make tailwind-install   # download binary to ./bin/tailwindcss
+make tailwind-build     # one-shot minified build → static/css/tailwind.css
+make tailwind-watch     # watch mode for development
 ```
 
 ## Apps & Architecture
@@ -83,7 +88,7 @@ Seven Django apps, all relationally linked:
 
 | App | Models | Purpose |
 |-----|--------|---------|
-| **dashboard** | (none) | Master homepage, global search, activity timeline, calendar view |
+| **dashboard** | EmailSettings | Master homepage, global search, activity timeline, calendar view, email/SMTP settings |
 | **stakeholders** | Stakeholder, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationship mapping, contact logs |
 | **assets** | RealEstate, Investment, Loan | Asset & liability tracker — properties, investments, loans with payment schedules |
 | **legal** | LegalMatter, Evidence | Legal matter management — case status, attorneys (M2M), evidence, related stakeholders/properties |
@@ -107,7 +112,8 @@ Seven Django apps, all relationally linked:
 - **Charts**: Chart.js 4.x on cash flow page — monthly trend bar chart + category breakdown doughnut chart. JSON endpoint at `cashflow/charts/data/` using `TruncMonth` + `Sum` aggregation.
 - **Liquidity Alerts**: `cashflow/alerts.py` — `get_liquidity_alerts()` returns alert dicts with 3 triggers: net negative monthly flow, large upcoming loan payments (>$5k/30 days), projected shortfall. Displayed via `partials/_alerts.html` on dashboard and cash flow page (context-aware: hides "View Cash Flow" link when already on that page).
 - **Currency formatting**: `django.contrib.humanize` `intcomma` filter for comma-separated dollar values across all templates
-- **Notifications**: `tasks/notifications.py` — 3 scheduled functions via django-q2 (overdue tasks, upcoming reminders, stale follow-ups)
+- **Notifications**: `tasks/notifications.py` — 3 scheduled functions via django-q2 (overdue tasks, upcoming reminders, stale follow-ups). SMTP config read from DB at runtime via `dashboard/email.py` helpers; master on/off switch via `EmailSettings.notifications_enabled`
+- **Email Settings**: `dashboard/models.py` — `EmailSettings` singleton (pk=1) stores SMTP config in DB. UI at `/settings/email/` with HTMX test-email button. `dashboard/email.py` provides `get_smtp_connection()`, `get_notification_addresses()`, `notifications_are_enabled()`. Admin registered with singleton enforcement (no add if exists, no delete)
 - **Button colour scheme**: Detail pages use purple (PDF/export), blue (Edit), green (Complete), red (Delete). List pages use purple for export buttons, blue for "+ New".
 - **Environment config**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks for SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_PATH, EMAIL_BACKEND — local dev works without `.env`
 - **Static files**: WhiteNoise serves static files in production (`CompressedManifestStaticFilesStorage` when `DEBUG=False`); standard Django staticfiles in dev
@@ -139,16 +145,16 @@ Seven Django apps, all relationally linked:
 - Liquidity alerts — net negative flow, large upcoming payments, projected shortfall (dashboard + cash flow page)
 - Currency values formatted with comma separators across all templates
 - Mobile-responsive button layout, summary cards, and calendar on all pages
-- Push notifications via django-q2 — overdue tasks, upcoming reminders, stale follow-ups (console email for dev)
+- Push notifications via django-q2 — overdue tasks, upcoming reminders, stale follow-ups
 - Notification schedule management command (`setup_schedules`)
+- Email settings UI — DB-backed SMTP configuration at `/settings/email/` with test email button, sidebar link, admin singleton enforcement
 - Friendly empty states with icons + CTA buttons on all list pages
 - HTMX loading indicators on all list page filters/searches
 - Colour-coded action buttons (purple exports, blue edit, green complete, red delete)
 - Docker deployment — single container with Gunicorn + WhiteNoise, env var config, named volumes
 - Unit/integration tests (210 tests across all modules)
+- Tailwind CSS switched from CDN to standalone CLI (v3.4.17) — compiled at build time, no Node.js required
 - GitHub repo: `trialskid/control-center`
 
 ### Next Steps
-- Switch Tailwind from CDN to standalone CLI for production
 - User authentication (currently no login required — fine for single-user VPN access)
-- SMTP email configuration for production notifications
