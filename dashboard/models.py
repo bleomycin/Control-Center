@@ -1,6 +1,26 @@
 from django.db import models
 
 
+class Notification(models.Model):
+    LEVEL_CHOICES = [
+        ("info", "Info"),
+        ("warning", "Warning"),
+        ("critical", "Critical"),
+    ]
+
+    message = models.CharField(max_length=500)
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default="info")
+    link = models.CharField(max_length=500, blank=True)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return self.message[:50]
+
+
 class EmailSettings(models.Model):
     """Singleton model for SMTP email configuration. Always use pk=1."""
 

@@ -1,9 +1,16 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}{{ matter.title }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
     <div>
-        <a href="{% url 'legal:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Legal Matters</a>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'legal:list' %}" class="hover:text-gray-300">Legal Matters</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ matter.title }}</span>
+        </nav>
         <h1 class="text-2xl font-bold text-white mt-2">{{ matter.title }}</h1>
         <div class="flex items-center gap-2 mt-2">
             <span class="text-xs px-2 py-0.5 rounded-full
@@ -38,7 +45,34 @@
         <p class="text-xs text-gray-400 uppercase tracking-wide">Filing Date</p>
         <p class="text-sm font-medium text-gray-200 mt-1">{{ matter.filing_date|date:"M j, Y"|default:"N/A" }}</p>
     </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Next Hearing</p>
+        <p class="text-sm font-medium {% if matter.next_hearing_date %}text-yellow-300{% else %}text-gray-200{% endif %} mt-1">{{ matter.next_hearing_date|date:"M j, Y"|default:"N/A" }}</p>
+    </div>
 </div>
+
+{% if matter.settlement_amount or matter.judgment_amount or matter.outcome %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    {% if matter.settlement_amount %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Settlement Amount</p>
+        <p class="text-xl font-bold text-green-400 mt-1">${{ matter.settlement_amount|floatformat:2|intcomma }}</p>
+    </div>
+    {% endif %}
+    {% if matter.judgment_amount %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Judgment Amount</p>
+        <p class="text-xl font-bold text-red-400 mt-1">${{ matter.judgment_amount|floatformat:2|intcomma }}</p>
+    </div>
+    {% endif %}
+    {% if matter.outcome %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 md:col-span-{% if matter.settlement_amount and matter.judgment_amount %}3{% elif matter.settlement_amount or matter.judgment_amount %}2{% else %}3{% endif %}">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Outcome</p>
+        <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ matter.outcome }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
 
 {% if matter.description %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">

@@ -7,10 +7,14 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = LegalMatter
         fields = ["title", "case_number", "matter_type", "status", "jurisdiction",
-                  "court", "filing_date", "description", "attorneys",
+                  "court", "filing_date", "next_hearing_date",
+                  "settlement_amount", "judgment_amount", "outcome",
+                  "description", "attorneys",
                   "related_stakeholders", "related_properties"]
         widgets = {
             "filing_date": forms.DateInput(attrs={"type": "date"}),
+            "next_hearing_date": forms.DateInput(attrs={"type": "date"}),
+            "outcome": forms.Textarea(attrs={"rows": 3}),
             "description": forms.Textarea(attrs={"rows": 4}),
             "attorneys": forms.SelectMultiple(attrs={"size": 4}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": 4}),

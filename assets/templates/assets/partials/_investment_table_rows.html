@@ -1,13 +1,16 @@
 {% load humanize %}
 {% for inv in investments %}
 <tr class="hover:bg-gray-700/50 transition-colors">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ inv.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
     <td class="px-4 py-3"><a href="{{ inv.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ inv.name }}</a></td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ inv.investment_type|default:"-" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ inv.institution|default:"-" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300">${{ inv.current_value|floatformat:0|intcomma|default:"-" }}</td>
 </tr>
 {% empty %}
-<tr><td colspan="4" class="px-4 py-12 text-center">
+<tr><td colspan="5" class="px-4 py-12 text-center">
     <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
     <p class="text-sm text-gray-500 mb-3">No investments found</p>
     <a href="{% url 'assets:investment_create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Investment</a>

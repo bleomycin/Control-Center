@@ -6,12 +6,14 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from assets.models import Loan
+from assets.models import Investment, Loan, RealEstate
 from cashflow.models import CashFlowEntry
+from legal.models import LegalMatter
 from notes.models import Note
 from stakeholders.models import ContactLog, Stakeholder
 from tasks.models import FollowUp, Task
 
+from .models import Notification
 from .views import _parse_date, get_activity_timeline
 
 
@@ -23,7 +25,8 @@ class DashboardViewTests(TestCase):
     def test_context_keys(self):
         resp = self.client.get(reverse("dashboard:index"))
         for key in ("overdue_tasks", "upcoming_tasks", "stale_followups",
-                     "recent_activity", "liquidity_alerts", "cashflow"):
+                     "recent_activity", "liquidity_alerts", "cashflow",
+                     "net_worth", "upcoming_deadlines"):
             self.assertIn(key, resp.context, f"Missing context key: {key}")
 
     def test_overdue_tasks_in_context(self):
@@ -228,3 +231,93 @@ class CalendarTests(TestCase):
     def test_parse_date_empty(self):
         result = _parse_date("")
         self.assertIsNone(result)
+
+    def test_hearing_events_in_calendar(self):
+        LegalMatter.objects.create(
+            title="Hearing Matter",
+            status="active",
+            next_hearing_date=timezone.localdate() + timedelta(days=5),
+        )
+        resp = self.client.get(reverse("dashboard:calendar_events"))
+        data = json.loads(resp.content)
+        hearing_events = [e for e in data if e.get("extendedProps", {}).get("type") == "hearing"]
+        self.assertTrue(len(hearing_events) >= 1)
+
+
+class NetWorthTests(TestCase):
+    def test_net_worth_calculation(self):
+        RealEstate.objects.create(name="Prop1", address="1 Main", estimated_value=Decimal("500000"), status="owned")
+        RealEstate.objects.create(name="Prop2", address="2 Main", estimated_value=Decimal("300000"), status="sold")
+        Investment.objects.create(name="Inv1", current_value=Decimal("100000"))
+        Loan.objects.create(name="Loan1", current_balance=Decimal("200000"), status="active")
+        Loan.objects.create(name="Loan2", current_balance=Decimal("50000"), status="paid_off")
+
+        resp = self.client.get(reverse("dashboard:index"))
+        nw = resp.context["net_worth"]
+        # total assets = 500000 (prop1, prop2 excluded because sold) + 100000 = 600000
+        self.assertEqual(nw["total_assets"], Decimal("600000"))
+        # liabilities = 200000 (only active loans)
+        self.assertEqual(nw["total_liabilities"], Decimal("200000"))
+        # net = 400000
+        self.assertEqual(nw["net_worth"], Decimal("400000"))
+
+    def test_upcoming_deadlines_aggregation(self):
+        today = timezone.localdate()
+        Task.objects.create(title="Due Task", due_date=today + timedelta(days=5), status="not_started")
+        Loan.objects.create(name="Payment Loan", status="active", next_payment_date=today + timedelta(days=10))
+        LegalMatter.objects.create(title="Hearing Matter", status="active", next_hearing_date=today + timedelta(days=15))
+
+        resp = self.client.get(reverse("dashboard:index"))
+        deadlines = resp.context["upcoming_deadlines"]
+        types = {d["type"] for d in deadlines}
+        self.assertIn("task", types)
+        self.assertIn("payment", types)
+        self.assertIn("hearing", types)
+        # Sorted by date
+        dates = [d["date"] for d in deadlines]
+        self.assertEqual(dates, sorted(dates))
+
+    def test_asset_risk_properties(self):
+        RealEstate.objects.create(name="Disputed Prop", address="1 Main", status="in_dispute")
+        resp = self.client.get(reverse("dashboard:index"))
+        self.assertTrue(resp.context["has_asset_risks"])
+        self.assertTrue(resp.context["at_risk_properties"].exists())
+
+    def test_asset_risk_loans(self):
+        Loan.objects.create(name="Default Loan", status="defaulted")
+        resp = self.client.get(reverse("dashboard:index"))
+        self.assertTrue(resp.context["has_asset_risks"])
+        self.assertTrue(resp.context["at_risk_loans"].exists())
+
+
+class NotificationTests(TestCase):
+    def test_notification_list(self):
+        Notification.objects.create(message="Test alert", level="info")
+        resp = self.client.get(reverse("dashboard:notifications"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test alert")
+
+    def test_badge_shows_unread(self):
+        Notification.objects.create(message="Unread", level="info")
+        resp = self.client.get(reverse("dashboard:notifications_badge"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "1")
+
+    def test_badge_empty_when_read(self):
+        Notification.objects.create(message="Read", level="info", is_read=True)
+        resp = self.client.get(reverse("dashboard:notifications_badge"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "1")
+
+    def test_mark_read(self):
+        Notification.objects.create(message="To Read", level="warning")
+        self.assertEqual(Notification.objects.filter(is_read=False).count(), 1)
+        resp = self.client.post(reverse("dashboard:notifications_mark_read"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Notification.objects.filter(is_read=False).count(), 0)
+
+    def test_notification_ordering(self):
+        n1 = Notification.objects.create(message="First")
+        n2 = Notification.objects.create(message="Second")
+        notifications = list(Notification.objects.all())
+        self.assertEqual(notifications[0], n2)  # newest first

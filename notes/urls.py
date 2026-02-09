@@ -14,4 +14,6 @@ urlpatterns = [
     path("<int:pk>/attachment/add/", views.attachment_add, name="attachment_add"),
     path("attachment/<int:pk>/delete/", views.attachment_delete, name="attachment_delete"),
     path("quick-capture/", views.quick_capture, name="quick_capture"),
+    path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
+    path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
 ]

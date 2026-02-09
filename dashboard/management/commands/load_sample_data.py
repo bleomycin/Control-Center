@@ -214,10 +214,27 @@ class Command(BaseCommand):
              "updating beneficiary designations, power of attorney refresh.",
              ["Dr. Helen Park"], [], []),
         ]
+        # Hearing dates and financial amounts per matter
+        lm_extras = {
+            "Holston Eviction - 1200 Oak Ave": {
+                "next_hearing_date": today + timedelta(days=21),
+                "judgment_amount": Decimal("4200.00"),
+            },
+            "Cedar Lane Boundary Dispute": {
+                "next_hearing_date": today + timedelta(days=45),
+            },
+            "Magnolia Blvd Acquisition - Due Diligence": {},
+            "Riverside Zoning Application": {
+                "next_hearing_date": today + timedelta(days=14),
+            },
+            "Estate Plan Update": {},
+        }
         for title, case, mtype, status, juris, court, filed, desc, attys, shs, props in lm_data:
+            extras = lm_extras.get(title, {})
             lm = LegalMatter.objects.create(
                 title=title, case_number=case, matter_type=mtype, status=status,
                 jurisdiction=juris, court=court, filing_date=filed, description=desc,
+                **extras,
             )
             for a in attys:
                 lm.attorneys.add(stakeholders[a])

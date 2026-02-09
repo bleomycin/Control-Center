@@ -77,6 +77,56 @@ def dashboard(request):
 
     from cashflow.alerts import get_liquidity_alerts
 
+    # Net Worth calculation
+    total_real_estate = RealEstate.objects.exclude(status="sold").aggregate(
+        total=Sum("estimated_value"),
+    )["total"] or 0
+    total_investments = Investment.objects.aggregate(
+        total=Sum("current_value"),
+    )["total"] or 0
+    total_assets = total_real_estate + total_investments
+    total_liabilities = Loan.objects.filter(status="active").aggregate(
+        total=Sum("current_balance"),
+    )["total"] or 0
+    net_worth = total_assets - total_liabilities
+
+    # Upcoming Deadlines (next 30 days, unified)
+    deadline_horizon = today + timedelta(days=30)
+    upcoming_deadlines = []
+    for task in Task.objects.filter(
+        due_date__gte=today, due_date__lte=deadline_horizon,
+    ).exclude(status="complete").select_related("related_stakeholder"):
+        upcoming_deadlines.append({
+            "date": task.due_date, "type": "task", "color": "yellow",
+            "title": task.title, "url": task.get_absolute_url(),
+        })
+    for loan in Loan.objects.filter(
+        status="active", next_payment_date__gte=today,
+        next_payment_date__lte=deadline_horizon,
+    ):
+        upcoming_deadlines.append({
+            "date": loan.next_payment_date, "type": "payment", "color": "red",
+            "title": f"Payment: {loan.name}", "url": loan.get_absolute_url(),
+        })
+    for matter in LegalMatter.objects.filter(
+        next_hearing_date__gte=today, next_hearing_date__lte=deadline_horizon,
+    ).exclude(status="resolved"):
+        upcoming_deadlines.append({
+            "date": matter.next_hearing_date, "type": "hearing", "color": "purple",
+            "title": f"Hearing: {matter.title}", "url": matter.get_absolute_url(),
+        })
+    upcoming_deadlines.sort(key=lambda x: x["date"])
+
+    # Asset Risk
+    from django.db.models import Q as DQ
+    at_risk_properties = RealEstate.objects.filter(
+        DQ(status="in_dispute") | DQ(legal_matters__status__in=["active", "pending"]),
+    ).distinct()
+    at_risk_loans = Loan.objects.filter(
+        status__in=["defaulted", "in_dispute"],
+    )
+    has_asset_risks = at_risk_properties.exists() or at_risk_loans.exists()
+
     context = {
         "overdue_tasks": overdue_tasks,
         "upcoming_tasks": upcoming_tasks,
@@ -91,6 +141,15 @@ def dashboard(request):
             "projected_inflows": projected_inflows,
             "projected_outflows": projected_outflows,
         },
+        "net_worth": {
+            "total_assets": total_assets,
+            "total_liabilities": total_liabilities,
+            "net_worth": net_worth,
+        },
+        "upcoming_deadlines": upcoming_deadlines,
+        "at_risk_properties": at_risk_properties,
+        "at_risk_loans": at_risk_loans,
+        "has_asset_risks": has_asset_risks,
     }
 
     return render(request, "dashboard/index.html", context)
@@ -306,6 +365,21 @@ def calendar_events(request):
             "extendedProps": {"type": "legal"},
         })
 
+    # Legal hearing dates (dark purple)
+    hearings = LegalMatter.objects.filter(next_hearing_date__isnull=False).exclude(status="resolved")
+    if start:
+        hearings = hearings.filter(next_hearing_date__gte=start)
+    if end:
+        hearings = hearings.filter(next_hearing_date__lte=end)
+    for matter in hearings:
+        events.append({
+            "title": f"Hearing: {matter.title}",
+            "start": str(matter.next_hearing_date),
+            "url": matter.get_absolute_url(),
+            "color": "#7c3aed",
+            "extendedProps": {"type": "hearing"},
+        })
+
     # Contact follow-up dates (blue)
     contacts = ContactLog.objects.filter(
         follow_up_needed=True, follow_up_date__isnull=False
@@ -365,3 +439,22 @@ def test_email(request):
             "success": False,
             "message": f"Failed to send: {e}",
         })
+
+
+def notifications_list(request):
+    from dashboard.models import Notification
+    notifications = Notification.objects.all()[:100]
+    return render(request, "dashboard/notifications.html", {"notifications": notifications})
+
+
+def notifications_badge(request):
+    from dashboard.models import Notification
+    count = Notification.objects.filter(is_read=False).count()
+    return render(request, "dashboard/partials/_notification_badge.html", {"unread_count": count})
+
+
+@require_POST
+def notifications_mark_read(request):
+    from dashboard.models import Notification
+    Notification.objects.filter(is_read=False).update(is_read=True)
+    return render(request, "dashboard/partials/_notification_badge.html", {"unread_count": 0})

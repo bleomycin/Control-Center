@@ -15,4 +15,7 @@ urlpatterns = [
     path("<int:pk>/toggle/", views.toggle_complete, name="toggle_complete"),
     path("<int:pk>/followup/add/", views.followup_add, name="followup_add"),
     path("followup/<int:pk>/delete/", views.followup_delete, name="followup_delete"),
+    path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
+    path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
+    path("bulk/complete/", views.bulk_complete, name="bulk_complete"),
 ]

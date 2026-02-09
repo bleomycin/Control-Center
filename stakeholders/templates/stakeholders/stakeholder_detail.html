@@ -4,7 +4,13 @@
 {% block content %}
 <div class="mb-6">
     <div>
-        <a href="{% url 'stakeholders:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Stakeholders</a>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'stakeholders:list' %}" class="hover:text-gray-300">Stakeholders</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ stakeholder.name }}</span>
+        </nav>
         <h1 class="text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
         <p class="text-sm text-gray-400 mt-1">{{ stakeholder.get_entity_type_display }}{% if stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}</p>
     </div>
@@ -84,6 +90,59 @@
         {% endfor %}
     </div>
 </div>
+{% endif %}
+
+<!-- Relationship Graph -->
+{% if relationships_from or relationships_to %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Relationship Network</h2>
+    </div>
+    <div id="cy" style="height: 400px; width: 100%;"></div>
+</div>
+<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script>
+(function() {
+    fetch("{% url 'stakeholders:graph_data' stakeholder.pk %}")
+        .then(r => r.json())
+        .then(data => {
+            const elements = [];
+            data.nodes.forEach(n => {
+                elements.push({ data: { id: n.id, label: n.name, type: n.type, url: n.url, is_center: n.is_center } });
+            });
+            data.edges.forEach(e => {
+                elements.push({ data: { source: e.source, target: e.target, label: e.label } });
+            });
+            const cy = cytoscape({
+                container: document.getElementById('cy'),
+                elements: elements,
+                style: [
+                    { selector: 'node', style: {
+                        'label': 'data(label)', 'text-valign': 'bottom', 'text-halign': 'center',
+                        'background-color': '#6366f1', 'color': '#d1d5db', 'font-size': '11px',
+                        'text-margin-y': 6, 'width': 30, 'height': 30,
+                    }},
+                    { selector: 'node[?is_center]', style: {
+                        'background-color': '#3b82f6', 'width': 40, 'height': 40,
+                        'border-width': 3, 'border-color': '#60a5fa',
+                    }},
+                    { selector: 'edge', style: {
+                        'label': 'data(label)', 'color': '#6b7280', 'font-size': '9px',
+                        'line-color': '#4b5563', 'target-arrow-color': '#4b5563',
+                        'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'width': 1.5,
+                        'text-rotation': 'autorotate', 'text-margin-y': -8,
+                    }},
+                ],
+                layout: { name: 'cose', animate: false, padding: 30 },
+                userZoomingEnabled: true, userPanningEnabled: true,
+            });
+            cy.on('tap', 'node', function(evt) {
+                const url = evt.target.data('url');
+                if (url) window.location.href = url;
+            });
+        });
+})();
+</script>
 {% endif %}
 
 <!-- Related Records Grid -->

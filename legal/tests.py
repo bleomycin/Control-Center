@@ -1,3 +1,6 @@
+from datetime import date, timedelta
+from decimal import Decimal
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -47,6 +50,25 @@ class LegalMatterModelTests(TestCase):
         prop = RealEstate.objects.create(name="Test Prop", address="123 Main")
         self.matter.related_properties.add(prop)
         self.assertIn(prop, self.matter.related_properties.all())
+
+    def test_new_fields_nullable(self):
+        m = LegalMatter.objects.create(title="No Extras")
+        self.assertIsNone(m.next_hearing_date)
+        self.assertIsNone(m.settlement_amount)
+        self.assertIsNone(m.judgment_amount)
+        self.assertEqual(m.outcome, "")
+
+    def test_new_fields_with_values(self):
+        m = LegalMatter.objects.create(
+            title="With Extras",
+            next_hearing_date=date.today() + timedelta(days=30),
+            settlement_amount=Decimal("50000.00"),
+            judgment_amount=Decimal("75000.00"),
+            outcome="Settled out of court.",
+        )
+        self.assertEqual(m.settlement_amount, Decimal("50000.00"))
+        self.assertEqual(m.judgment_amount, Decimal("75000.00"))
+        self.assertEqual(m.outcome, "Settled out of court.")
 
 
 class EvidenceModelTests(TestCase):
@@ -145,3 +167,30 @@ class LegalViewTests(TestCase):
         resp = self.client.post(reverse("legal:evidence_delete", args=[ev.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Evidence.objects.filter(pk=ev.pk).exists())
+
+    def test_csv_includes_new_fields(self):
+        LegalMatter.objects.create(
+            title="CSV Test",
+            next_hearing_date=date.today() + timedelta(days=10),
+            settlement_amount=Decimal("25000.00"),
+        )
+        resp = self.client.get(reverse("legal:export_csv"))
+        content = resp.content.decode()
+        self.assertIn("Next Hearing", content)
+        self.assertIn("Settlement Amount", content)
+
+    def test_pdf_includes_hearing_date(self):
+        m = LegalMatter.objects.create(
+            title="PDF Test",
+            next_hearing_date=date.today() + timedelta(days=10),
+        )
+        resp = self.client.get(reverse("legal:export_pdf", args=[m.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_list_shows_hearing_column(self):
+        LegalMatter.objects.create(
+            title="Hearing Test",
+            next_hearing_date=date.today() + timedelta(days=5),
+        )
+        resp = self.client.get(reverse("legal:list"))
+        self.assertContains(resp, "Hearing")
