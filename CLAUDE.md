@@ -18,9 +18,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Charts | Chart.js 4.x (CDN) |
 | PDF Export | reportlab 4.4.9 (platypus engine) |
 | Background Jobs | Django-Q2 (ORM broker) |
-| Deployment | Gunicorn + Nginx on Linux |
+| Static Files | WhiteNoise 6.9.0 |
+| Deployment | Docker (Gunicorn + WhiteNoise) |
 
 ## Build & Run Commands
+
+### Docker (recommended)
+
+```bash
+cp .env.example .env    # edit SECRET_KEY for production
+docker compose up --build
+
+# Run tests inside container
+docker compose exec web python manage.py test
+
+# Shell into container
+docker compose exec web bash
+```
+
+### Local Development
 
 ```bash
 # Create virtual environment
@@ -93,7 +109,10 @@ Seven Django apps, all relationally linked:
 - **Currency formatting**: `django.contrib.humanize` `intcomma` filter for comma-separated dollar values across all templates
 - **Notifications**: `tasks/notifications.py` — 3 scheduled functions via django-q2 (overdue tasks, upcoming reminders, stale follow-ups)
 - **Button colour scheme**: Detail pages use purple (PDF/export), blue (Edit), green (Complete), red (Delete). List pages use purple for export buttons, blue for "+ New".
-- **ALLOWED_HOSTS**: Set to `["*"]` for development (lock down for production)
+- **Environment config**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks for SECRET_KEY, DEBUG, ALLOWED_HOSTS, DATABASE_PATH, EMAIL_BACKEND — local dev works without `.env`
+- **Static files**: WhiteNoise serves static files in production (`CompressedManifestStaticFilesStorage` when `DEBUG=False`); standard Django staticfiles in dev
+- **Media serving**: Unconditional `re_path` in `urls.py` (no Nginx needed for single-user app)
+- **Docker**: Single container runs Gunicorn (foreground) + qcluster (background). `entrypoint.sh` handles migrate, collectstatic, createsuperuser, sample data loading. Named volumes for SQLite (`blaine-data`) and media (`blaine-media`)
 
 ## Current Status
 
@@ -125,10 +144,11 @@ Seven Django apps, all relationally linked:
 - Friendly empty states with icons + CTA buttons on all list pages
 - HTMX loading indicators on all list page filters/searches
 - Colour-coded action buttons (purple exports, blue edit, green complete, red delete)
+- Docker deployment — single container with Gunicorn + WhiteNoise, env var config, named volumes
+- Unit/integration tests (210 tests across all modules)
+- GitHub repo: `trialskid/control-center`
 
 ### Next Steps
-- Production deployment (Gunicorn + Nginx, proper ALLOWED_HOSTS, static file collection)
 - Switch Tailwind from CDN to standalone CLI for production
 - User authentication (currently no login required — fine for single-user VPN access)
 - SMTP email configuration for production notifications
-- Unit/integration tests

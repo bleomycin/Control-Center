@@ -154,15 +154,10 @@ Q_CLUSTER = {
     'orm': 'default',
 }
 
-# Email configuration (console for dev — switch to SMTP for production)
+# Email configuration
+# NOTE: SMTP settings for notifications are now managed via the UI at /settings/email/
+# (dashboard.models.EmailSettings). The settings below are kept as Django defaults.
 EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
-# For production, uncomment and configure:
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_HOST = 'smtp.example.com'
-# EMAIL_PORT = 587
-# EMAIL_USE_TLS = True
-# EMAIL_HOST_USER = 'your-email@example.com'
-# EMAIL_HOST_PASSWORD = 'your-password'
 
 ADMIN_EMAIL = 'admin@blaine.local'
 DEFAULT_FROM_EMAIL = 'noreply@blaine.local'

@@ -1,6 +1,8 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.core import mail
+from django.core.mail.backends.locmem import EmailBackend as LocMemBackend
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -233,6 +235,23 @@ class NotificationTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.stakeholder = Stakeholder.objects.create(name="Notify Person")
+
+    def setUp(self):
+        from dashboard.models import EmailSettings
+
+        EmailSettings.objects.update_or_create(pk=1, defaults={
+            "smtp_host": "localhost",
+            "from_email": "test@blaine.local",
+            "admin_email": "admin@blaine.local",
+            "notifications_enabled": True,
+        })
+        # Use in-memory email backend so tests don't need a real SMTP server
+        patcher = patch(
+            "dashboard.email.get_smtp_connection",
+            return_value=LocMemBackend(),
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def test_overdue_sends_email(self):
         Task.objects.create(
