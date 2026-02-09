@@ -72,9 +72,12 @@ class StakeholderDetailView(DetailView):
         ctx["all_tasks"] = obj.tasks.all()
         ctx["all_notes"] = obj.notes.all()
         ctx["all_legal_matters"] = obj.legal_matters.all()
-        ctx["all_properties"] = obj.properties.all()
-        ctx["all_investments"] = obj.investments.all()
-        ctx["all_loans"] = obj.loans_as_lender.all()
+
+        # Properties, investments, loans via through models
+        from assets.models import RealEstate, Investment, Loan
+        ctx["all_properties"] = RealEstate.objects.filter(ownerships__stakeholder=obj).distinct()
+        ctx["all_investments"] = Investment.objects.filter(participants__stakeholder=obj).distinct()
+        ctx["all_loans"] = Loan.objects.filter(parties__stakeholder=obj).distinct()
         ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
 
         # Relationships
@@ -258,20 +261,32 @@ def relationship_graph_data(request, pk):
             edges.append({"source": f"s-{rel.from_stakeholder.pk}",
                          "target": f"s-{rel.to_stakeholder.pk}", "label": rel.relationship_type})
 
-    # Properties
-    for prop in center.properties.all():
+    # Properties (via ownership)
+    for ownership in center.property_ownerships.all():
+        prop = ownership.property
         add_node(f"p-{prop.pk}", prop.name, "Property", "roundrectangle", prop.get_absolute_url())
-        edges.append({"source": f"s-{center.pk}", "target": f"p-{prop.pk}", "label": "owns"})
+        label = ownership.role or "owns"
+        if ownership.ownership_percentage:
+            label += f" ({ownership.ownership_percentage}%)"
+        edges.append({"source": f"s-{center.pk}", "target": f"p-{prop.pk}", "label": label})
 
-    # Investments
-    for inv in center.investments.all():
+    # Investments (via participation)
+    for participation in center.investment_participations.all():
+        inv = participation.investment
         add_node(f"i-{inv.pk}", inv.name, "Investment", "diamond", inv.get_absolute_url())
-        edges.append({"source": f"s-{center.pk}", "target": f"i-{inv.pk}", "label": "invests"})
+        label = participation.role or "invests"
+        if participation.ownership_percentage:
+            label += f" ({participation.ownership_percentage}%)"
+        edges.append({"source": f"s-{center.pk}", "target": f"i-{inv.pk}", "label": label})
 
-    # Loans (as lender)
-    for loan in center.loans_as_lender.all():
+    # Loans (via loan parties)
+    for party in center.loan_parties.all():
+        loan = party.loan
         add_node(f"l-{loan.pk}", loan.name, "Loan", "triangle", loan.get_absolute_url())
-        edges.append({"source": f"s-{center.pk}", "target": f"l-{loan.pk}", "label": "lender"})
+        label = party.role or "party"
+        if party.ownership_percentage:
+            label += f" ({party.ownership_percentage}%)"
+        edges.append({"source": f"s-{center.pk}", "target": f"l-{loan.pk}", "label": label})
 
     # Legal matters (as attorney or related party)
     for matter in center.legal_matters.all():
