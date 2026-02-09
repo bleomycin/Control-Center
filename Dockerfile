@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Build Tailwind CSS (download binary, compile, remove binary)
-RUN curl -sLo /tmp/tailwindcss https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64 \
+# python:3.12-slim has neither curl nor wget, so use Python to download
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/tailwindlabs/tailwindcss/releases/download/v3.4.17/tailwindcss-linux-x64', '/tmp/tailwindcss')" \
     && chmod +x /tmp/tailwindcss \
     && /tmp/tailwindcss -i static/css/input.css -o static/css/tailwind.css --minify \
     && rm /tmp/tailwindcss
