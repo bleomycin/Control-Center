@@ -1,0 +1,15 @@
+{% load humanize %}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Total Assets</p>
+        <p class="text-xl font-bold text-blue-400 mt-1">${{ net_worth.total_assets|floatformat:0|intcomma }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Total Liabilities</p>
+        <p class="text-xl font-bold text-red-400 mt-1">${{ net_worth.total_liabilities|floatformat:0|intcomma }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Net Worth</p>
+        <p class="text-xl font-bold {% if net_worth.net_worth >= 0 %}text-green-400{% else %}text-red-400{% endif %} mt-1">${{ net_worth.net_worth|floatformat:0|intcomma }}</p>
+    </div>
+</div>

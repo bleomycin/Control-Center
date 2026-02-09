@@ -1,11 +1,11 @@
 from django.contrib import messages
-from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from .forms import ContactLogForm, StakeholderForm
-from .models import ContactLog, Stakeholder
+from .models import ContactLog, Relationship, Stakeholder
 
 
 class StakeholderListView(ListView):
@@ -19,9 +19,14 @@ class StakeholderListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
-        entity_type = self.request.GET.get("type")
-        if entity_type:
-            qs = qs.filter(entity_type=entity_type)
+        entity_types = self.request.GET.getlist("type")
+        if entity_types:
+            qs = qs.filter(entity_type__in=entity_types)
+        ALLOWED_SORTS = {"name", "entity_type", "organization", "trust_rating", "risk_rating"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -34,6 +39,9 @@ class StakeholderListView(ListView):
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["entity_types"] = Stakeholder.ENTITY_TYPE_CHOICES
         ctx["selected_type"] = self.request.GET.get("type", "")
+        ctx["selected_types"] = self.request.GET.getlist("type")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -170,3 +178,76 @@ def contact_log_delete(request, pk):
         log.delete()
     return render(request, "stakeholders/partials/_contact_log_list.html",
                   {"contact_logs": stakeholder.contact_logs.all()[:10], "stakeholder": stakeholder})
+
+
+def relationship_graph_data(request, pk):
+    """JSON endpoint for Cytoscape.js relationship graph."""
+    center = get_object_or_404(Stakeholder, pk=pk)
+    nodes = {}
+    edges = []
+
+    def add_node(s, is_center=False):
+        if s.pk not in nodes:
+            nodes[s.pk] = {
+                "id": str(s.pk),
+                "name": s.name,
+                "type": s.get_entity_type_display(),
+                "url": s.get_absolute_url(),
+                "is_center": is_center,
+            }
+
+    add_node(center, is_center=True)
+
+    # Direct relationships (1st degree)
+    connected_ids = set()
+    for rel in Relationship.objects.filter(from_stakeholder=center).select_related("to_stakeholder"):
+        add_node(rel.to_stakeholder)
+        connected_ids.add(rel.to_stakeholder.pk)
+        edges.append({"source": str(center.pk), "target": str(rel.to_stakeholder.pk), "label": rel.relationship_type})
+    for rel in Relationship.objects.filter(to_stakeholder=center).select_related("from_stakeholder"):
+        add_node(rel.from_stakeholder)
+        connected_ids.add(rel.from_stakeholder.pk)
+        edges.append({"source": str(rel.from_stakeholder.pk), "target": str(center.pk), "label": rel.relationship_type})
+
+    # 2nd degree relationships (between connected stakeholders)
+    if connected_ids:
+        for rel in Relationship.objects.filter(
+            from_stakeholder_id__in=connected_ids,
+            to_stakeholder_id__in=connected_ids,
+        ).select_related("from_stakeholder", "to_stakeholder"):
+            add_node(rel.from_stakeholder)
+            add_node(rel.to_stakeholder)
+            edges.append({"source": str(rel.from_stakeholder.pk), "target": str(rel.to_stakeholder.pk), "label": rel.relationship_type})
+
+    return JsonResponse({"nodes": list(nodes.values()), "edges": edges})
+
+
+def bulk_delete(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Stakeholder.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("stakeholders:bulk_delete"),
+            })
+        Stakeholder.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} stakeholder(s) deleted.")
+    return redirect("stakeholders:list")
+
+
+def bulk_export_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = Stakeholder.objects.filter(pk__in=pks) if pks else Stakeholder.objects.none()
+    fields = [
+        ("name", "Name"),
+        ("entity_type", "Type"),
+        ("email", "Email"),
+        ("phone", "Phone"),
+        ("organization", "Organization"),
+        ("trust_rating", "Trust Rating"),
+        ("risk_rating", "Risk Rating"),
+    ]
+    return do_export(qs, fields, "stakeholders_selected")

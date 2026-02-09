@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
@@ -21,12 +21,23 @@ class TaskListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
-        status = self.request.GET.get("status")
-        if status:
-            qs = qs.filter(status=status)
+        statuses = self.request.GET.getlist("status")
+        if statuses:
+            qs = qs.filter(status__in=statuses)
         priority = self.request.GET.get("priority")
         if priority:
             qs = qs.filter(priority=priority)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(due_date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(due_date__lte=date_to)
+        ALLOWED_SORTS = {"title", "status", "priority", "due_date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -41,6 +52,11 @@ class TaskListView(ListView):
         ctx["priority_choices"] = Task.PRIORITY_CHOICES
         ctx["selected_status"] = self.request.GET.get("status", "")
         ctx["selected_priority"] = self.request.GET.get("priority", "")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["selected_statuses"] = self.request.GET.getlist("status")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -198,3 +214,39 @@ def followup_delete(request, pk):
         fu.delete()
     return render(request, "tasks/partials/_followup_list.html",
                   {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
+
+
+def bulk_delete(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Task.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("tasks:bulk_delete"),
+            })
+        Task.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} task(s) deleted.")
+    return redirect("tasks:list")
+
+
+def bulk_export_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = Task.objects.filter(pk__in=pks) if pks else Task.objects.none()
+    fields = [
+        ("title", "Title"),
+        ("status", "Status"),
+        ("priority", "Priority"),
+        ("due_date", "Due Date"),
+    ]
+    return do_export(qs, fields, "tasks_selected")
+
+
+def bulk_complete(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Task.objects.filter(pk__in=pks).exclude(status="complete").update(status="complete")
+        messages.success(request, f"{count} task(s) marked complete.")
+    return redirect("tasks:list")

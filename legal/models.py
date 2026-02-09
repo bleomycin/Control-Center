@@ -24,6 +24,10 @@ class LegalMatter(models.Model):
     jurisdiction = models.CharField(max_length=255, blank=True)
     court = models.CharField(max_length=255, blank=True)
     filing_date = models.DateField(null=True, blank=True)
+    next_hearing_date = models.DateField(null=True, blank=True)
+    settlement_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    judgment_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    outcome = models.TextField(blank=True)
     description = models.TextField(blank=True)
     attorneys = models.ManyToManyField(
         "stakeholders.Stakeholder", blank=True, related_name="legal_matters_as_attorney",

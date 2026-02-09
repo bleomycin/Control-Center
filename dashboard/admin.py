@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import EmailSettings
+from .models import EmailSettings, Notification
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("message", "level", "is_read", "created_at")
+    list_filter = ("level", "is_read")
 
 
 @admin.register(EmailSettings)

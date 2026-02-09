@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
@@ -18,12 +18,29 @@ class LegalMatterListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
-        status = self.request.GET.get("status")
-        if status:
-            qs = qs.filter(status=status)
+        statuses = self.request.GET.getlist("status")
+        if statuses:
+            qs = qs.filter(status__in=statuses)
         matter_type = self.request.GET.get("type")
         if matter_type:
             qs = qs.filter(matter_type=matter_type)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(filing_date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(filing_date__lte=date_to)
+        hearing_date_from = self.request.GET.get("hearing_date_from")
+        if hearing_date_from:
+            qs = qs.filter(next_hearing_date__gte=hearing_date_from)
+        hearing_date_to = self.request.GET.get("hearing_date_to")
+        if hearing_date_to:
+            qs = qs.filter(next_hearing_date__lte=hearing_date_to)
+        ALLOWED_SORTS = {"title", "status", "matter_type", "filing_date", "next_hearing_date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -38,6 +55,13 @@ class LegalMatterListView(ListView):
         ctx["type_choices"] = LegalMatter.MATTER_TYPE_CHOICES
         ctx["selected_status"] = self.request.GET.get("status", "")
         ctx["selected_type"] = self.request.GET.get("type", "")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["hearing_date_from"] = self.request.GET.get("hearing_date_from", "")
+        ctx["hearing_date_to"] = self.request.GET.get("hearing_date_to", "")
+        ctx["selected_statuses"] = self.request.GET.getlist("status")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -97,6 +121,9 @@ def export_csv(request):
         ("jurisdiction", "Jurisdiction"),
         ("court", "Court"),
         ("filing_date", "Filing Date"),
+        ("next_hearing_date", "Next Hearing"),
+        ("settlement_amount", "Settlement Amount"),
+        ("judgment_amount", "Judgment Amount"),
     ]
     return do_export(qs, fields, "legal_matters")
 
@@ -110,8 +137,13 @@ def export_pdf_detail(request, pk):
             ("Jurisdiction", m.jurisdiction or "N/A"),
             ("Court", m.court or "N/A"),
             ("Filing Date", m.filing_date.strftime("%b %d, %Y") if m.filing_date else "N/A"),
+            ("Next Hearing", m.next_hearing_date.strftime("%b %d, %Y") if m.next_hearing_date else "N/A"),
+            ("Settlement Amount", f"${m.settlement_amount:,.2f}" if m.settlement_amount else "N/A"),
+            ("Judgment Amount", f"${m.judgment_amount:,.2f}" if m.judgment_amount else "N/A"),
         ]},
     ]
+    if m.outcome:
+        sections.append({"heading": "Outcome", "type": "text", "content": m.outcome})
     if m.description:
         sections.append({"heading": "Description", "type": "text", "content": m.description})
     attorneys = m.attorneys.all()
@@ -163,3 +195,37 @@ def evidence_delete(request, pk):
         ev.delete()
     return render(request, "legal/partials/_evidence_list.html",
                   {"evidence_list": matter.evidence.all(), "matter": matter})
+
+
+def bulk_delete(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = LegalMatter.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("legal:bulk_delete"),
+            })
+        LegalMatter.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} legal matter(s) deleted.")
+    return redirect("legal:list")
+
+
+def bulk_export_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = LegalMatter.objects.filter(pk__in=pks) if pks else LegalMatter.objects.none()
+    fields = [
+        ("title", "Title"),
+        ("case_number", "Case Number"),
+        ("matter_type", "Type"),
+        ("status", "Status"),
+        ("jurisdiction", "Jurisdiction"),
+        ("court", "Court"),
+        ("filing_date", "Filing Date"),
+        ("next_hearing_date", "Next Hearing"),
+        ("settlement_amount", "Settlement Amount"),
+        ("judgment_amount", "Judgment Amount"),
+    ]
+    return do_export(qs, fields, "legal_matters_selected")

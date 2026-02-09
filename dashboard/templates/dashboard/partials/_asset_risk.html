@@ -1,0 +1,30 @@
+{% if has_asset_risks %}
+<div class="mt-6 bg-gray-800 rounded-lg border border-red-900/50">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+        <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+        </svg>
+        <h2 class="text-sm font-semibold text-red-300 uppercase tracking-wide">Asset Risk Alerts</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for prop in at_risk_properties %}
+        <a href="{{ prop.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <div class="flex items-center gap-3">
+                <span class="text-xs px-2 py-0.5 rounded-full bg-red-900/50 text-red-300">Property</span>
+                <p class="text-sm text-gray-200">{{ prop.name }}</p>
+            </div>
+            <span class="text-xs text-gray-400">{{ prop.get_status_display }}</span>
+        </a>
+        {% endfor %}
+        {% for loan in at_risk_loans %}
+        <a href="{{ loan.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <div class="flex items-center gap-3">
+                <span class="text-xs px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300">Loan</span>
+                <p class="text-sm text-gray-200">{{ loan.name }}</p>
+            </div>
+            <span class="text-xs text-gray-400">{{ loan.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

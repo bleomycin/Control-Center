@@ -3,7 +3,13 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <div class="mb-6">
-        <a href="{% url 'cashflow:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Cash Flow</a>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'cashflow:list' %}" class="hover:text-gray-300">Cash Flow</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{% if object %}Edit {{ object }}{% else %}New Entry{% endif %}</span>
+        </nav>
         <h1 class="text-2xl font-bold text-white mt-2">{% if object %}Edit Entry{% else %}New Entry{% endif %}</h1>
     </div>
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">

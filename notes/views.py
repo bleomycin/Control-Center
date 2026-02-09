@@ -1,6 +1,6 @@
 from django.contrib import messages
 from django.http import HttpResponse
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
@@ -32,9 +32,20 @@ class NoteListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
-        note_type = self.request.GET.get("type")
-        if note_type:
-            qs = qs.filter(note_type=note_type)
+        note_types = self.request.GET.getlist("type")
+        if note_types:
+            qs = qs.filter(note_type__in=note_types)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(date__date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(date__date__lte=date_to)
+        ALLOWED_SORTS = {"title", "note_type", "date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -47,6 +58,11 @@ class NoteListView(ListView):
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["note_types"] = Note.NOTE_TYPE_CHOICES
         ctx["selected_type"] = self.request.GET.get("type", "")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["selected_types"] = self.request.GET.getlist("type")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -164,3 +180,31 @@ def quick_capture(request):
     else:
         form = QuickNoteForm(initial={"date": timezone.now()})
     return render(request, "notes/partials/_quick_capture_form.html", {"form": form})
+
+
+def bulk_delete(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Note.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("notes:bulk_delete"),
+            })
+        Note.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} note(s) deleted.")
+    return redirect("notes:list")
+
+
+def bulk_export_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = Note.objects.filter(pk__in=pks) if pks else Note.objects.none()
+    fields = [
+        ("title", "Title"),
+        ("note_type", "Type"),
+        ("date", "Date"),
+        ("content", "Content"),
+    ]
+    return do_export(qs, fields, "notes_selected")

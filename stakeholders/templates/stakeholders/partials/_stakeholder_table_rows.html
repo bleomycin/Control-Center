@@ -1,5 +1,8 @@
 {% for s in stakeholders %}
 <tr class="hover:bg-gray-700/50 transition-colors">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ s.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
     <td class="px-4 py-3">
         <a href="{{ s.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ s.name }}</a>
         <p class="text-xs text-gray-400 sm:hidden">{{ s.get_entity_type_display }}</p>
@@ -18,7 +21,7 @@
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="5" class="px-4 py-12 text-center">
+<tr><td colspan="6" class="px-4 py-12 text-center">
     <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
     <p class="text-sm text-gray-500 mb-3">No stakeholders found</p>
     <a href="{% url 'stakeholders:create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Stakeholder</a>

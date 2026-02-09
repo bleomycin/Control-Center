@@ -1,3 +1,5 @@
+import json
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
@@ -265,3 +267,30 @@ class StakeholderViewTests(TestCase):
         resp = self.client.post(reverse("stakeholders:contact_log_delete", args=[log.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(ContactLog.objects.filter(pk=log.pk).exists())
+
+    def test_graph_data_returns_json(self):
+        resp = self.client.get(reverse("stakeholders:graph_data", args=[self.stakeholder.pk]))
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.content)
+        self.assertIn("nodes", data)
+        self.assertIn("edges", data)
+
+    def test_graph_data_includes_center_node(self):
+        resp = self.client.get(reverse("stakeholders:graph_data", args=[self.stakeholder.pk]))
+        data = json.loads(resp.content)
+        center_nodes = [n for n in data["nodes"] if n["is_center"]]
+        self.assertEqual(len(center_nodes), 1)
+        self.assertEqual(center_nodes[0]["name"], self.stakeholder.name)
+
+    def test_graph_data_includes_relationships(self):
+        other = Stakeholder.objects.create(name="Other Person")
+        Relationship.objects.create(
+            from_stakeholder=self.stakeholder,
+            to_stakeholder=other,
+            relationship_type="colleague",
+        )
+        resp = self.client.get(reverse("stakeholders:graph_data", args=[self.stakeholder.pk]))
+        data = json.loads(resp.content)
+        self.assertEqual(len(data["nodes"]), 2)
+        self.assertEqual(len(data["edges"]), 1)
+        self.assertEqual(data["edges"][0]["label"], "colleague")

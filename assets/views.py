@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
@@ -133,9 +133,20 @@ class RealEstateListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
-        status = self.request.GET.get("status")
-        if status:
-            qs = qs.filter(status=status)
+        statuses = self.request.GET.getlist("status")
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(acquisition_date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(acquisition_date__lte=date_to)
+        ALLOWED_SORTS = {"name", "status", "estimated_value", "acquisition_date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -148,6 +159,11 @@ class RealEstateListView(ListView):
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["status_choices"] = RealEstate.STATUS_CHOICES
         ctx["selected_status"] = self.request.GET.get("status", "")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["selected_statuses"] = self.request.GET.getlist("status")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -208,6 +224,11 @@ class InvestmentListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
+        ALLOWED_SORTS = {"name", "investment_type", "current_value"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -218,6 +239,8 @@ class InvestmentListView(ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["search_query"] = self.request.GET.get("q", "")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -269,9 +292,20 @@ class LoanListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
-        status = self.request.GET.get("status")
-        if status:
-            qs = qs.filter(status=status)
+        statuses = self.request.GET.getlist("status")
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(next_payment_date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(next_payment_date__lte=date_to)
+        ALLOWED_SORTS = {"name", "status", "current_balance", "next_payment_date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -284,6 +318,11 @@ class LoanListView(ListView):
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["status_choices"] = Loan.STATUS_CHOICES
         ctx["selected_status"] = self.request.GET.get("status", "")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["selected_statuses"] = self.request.GET.getlist("status")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
         return ctx
 
 
@@ -326,3 +365,91 @@ class LoanDeleteView(DeleteView):
     def form_valid(self, form):
         messages.success(self.request, f'Loan "{self.object}" deleted.')
         return super().form_valid(form)
+
+
+def bulk_delete_realestate(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = RealEstate.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("assets:realestate_bulk_delete"),
+            })
+        RealEstate.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} property(ies) deleted.")
+    return redirect("assets:realestate_list")
+
+
+def bulk_export_realestate_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = RealEstate.objects.filter(pk__in=pks) if pks else RealEstate.objects.none()
+    fields = [
+        ("name", "Name"),
+        ("address", "Address"),
+        ("property_type", "Type"),
+        ("estimated_value", "Estimated Value"),
+        ("status", "Status"),
+        ("acquisition_date", "Acquisition Date"),
+    ]
+    return do_export(qs, fields, "real_estate_selected")
+
+
+def bulk_delete_investment(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Investment.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("assets:investment_bulk_delete"),
+            })
+        Investment.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} investment(s) deleted.")
+    return redirect("assets:investment_list")
+
+
+def bulk_export_investment_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = Investment.objects.filter(pk__in=pks) if pks else Investment.objects.none()
+    fields = [
+        ("name", "Name"),
+        ("investment_type", "Type"),
+        ("institution", "Institution"),
+        ("current_value", "Current Value"),
+    ]
+    return do_export(qs, fields, "investments_selected")
+
+
+def bulk_delete_loan(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Loan.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("assets:loan_bulk_delete"),
+            })
+        Loan.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} loan(s) deleted.")
+    return redirect("assets:loan_list")
+
+
+def bulk_export_loan_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = Loan.objects.filter(pk__in=pks) if pks else Loan.objects.none()
+    fields = [
+        ("name", "Name"),
+        ("current_balance", "Balance"),
+        ("interest_rate", "Rate"),
+        ("monthly_payment", "Monthly Payment"),
+        ("next_payment_date", "Next Payment"),
+        ("status", "Status"),
+    ]
+    return do_export(qs, fields, "loans_selected")

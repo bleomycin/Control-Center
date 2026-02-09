@@ -56,6 +56,15 @@ def check_overdue_tasks():
         recipient_list=[ctx["admin_email"]],
         connection=ctx["connection"],
     )
+
+    from dashboard.models import Notification
+    for task in overdue:
+        Notification.objects.create(
+            message=f"Overdue: {task.title} ({(today - task.due_date).days} days)",
+            level="warning",
+            link=task.get_absolute_url(),
+        )
+
     return f"Sent overdue alert for {overdue.count()} task(s)."
 
 
@@ -92,6 +101,15 @@ def check_upcoming_reminders():
         recipient_list=[ctx["admin_email"]],
         connection=ctx["connection"],
     )
+
+    from dashboard.models import Notification
+    for task in upcoming:
+        Notification.objects.create(
+            message=f"Reminder: {task.title}",
+            level="info",
+            link=task.get_absolute_url(),
+        )
+
     return f"Sent reminder alert for {upcoming.count()} task(s)."
 
 
@@ -129,4 +147,13 @@ def check_stale_followups():
         recipient_list=[ctx["admin_email"]],
         connection=ctx["connection"],
     )
+
+    from dashboard.models import Notification
+    for fu in stale:
+        Notification.objects.create(
+            message=f"Stale follow-up: {fu.stakeholder.name} re: {fu.task.title}",
+            level="warning",
+            link=fu.get_absolute_url(),
+        )
+
     return f"Sent stale follow-up alert for {stale.count()} item(s)."

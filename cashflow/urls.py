@@ -10,4 +10,6 @@ urlpatterns = [
     path("create/", views.CashFlowCreateView.as_view(), name="create"),
     path("<int:pk>/edit/", views.CashFlowUpdateView.as_view(), name="edit"),
     path("<int:pk>/delete/", views.CashFlowDeleteView.as_view(), name="delete"),
+    path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
+    path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
 ]

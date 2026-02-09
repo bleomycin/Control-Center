@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.db.models import Sum, Q
+from django.shortcuts import redirect, render
 from django.db.models.functions import TruncMonth
 from django.http import JsonResponse
 from django.urls import reverse_lazy
@@ -77,9 +78,9 @@ class CashFlowListView(ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        entry_type = self.request.GET.get("type")
-        if entry_type:
-            qs = qs.filter(entry_type=entry_type)
+        entry_types = self.request.GET.getlist("type")
+        if entry_types:
+            qs = qs.filter(entry_type__in=entry_types)
         projected = self.request.GET.get("projected")
         if projected == "actual":
             qs = qs.filter(is_projected=False)
@@ -88,6 +89,17 @@ class CashFlowListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(description__icontains=q)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(date__lte=date_to)
+        ALLOWED_SORTS = {"description", "entry_type", "category", "date", "amount"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_template_names(self):
@@ -100,6 +112,11 @@ class CashFlowListView(ListView):
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["selected_type"] = self.request.GET.get("type", "")
         ctx["selected_projected"] = self.request.GET.get("projected", "")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["selected_types"] = self.request.GET.getlist("type")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
 
         # Running totals for currently filtered entries
         qs = self.get_queryset()
@@ -146,3 +163,33 @@ class CashFlowDeleteView(DeleteView):
     def form_valid(self, form):
         messages.success(self.request, f'Entry "{self.object}" deleted.')
         return super().form_valid(form)
+
+
+def bulk_delete(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = CashFlowEntry.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            from django.urls import reverse
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("cashflow:bulk_delete"),
+            })
+        CashFlowEntry.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} entry(ies) deleted.")
+    return redirect("cashflow:list")
+
+
+def bulk_export_csv(request):
+    from blaine.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = CashFlowEntry.objects.filter(pk__in=pks) if pks else CashFlowEntry.objects.none()
+    fields = [
+        ("date", "Date"),
+        ("description", "Description"),
+        ("entry_type", "Type"),
+        ("category", "Category"),
+        ("amount", "Amount"),
+        ("is_projected", "Projected"),
+    ]
+    return do_export(qs, fields, "cashflow_selected")
