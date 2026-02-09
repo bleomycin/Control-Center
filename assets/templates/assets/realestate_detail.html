@@ -40,28 +40,19 @@
     </div>
 </div>
 
-{% with ownerships=property.ownerships.all %}
-{% if ownerships %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <p class="text-xs text-gray-400 uppercase tracking-wide">Owners</p>
+        <button hx-get="{% url 'assets:ownership_add' property.pk %}"
+                hx-target="#ownership-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Owner</button>
     </div>
-    <div class="divide-y divide-gray-700">
-        {% for ownership in ownerships %}
-        <div class="flex items-center justify-between px-4 py-3">
-            <div>
-                <a href="{{ ownership.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ ownership.stakeholder.name }}</a>
-                {% if ownership.role %}<span class="text-xs text-gray-400 ml-2">({{ ownership.role }})</span>{% endif %}
-            </div>
-            {% if ownership.ownership_percentage %}
-            <span class="text-sm font-medium text-green-400">{{ ownership.ownership_percentage }}%</span>
-            {% endif %}
-        </div>
-        {% endfor %}
+    <div id="ownership-form-container"></div>
+    <div id="ownership-list">
+        {% include "assets/partials/_ownership_list.html" with ownerships=property.ownerships.all %}
     </div>
 </div>
-{% endif %}
-{% endwith %}
 
 {% if property.notes_text %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">

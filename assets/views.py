@@ -3,8 +3,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from .forms import InvestmentForm, LoanForm, RealEstateForm
-from .models import Investment, Loan, RealEstate
+from .forms import (InvestmentForm, InvestmentParticipantForm, LoanForm,
+                     LoanPartyForm, PropertyOwnershipForm, RealEstateForm)
+from .models import (Investment, InvestmentParticipant, Loan, LoanParty,
+                     PropertyOwnership, RealEstate)
 
 
 def export_realestate_csv(request):
@@ -459,3 +461,80 @@ def bulk_export_loan_csv(request):
         ("status", "Status"),
     ]
     return do_export(qs, fields, "loans_selected")
+
+
+# --- Inline stakeholder management ---
+
+def ownership_add(request, pk):
+    prop = get_object_or_404(RealEstate, pk=pk)
+    if request.method == "POST":
+        form = PropertyOwnershipForm(request.POST)
+        if form.is_valid():
+            ownership = form.save(commit=False)
+            ownership.property = prop
+            ownership.save()
+            return render(request, "assets/partials/_ownership_list.html",
+                          {"ownerships": prop.ownerships.select_related("stakeholder").all(), "property": prop})
+    else:
+        form = PropertyOwnershipForm()
+    return render(request, "assets/partials/_ownership_form.html",
+                  {"form": form, "property": prop})
+
+
+def ownership_delete(request, pk):
+    ownership = get_object_or_404(PropertyOwnership, pk=pk)
+    prop = ownership.property
+    if request.method == "POST":
+        ownership.delete()
+    return render(request, "assets/partials/_ownership_list.html",
+                  {"ownerships": prop.ownerships.select_related("stakeholder").all(), "property": prop})
+
+
+def participant_add(request, pk):
+    inv = get_object_or_404(Investment, pk=pk)
+    if request.method == "POST":
+        form = InvestmentParticipantForm(request.POST)
+        if form.is_valid():
+            participant = form.save(commit=False)
+            participant.investment = inv
+            participant.save()
+            return render(request, "assets/partials/_participant_list.html",
+                          {"participants": inv.participants.select_related("stakeholder").all(), "investment": inv})
+    else:
+        form = InvestmentParticipantForm()
+    return render(request, "assets/partials/_participant_form.html",
+                  {"form": form, "investment": inv})
+
+
+def participant_delete(request, pk):
+    participant = get_object_or_404(InvestmentParticipant, pk=pk)
+    inv = participant.investment
+    if request.method == "POST":
+        participant.delete()
+    return render(request, "assets/partials/_participant_list.html",
+                  {"participants": inv.participants.select_related("stakeholder").all(), "investment": inv})
+
+
+def loan_party_add(request, pk):
+    loan = get_object_or_404(Loan, pk=pk)
+    if request.method == "POST":
+        form = LoanPartyForm(request.POST)
+        if form.is_valid():
+            party = form.save(commit=False)
+            party.loan = loan
+            party.save()
+            return render(request, "assets/partials/_party_list.html",
+                          {"parties": loan.parties.select_related("stakeholder").all(), "loan": loan})
+    else:
+        form = LoanPartyForm()
+    return render(request, "assets/partials/_party_form.html",
+                  {"form": form, "loan": loan})
+
+
+def loan_party_delete(request, pk):
+    party = get_object_or_404(LoanParty, pk=pk)
+    loan = party.loan
+    if request.method == "POST":
+        party.delete()
+    return render(request, "assets/partials/_party_list.html",
+                  {"parties": loan.parties.select_related("stakeholder").all(), "loan": loan})

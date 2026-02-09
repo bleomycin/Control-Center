@@ -12,6 +12,8 @@ urlpatterns = [
     path("real-estate/<int:pk>/pdf/", views.export_pdf_realestate_detail, name="realestate_export_pdf"),
     path("real-estate/<int:pk>/edit/", views.RealEstateUpdateView.as_view(), name="realestate_edit"),
     path("real-estate/<int:pk>/delete/", views.RealEstateDeleteView.as_view(), name="realestate_delete"),
+    path("real-estate/<int:pk>/ownership/add/", views.ownership_add, name="ownership_add"),
+    path("ownership/<int:pk>/delete/", views.ownership_delete, name="ownership_delete"),
     path("real-estate/bulk/delete/", views.bulk_delete_realestate, name="realestate_bulk_delete"),
     path("real-estate/bulk/export/", views.bulk_export_realestate_csv, name="realestate_bulk_export_csv"),
     # Investments
@@ -22,6 +24,8 @@ urlpatterns = [
     path("investments/<int:pk>/pdf/", views.export_pdf_investment_detail, name="investment_export_pdf"),
     path("investments/<int:pk>/edit/", views.InvestmentUpdateView.as_view(), name="investment_edit"),
     path("investments/<int:pk>/delete/", views.InvestmentDeleteView.as_view(), name="investment_delete"),
+    path("investments/<int:pk>/participant/add/", views.participant_add, name="participant_add"),
+    path("participant/<int:pk>/delete/", views.participant_delete, name="participant_delete"),
     path("investments/bulk/delete/", views.bulk_delete_investment, name="investment_bulk_delete"),
     path("investments/bulk/export/", views.bulk_export_investment_csv, name="investment_bulk_export_csv"),
     # Loans
@@ -32,6 +36,8 @@ urlpatterns = [
     path("loans/<int:pk>/pdf/", views.export_pdf_loan_detail, name="loan_export_pdf"),
     path("loans/<int:pk>/edit/", views.LoanUpdateView.as_view(), name="loan_edit"),
     path("loans/<int:pk>/delete/", views.LoanDeleteView.as_view(), name="loan_delete"),
+    path("loans/<int:pk>/party/add/", views.loan_party_add, name="loan_party_add"),
+    path("party/<int:pk>/delete/", views.loan_party_delete, name="loan_party_delete"),
     path("loans/bulk/delete/", views.bulk_delete_loan, name="loan_bulk_delete"),
     path("loans/bulk/export/", views.bulk_export_loan_csv, name="loan_bulk_export_csv"),
 ]
