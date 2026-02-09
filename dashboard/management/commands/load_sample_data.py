@@ -25,7 +25,7 @@ class Command(BaseCommand):
 
         self.stdout.write("Seeding choice options...")
         from dashboard.models import ChoiceOption
-        from dashboard.migrations.0004_seed_choice_options import SEED_DATA
+        from dashboard.choice_seed_data import SEED_DATA
         for category, value, label, sort_order in SEED_DATA:
             ChoiceOption.objects.get_or_create(
                 category=category, value=value,
