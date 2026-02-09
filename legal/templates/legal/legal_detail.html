@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize choice_labels %}
 {% block title %}{{ matter.title }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
@@ -18,7 +18,7 @@
                 {% elif matter.status == 'pending' %}bg-yellow-900/50 text-yellow-300
                 {% elif matter.status == 'on_hold' %}bg-orange-900/50 text-orange-300
                 {% else %}bg-gray-700 text-gray-300{% endif %}">{{ matter.get_status_display }}</span>
-            <span class="text-xs text-gray-400">{{ matter.get_matter_type_display }}</span>
+            <span class="text-xs text-gray-400">{{ matter.matter_type|choice_label:"matter_type" }}</span>
         </div>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">

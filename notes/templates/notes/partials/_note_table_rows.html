@@ -1,14 +1,14 @@
-{% for note in notes %}
+{% load choice_labels %}{% for note in notes %}
 <tr class="hover:bg-gray-700/50 transition-colors">
     <td class="px-4 py-3 w-8">
         <input type="checkbox" name="selected" value="{{ note.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
     </td>
     <td class="px-4 py-3">
         <a href="{{ note.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ note.title }}</a>
-        <p class="text-xs text-gray-400 sm:hidden">{{ note.get_note_type_display }}</p>
+        <p class="text-xs text-gray-400 sm:hidden">{{ note.note_type|choice_label:"note_type" }}</p>
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">
-        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ note.get_note_type_display }}</span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ note.note_type|choice_label:"note_type" }}</span>
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ note.date|date:"M j, Y g:i A" }}</td>
 </tr>

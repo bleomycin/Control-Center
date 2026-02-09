@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from dashboard.choices import get_choice_label, get_choices
 from .forms import EvidenceForm, LegalMatterForm
 from .models import Evidence, LegalMatter
 
@@ -52,7 +53,7 @@ class LegalMatterListView(ListView):
         ctx = super().get_context_data(**kwargs)
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["status_choices"] = LegalMatter.STATUS_CHOICES
-        ctx["type_choices"] = LegalMatter.MATTER_TYPE_CHOICES
+        ctx["type_choices"] = get_choices("matter_type")
         ctx["selected_status"] = self.request.GET.get("status", "")
         ctx["selected_type"] = self.request.GET.get("type", "")
         ctx["date_from"] = self.request.GET.get("date_from", "")
@@ -155,7 +156,7 @@ def export_pdf_detail(request, pk):
     if stakeholders:
         sections.append({"heading": "Related Stakeholders", "type": "table",
                          "headers": ["Name", "Type", "Organization"],
-                         "rows": [[s.name, s.get_entity_type_display(), s.organization or "-"] for s in stakeholders]})
+                         "rows": [[s.name, get_choice_label("entity_type", s.entity_type), s.organization or "-"] for s in stakeholders]})
     evidence = m.evidence.all()
     if evidence:
         sections.append({"heading": "Evidence", "type": "table",
@@ -169,7 +170,7 @@ def export_pdf_detail(request, pk):
                          "rows": [[t.title, t.get_status_display(), t.get_priority_display(),
                                    t.due_date.strftime("%b %d, %Y") if t.due_date else "-"] for t in tasks]})
     return render_pdf(request, f"legal-matter-{m.pk}", m.title,
-                      f"{m.get_matter_type_display()} — {m.get_status_display()}", sections)
+                      f"{get_choice_label('matter_type', m.matter_type)} — {m.get_status_display()}", sections)
 
 
 def evidence_add(request, pk):

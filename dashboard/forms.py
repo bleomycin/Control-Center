@@ -1,8 +1,10 @@
+import re
+
 from django import forms
 from django.core.exceptions import ValidationError
 
 from legacy.forms import TailwindFormMixin
-from dashboard.models import EmailSettings
+from dashboard.models import ChoiceOption, EmailSettings
 
 
 class EmailSettingsForm(TailwindFormMixin, forms.ModelForm):
@@ -42,3 +44,51 @@ class EmailSettingsForm(TailwindFormMixin, forms.ModelForm):
         if not password and self.instance:
             return self.instance.password
         return password
+
+
+class ChoiceOptionForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = ChoiceOption
+        fields = ["label", "value"]
+
+    def __init__(self, *args, category=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.category = category or (self.instance.category if self.instance.pk else None)
+        if not self.instance.pk:
+            # For new options, auto-generate value from label
+            self.fields["value"].required = False
+            self.fields["value"].widget = forms.HiddenInput()
+
+    def clean_value(self):
+        value = self.cleaned_data.get("value")
+        if not value:
+            # Auto-generate from label
+            label = self.cleaned_data.get("label", "")
+            value = re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")
+        if len(value) > 30:
+            raise ValidationError("Value must be 30 characters or fewer.")
+        return value
+
+    def clean(self):
+        cleaned = super().clean()
+        value = cleaned.get("value")
+        if value and self.category:
+            qs = ChoiceOption.objects.filter(category=self.category, value=value)
+            if self.instance.pk:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise ValidationError(f"A choice with value '{value}' already exists in this category.")
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.category:
+            instance.category = self.category
+        if not instance.sort_order:
+            max_order = ChoiceOption.objects.filter(
+                category=instance.category,
+            ).order_by("-sort_order").values_list("sort_order", flat=True).first()
+            instance.sort_order = (max_order or 0) + 1
+        if commit:
+            instance.save()
+        return instance

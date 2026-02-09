@@ -23,6 +23,15 @@ class Command(BaseCommand):
         today = date.today()
         now = timezone.now()
 
+        self.stdout.write("Seeding choice options...")
+        from dashboard.models import ChoiceOption
+        from dashboard.migrations.0004_seed_choice_options import SEED_DATA
+        for category, value, label, sort_order in SEED_DATA:
+            ChoiceOption.objects.get_or_create(
+                category=category, value=value,
+                defaults={"label": label, "sort_order": sort_order},
+            )
+
         self.stdout.write("Creating stakeholders...")
         stakeholders = {}
         data = [

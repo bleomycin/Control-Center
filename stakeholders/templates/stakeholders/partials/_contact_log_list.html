@@ -1,9 +1,9 @@
-<div class="divide-y divide-gray-700">
+{% load choice_labels %}<div class="divide-y divide-gray-700">
     {% for log in contact_logs %}
     <div class="px-4 py-3 flex items-start justify-between group">
         <div>
             <div class="flex items-center gap-2">
-                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ log.get_method_display }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ log.method|choice_label:"contact_method" }}</span>
                 <span class="text-xs text-gray-400">{{ log.date|date:"M j, Y g:i A" }}</span>
             </div>
             <p class="text-sm text-gray-200 mt-1">{{ log.summary }}</p>

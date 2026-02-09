@@ -6,6 +6,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from django.http import HttpResponse
 
+from dashboard.choices import get_choice_label
 from .forms import FollowUpForm, QuickTaskForm, TaskForm
 from .models import FollowUp, Task
 
@@ -166,7 +167,7 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Follow-ups", "type": "table",
                          "headers": ["Date", "Stakeholder", "Method", "Response", "Notes"],
                          "rows": [[fu.outreach_date.strftime("%b %d, %Y"), fu.stakeholder.name,
-                                   fu.get_method_display(),
+                                   get_choice_label("contact_method", fu.method),
                                    f"Yes ({fu.response_date.strftime('%b %d')})" if fu.response_received else "Pending",
                                    (fu.notes_text[:60] + "...") if len(fu.notes_text) > 60 else fu.notes_text or "-"]
                                   for fu in follow_ups]})
@@ -174,7 +175,7 @@ def export_pdf_detail(request, pk):
     if notes:
         sections.append({"heading": "Related Notes", "type": "table",
                          "headers": ["Title", "Type", "Date"],
-                         "rows": [[n.title, n.get_note_type_display(), n.date.strftime("%b %d, %Y")] for n in notes]})
+                         "rows": [[n.title, get_choice_label("note_type", n.note_type), n.date.strftime("%b %d, %Y")] for n in notes]})
     return render_pdf(request, f"task-{t.pk}", t.title,
                       f"{t.get_status_display()} — {t.get_priority_display()} Priority", sections)
 

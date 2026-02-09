@@ -1,5 +1,6 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
+from dashboard.choices import get_choices
 from .models import Attachment, Note
 
 
@@ -19,6 +20,10 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
             "related_tasks": forms.SelectMultiple(attrs={"size": 4}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["note_type"].widget = forms.Select(choices=get_choices("note_type"))
+
 
 class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
     """Simplified form for quick capture modal."""
@@ -29,6 +34,10 @@ class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "content": forms.Textarea(attrs={"rows": 4}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["note_type"].widget = forms.Select(choices=get_choices("note_type"))
 
 
 class AttachmentForm(TailwindFormMixin, forms.ModelForm):

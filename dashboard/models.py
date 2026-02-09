@@ -1,6 +1,29 @@
 from django.db import models
 
 
+CATEGORY_CHOICES = [
+    ("entity_type", "Stakeholder Type"),
+    ("contact_method", "Contact Method"),
+    ("matter_type", "Legal Matter Type"),
+    ("note_type", "Note Type"),
+]
+
+
+class ChoiceOption(models.Model):
+    category = models.CharField(max_length=30, choices=CATEGORY_CHOICES, db_index=True)
+    value = models.CharField(max_length=30)
+    label = models.CharField(max_length=100)
+    sort_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ["category", "value"]
+        ordering = ["category", "sort_order", "label"]
+
+    def __str__(self):
+        return f"{self.get_category_display()}: {self.label}"
+
+
 class Notification(models.Model):
     LEVEL_CHOICES = [
         ("info", "Info"),

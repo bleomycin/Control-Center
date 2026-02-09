@@ -130,12 +130,14 @@ def check_stale_followups():
     if not stale.exists():
         return "No stale follow-ups."
 
+    from dashboard.choices import get_choice_label
+
     lines = []
     for fu in stale:
         days = (now - fu.outreach_date).days
         lines.append(
             f"  - {fu.stakeholder.name} re: {fu.task.title} "
-            f"({fu.get_method_display()}, {days} day(s) ago)"
+            f"({get_choice_label('contact_method', fu.method)}, {days} day(s) ago)"
         )
 
     body = f"You have {stale.count()} stale follow-up(s) with no response:\n\n" + "\n".join(lines)

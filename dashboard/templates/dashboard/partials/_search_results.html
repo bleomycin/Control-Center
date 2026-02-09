@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize choice_labels %}
 {% if not query %}
 <p class="text-gray-500 text-center py-12">Type to search across all modules</p>
 {% elif not has_results %}
@@ -17,7 +17,7 @@
                 <p class="text-sm text-gray-200">{{ s.name }}</p>
                 {% if s.organization %}<p class="text-xs text-gray-400">{{ s.organization }}</p>{% endif %}
             </div>
-            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ s.get_entity_type_display }}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ s.entity_type|choice_label:"entity_type" }}</span>
         </a>
         {% endfor %}
     </div>
@@ -59,7 +59,7 @@
                 <p class="text-sm text-gray-200">{{ n.title }}</p>
                 <p class="text-xs text-gray-400">{{ n.date|date:"M j, Y" }}</p>
             </div>
-            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ n.get_note_type_display }}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ n.note_type|choice_label:"note_type" }}</span>
         </a>
         {% endfor %}
     </div>

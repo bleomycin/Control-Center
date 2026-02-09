@@ -1,4 +1,4 @@
-{% for matter in matters %}
+{% load choice_labels %}{% for matter in matters %}
 <tr class="hover:bg-gray-700/50 transition-colors">
     <td class="px-4 py-3 w-8">
         <input type="checkbox" name="selected" value="{{ matter.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
@@ -7,7 +7,7 @@
         <a href="{{ matter.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ matter.title }}</a>
         {% if matter.jurisdiction %}<p class="text-xs text-gray-400">{{ matter.jurisdiction }}</p>{% endif %}
     </td>
-    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ matter.get_matter_type_display }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ matter.matter_type|choice_label:"matter_type" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ matter.case_number|default:"-" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">{{ matter.next_hearing_date|date:"M j, Y"|default:"-" }}</td>
     <td class="px-4 py-3">

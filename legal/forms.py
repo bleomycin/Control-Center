@@ -1,5 +1,6 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
+from dashboard.choices import get_choices
 from .models import LegalMatter, Evidence
 
 
@@ -20,6 +21,10 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
             "related_stakeholders": forms.SelectMultiple(attrs={"size": 4}),
             "related_properties": forms.SelectMultiple(attrs={"size": 4}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["matter_type"].widget = forms.Select(choices=get_choices("matter_type"))
 
 
 class EvidenceForm(TailwindFormMixin, forms.ModelForm):
