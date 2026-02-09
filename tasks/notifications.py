@@ -1,12 +1,34 @@
 from datetime import timedelta
 
-from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 
 
+def _get_email_context():
+    """Return email context dict or None if notifications are disabled."""
+    from dashboard.email import (
+        get_notification_addresses,
+        get_smtp_connection,
+        notifications_are_enabled,
+    )
+
+    if not notifications_are_enabled():
+        return None
+
+    from_email, admin_email = get_notification_addresses()
+    return {
+        "connection": get_smtp_connection(),
+        "from_email": from_email,
+        "admin_email": admin_email,
+    }
+
+
 def check_overdue_tasks():
     """Daily: email listing all overdue tasks."""
+    ctx = _get_email_context()
+    if ctx is None:
+        return "Notifications disabled."
+
     from tasks.models import Task
 
     today = timezone.localdate()
@@ -30,14 +52,19 @@ def check_overdue_tasks():
     send_mail(
         subject=f"[Control Center] {overdue.count()} Overdue Task(s)",
         message=body,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[settings.ADMIN_EMAIL],
+        from_email=ctx["from_email"],
+        recipient_list=[ctx["admin_email"]],
+        connection=ctx["connection"],
     )
     return f"Sent overdue alert for {overdue.count()} task(s)."
 
 
 def check_upcoming_reminders():
     """Hourly: email for tasks with reminder_date in the next 24 hours."""
+    ctx = _get_email_context()
+    if ctx is None:
+        return "Notifications disabled."
+
     from tasks.models import Task
 
     now = timezone.now()
@@ -61,14 +88,19 @@ def check_upcoming_reminders():
     send_mail(
         subject=f"[Control Center] {upcoming.count()} Upcoming Reminder(s)",
         message=body,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[settings.ADMIN_EMAIL],
+        from_email=ctx["from_email"],
+        recipient_list=[ctx["admin_email"]],
+        connection=ctx["connection"],
     )
     return f"Sent reminder alert for {upcoming.count()} task(s)."
 
 
 def check_stale_followups():
     """Daily: email for follow-ups with no response received >3 days."""
+    ctx = _get_email_context()
+    if ctx is None:
+        return "Notifications disabled."
+
     from tasks.models import FollowUp
 
     now = timezone.now()
@@ -93,7 +125,8 @@ def check_stale_followups():
     send_mail(
         subject=f"[Control Center] {stale.count()} Stale Follow-up(s)",
         message=body,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[settings.ADMIN_EMAIL],
+        from_email=ctx["from_email"],
+        recipient_list=[ctx["admin_email"]],
+        connection=ctx["connection"],
     )
     return f"Sent stale follow-up alert for {stale.count()} item(s)."

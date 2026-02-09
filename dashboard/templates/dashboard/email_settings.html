@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Email Settings - Control Center{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="mb-6">
+        <a href="{% url 'dashboard:index' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Dashboard</a>
+        <h1 class="text-2xl font-bold text-white mt-2">Email Settings</h1>
+        <p class="text-sm text-gray-400 mt-1">Configure SMTP server for email notifications.</p>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="mb-4 p-3 rounded-md text-sm {% if message.tags == 'success' %}bg-green-900/50 text-green-300 border border-green-700{% else %}bg-red-900/50 text-red-300 border border-red-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if form.non_field_errors %}
+    <div class="mb-4 p-3 rounded-md text-sm bg-red-900/50 text-red-300 border border-red-700">
+        {% for error in form.non_field_errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-6">
+        {% csrf_token %}
+
+        <!-- SMTP Server -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">SMTP Server</h2>
+            <div class="space-y-4">
+                {% for field in form %}
+                {% if field.name == "smtp_host" or field.name == "smtp_port" or field.name == "use_tls" or field.name == "use_ssl" %}
+                <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                        {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+                    {% if field.help_text %}<p class="mt-1 text-xs text-gray-500">{{ field.help_text }}</p>{% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Authentication -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">Authentication</h2>
+            <div class="space-y-4">
+                {% for field in form %}
+                {% if field.name == "username" or field.name == "password" %}
+                <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                        {{ field.label }}
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Addresses -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">Email Addresses</h2>
+            <div class="space-y-4">
+                {% for field in form %}
+                {% if field.name == "from_email" or field.name == "admin_email" %}
+                <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                        {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Notifications -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">Notifications</h2>
+            <div class="space-y-4">
+                {% for field in form %}
+                {% if field.name == "notifications_enabled" %}
+                <div class="flex items-center gap-3">
+                    {{ field }}
+                    <label for="{{ field.id_for_label }}" class="text-sm font-medium text-gray-300">
+                        {{ field.label }}
+                    </label>
+                </div>
+                <p class="text-xs text-gray-500">When enabled, scheduled tasks (overdue alerts, reminders, stale follow-ups) will send emails via the SMTP server above.</p>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Security note -->
+        <div class="bg-gray-900/50 border border-gray-700 rounded-md p-3">
+            <p class="text-xs text-gray-500">
+                <span class="text-yellow-500 font-medium">Note:</span>
+                SMTP password is stored in the local SQLite database. This is acceptable for a single-user app accessed via VPN.
+            </p>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex flex-wrap gap-3 pt-2">
+            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
+                Save Settings
+            </button>
+            <button type="button"
+                    hx-post="{% url 'dashboard:test_email' %}"
+                    hx-target="#test-result"
+                    hx-swap="innerHTML"
+                    hx-indicator="#test-spinner"
+                    class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium rounded-md transition-colors inline-flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                </svg>
+                Send Test Email
+                <svg id="test-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+            </button>
+            <a href="{% url 'dashboard:index' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
+        </div>
+    </form>
+
+    <!-- Test result banner -->
+    <div id="test-result" class="mt-4"></div>
+</div>
+{% endblock %}

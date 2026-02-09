@@ -1,10 +1,13 @@
 from datetime import date, timedelta
 from datetime import datetime as dt
 
+from django.contrib import messages
+from django.core.mail import send_mail
 from django.db.models import Q, Sum
 from django.http import JsonResponse
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from assets.models import Investment, Loan, RealEstate
 from cashflow.models import CashFlowEntry
@@ -321,3 +324,44 @@ def calendar_events(request):
         })
 
     return JsonResponse(events, safe=False)
+
+
+def email_settings(request):
+    from dashboard.forms import EmailSettingsForm
+    from dashboard.models import EmailSettings
+
+    instance = EmailSettings.load()
+    if request.method == "POST":
+        form = EmailSettingsForm(request.POST, instance=instance)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Email settings saved.")
+            return redirect("dashboard:email_settings")
+    else:
+        form = EmailSettingsForm(instance=instance)
+    return render(request, "dashboard/email_settings.html", {"form": form})
+
+
+@require_POST
+def test_email(request):
+    from dashboard.email import get_notification_addresses, get_smtp_connection
+
+    try:
+        connection = get_smtp_connection()
+        from_email, admin_email = get_notification_addresses()
+        send_mail(
+            subject="[Control Center] Test Email",
+            message="This is a test email from Control Center. If you see this, your SMTP settings are working.",
+            from_email=from_email,
+            recipient_list=[admin_email],
+            connection=connection,
+        )
+        return render(request, "dashboard/partials/_test_email_result.html", {
+            "success": True,
+            "message": f"Test email sent to {admin_email}.",
+        })
+    except Exception as e:
+        return render(request, "dashboard/partials/_test_email_result.html", {
+            "success": False,
+            "message": f"Failed to send: {e}",
+        })
