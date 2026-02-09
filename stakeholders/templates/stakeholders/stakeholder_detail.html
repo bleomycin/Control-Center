@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize choice_labels %}
 {% block title %}{{ stakeholder.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
@@ -12,7 +12,7 @@
             <span class="text-gray-200">{{ stakeholder.name }}</span>
         </nav>
         <h1 class="text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
-        <p class="text-sm text-gray-400 mt-1">{{ stakeholder.get_entity_type_display }}{% if stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}</p>
+        <p class="text-sm text-gray-400 mt-1">{{ stakeholder.entity_type|choice_label:"entity_type" }}{% if stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}</p>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
         <a href="{% url 'stakeholders:export_pdf' stakeholder.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>

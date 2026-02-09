@@ -5,6 +5,7 @@ from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from dashboard.choices import get_choice_label, get_choices
 from .forms import AttachmentForm, NoteForm, QuickNoteForm
 from .models import Attachment, Note
 
@@ -56,7 +57,7 @@ class NoteListView(ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["search_query"] = self.request.GET.get("q", "")
-        ctx["note_types"] = Note.NOTE_TYPE_CHOICES
+        ctx["note_types"] = get_choices("note_type")
         ctx["selected_type"] = self.request.GET.get("type", "")
         ctx["date_from"] = self.request.GET.get("date_from", "")
         ctx["date_to"] = self.request.GET.get("date_to", "")
@@ -123,12 +124,12 @@ def export_pdf_detail(request, pk):
     if participants:
         sections.append({"heading": "Participants", "type": "table",
                          "headers": ["Name", "Type", "Organization"],
-                         "rows": [[p.name, p.get_entity_type_display(), p.organization or "-"] for p in participants]})
+                         "rows": [[p.name, get_choice_label("entity_type", p.entity_type), p.organization or "-"] for p in participants]})
     stakeholders = n.related_stakeholders.all()
     if stakeholders:
         sections.append({"heading": "Related Stakeholders", "type": "table",
                          "headers": ["Name", "Type"],
-                         "rows": [[s.name, s.get_entity_type_display()] for s in stakeholders]})
+                         "rows": [[s.name, get_choice_label("entity_type", s.entity_type)] for s in stakeholders]})
     legal_matters = n.related_legal_matters.all()
     if legal_matters:
         sections.append({"heading": "Related Legal Matters", "type": "table",
@@ -140,7 +141,7 @@ def export_pdf_detail(request, pk):
                          "headers": ["File", "Description", "Uploaded"],
                          "rows": [[a.file.name, a.description or "-", a.uploaded_at.strftime("%b %d, %Y")] for a in attachments]})
     return render_pdf(request, f"note-{n.pk}", n.title,
-                      f"{n.get_note_type_display()} — {n.date.strftime('%b %d, %Y %I:%M %p')}", sections)
+                      f"{get_choice_label('note_type', n.note_type)} — {n.date.strftime('%b %d, %Y %I:%M %p')}", sections)
 
 
 def attachment_add(request, pk):

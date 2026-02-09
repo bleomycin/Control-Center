@@ -1,0 +1,31 @@
+<form hx-post="{% url 'dashboard:choice_edit' option.pk %}"
+      hx-target="#category-{{ option.category }}"
+      hx-swap="innerHTML"
+      class="px-4 py-3 bg-gray-750" id="option-{{ option.pk }}">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="mb-2 text-sm text-red-400">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    </div>
+    {% endif %}
+    <div class="flex items-end gap-3">
+        <div class="flex-1">
+            <label class="block text-xs text-gray-400 mb-1">Label</label>
+            {{ form.label }}
+            {% if form.label.errors %}<p class="text-xs text-red-400 mt-1">{{ form.label.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+            <label class="block text-xs text-gray-400 mb-1">Value</label>
+            <input type="text" name="value" value="{{ option.value }}" readonly
+                   class="block w-full rounded-md border-gray-600 bg-gray-600 text-gray-400 shadow-sm sm:text-sm px-3 py-2 cursor-not-allowed"
+                   title="Value cannot be changed after creation">
+        </div>
+        <button type="submit" class="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">Save</button>
+        <button type="button"
+                hx-get="{% url 'dashboard:choice_settings' %}"
+                hx-target="#category-{{ option.category }}"
+                hx-select="#category-{{ option.category }} > *"
+                hx-swap="innerHTML"
+                class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-md transition-colors">Cancel</button>
+    </div>
+</form>

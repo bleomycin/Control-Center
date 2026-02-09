@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
+from dashboard.choices import get_choice_label, get_choices
 from .forms import ContactLogForm, StakeholderForm
 from .models import ContactLog, Relationship, Stakeholder
 
@@ -37,7 +38,7 @@ class StakeholderListView(ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["search_query"] = self.request.GET.get("q", "")
-        ctx["entity_types"] = Stakeholder.ENTITY_TYPE_CHOICES
+        ctx["entity_types"] = get_choices("entity_type")
         ctx["selected_type"] = self.request.GET.get("type", "")
         ctx["selected_types"] = self.request.GET.getlist("type")
         ctx["current_sort"] = self.request.GET.get("sort", "")
@@ -129,7 +130,7 @@ def export_pdf_detail(request, pk):
     if logs:
         sections.append({"heading": "Contact Log", "type": "table",
                          "headers": ["Date", "Method", "Summary", "Follow-up"],
-                         "rows": [[l.date.strftime("%b %d, %Y"), l.get_method_display(),
+                         "rows": [[l.date.strftime("%b %d, %Y"), get_choice_label("contact_method", l.method),
                                    l.summary[:80], "Yes" if l.follow_up_needed else "No"] for l in logs]})
     rels_from = s.relationships_from.select_related("to_stakeholder").all()
     rels_to = s.relationships_to.select_related("from_stakeholder").all()
@@ -148,8 +149,8 @@ def export_pdf_detail(request, pk):
     if notes:
         sections.append({"heading": "Recent Notes", "type": "table",
                          "headers": ["Title", "Type", "Date"],
-                         "rows": [[n.title, n.get_note_type_display(), n.date.strftime("%b %d, %Y")] for n in notes]})
-    subtitle = f"{s.get_entity_type_display()}"
+                         "rows": [[n.title, get_choice_label("note_type", n.note_type), n.date.strftime("%b %d, %Y")] for n in notes]})
+    subtitle = f"{get_choice_label('entity_type', s.entity_type)}"
     if s.organization:
         subtitle += f" — {s.organization}"
     return render_pdf(request, f"stakeholder-{s.pk}", s.name, subtitle, sections)
@@ -191,7 +192,7 @@ def relationship_graph_data(request, pk):
             nodes[s.pk] = {
                 "id": str(s.pk),
                 "name": s.name,
-                "type": s.get_entity_type_display(),
+                "type": get_choice_label("entity_type", s.entity_type),
                 "url": s.get_absolute_url(),
                 "is_center": is_center,
             }
