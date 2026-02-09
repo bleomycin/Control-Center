@@ -26,6 +26,9 @@ media/
 .DS_Store
 Thumbs.db
 
+# Static files (collectstatic output)
+staticfiles/
+
 # Environment
 .env
 
