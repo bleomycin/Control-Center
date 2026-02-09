@@ -116,33 +116,6 @@ class CashFlowListView(ListView):
         return ctx
 
 
-def export_pdf(request):
-    from blaine.pdf_export import render_pdf
-    entries = CashFlowEntry.objects.all()
-    totals = entries.aggregate(
-        total_inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
-        total_outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
-    )
-    net = totals["total_inflows"] - totals["total_outflows"]
-    sign = "+" if net >= 0 else ""
-    sections = [
-        {"heading": "Totals", "type": "table",
-         "headers": ["Metric", "Amount"],
-         "rows": [
-             ["Total Inflows", f"${totals['total_inflows']:,.0f}"],
-             ["Total Outflows", f"${totals['total_outflows']:,.0f}"],
-             ["Net Flow", f"{sign}${net:,.0f}"],
-         ]},
-        {"heading": "Entries", "type": "table",
-         "headers": ["Date", "Description", "Category", "Type", "Amount", "Status"],
-         "rows": [[e.date.strftime("%b %d, %Y"), e.description, e.category or "-",
-                    e.get_entry_type_display(),
-                    f"{'+'if e.entry_type == 'inflow' else '-'}${e.amount:,.0f}",
-                    "Projected" if e.is_projected else "Actual"] for e in entries]},
-    ]
-    return render_pdf(request, "cashflow-summary", "Cash Flow Summary", "", sections)
-
-
 class CashFlowCreateView(CreateView):
     model = CashFlowEntry
     form_class = CashFlowEntryForm

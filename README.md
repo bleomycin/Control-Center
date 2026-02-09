@@ -2,6 +2,19 @@
 
 A self-hosted personal management system built with Django. Designed as a single-user command center for managing stakeholders, assets, legal matters, tasks, cash flow, and notes — all from one dark-themed dashboard.
 
+## Quick Start (Docker)
+
+```bash
+git clone <repo-url>
+cd blaine
+cp .env.example .env    # edit SECRET_KEY for production
+docker compose up --build
+```
+
+App at **http://localhost:8000** — login: `admin` / `admin`
+
+Sample data loads automatically on first run. To disable, set `LOAD_SAMPLE_DATA=false` in `.env`.
+
 ## Tech Stack
 
 - **Backend:** Python 3.12, Django 6.0.2, SQLite
