@@ -5,7 +5,10 @@ from django.urls import reverse
 
 from stakeholders.models import Stakeholder
 
-from .models import Investment, Loan, RealEstate
+from .models import (
+    Investment, InvestmentParticipant, Loan, LoanParty,
+    PropertyOwnership, RealEstate,
+)
 
 
 class RealEstateModelTests(TestCase):
@@ -15,8 +18,13 @@ class RealEstateModelTests(TestCase):
         cls.prop = RealEstate.objects.create(
             name="Main Office",
             address="123 Main St",
-            stakeholder=cls.stakeholder,
             estimated_value=Decimal("500000.00"),
+        )
+        cls.ownership = PropertyOwnership.objects.create(
+            property=cls.prop,
+            stakeholder=cls.stakeholder,
+            ownership_percentage=Decimal("100.00"),
+            role="Owner",
         )
 
     def test_defaults(self):
@@ -33,10 +41,15 @@ class RealEstateModelTests(TestCase):
             reverse("assets:realestate_detail", kwargs={"pk": self.prop.pk}),
         )
 
-    def test_stakeholder_set_null(self):
-        self.stakeholder.delete()
-        self.prop.refresh_from_db()
-        self.assertIsNone(self.prop.stakeholder)
+    def test_stakeholder_m2m(self):
+        self.assertIn(self.stakeholder, self.prop.stakeholders.all())
+
+    def test_ownership_cascade_on_stakeholder_delete(self):
+        s = Stakeholder.objects.create(name="Temp Owner")
+        p = RealEstate.objects.create(name="Temp", address="x")
+        PropertyOwnership.objects.create(property=p, stakeholder=s, role="Owner")
+        s.delete()
+        self.assertEqual(p.stakeholders.count(), 0)
 
     def test_decimal_precision(self):
         p = RealEstate.objects.create(
@@ -59,7 +72,12 @@ class InvestmentModelTests(TestCase):
         cls.inv = Investment.objects.create(
             name="Stock Portfolio",
             investment_type="equities",
+        )
+        cls.participant = InvestmentParticipant.objects.create(
+            investment=cls.inv,
             stakeholder=cls.stakeholder,
+            ownership_percentage=Decimal("100.00"),
+            role="Lead Investor",
         )
 
     def test_create(self):
@@ -72,10 +90,8 @@ class InvestmentModelTests(TestCase):
             reverse("assets:investment_detail", kwargs={"pk": self.inv.pk}),
         )
 
-    def test_stakeholder_set_null(self):
-        self.stakeholder.delete()
-        self.inv.refresh_from_db()
-        self.assertIsNone(self.inv.stakeholder)
+    def test_stakeholder_m2m(self):
+        self.assertIn(self.stakeholder, self.inv.stakeholders.all())
 
 
 class LoanModelTests(TestCase):
@@ -84,9 +100,13 @@ class LoanModelTests(TestCase):
         cls.lender = Stakeholder.objects.create(name="Bank")
         cls.loan = Loan.objects.create(
             name="Mortgage",
-            lender=cls.lender,
             original_amount=Decimal("250000.00"),
             interest_rate=Decimal("4.500"),
+        )
+        cls.party = LoanParty.objects.create(
+            loan=cls.loan,
+            stakeholder=cls.lender,
+            role="Lender",
         )
 
     def test_defaults(self):
@@ -100,10 +120,8 @@ class LoanModelTests(TestCase):
             reverse("assets:loan_detail", kwargs={"pk": self.loan.pk}),
         )
 
-    def test_lender_set_null(self):
-        self.lender.delete()
-        self.loan.refresh_from_db()
-        self.assertIsNone(self.loan.lender)
+    def test_stakeholder_m2m(self):
+        self.assertIn(self.lender, self.loan.stakeholders.all())
 
     def test_decimal_fields(self):
         self.loan.refresh_from_db()
