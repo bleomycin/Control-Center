@@ -1,0 +1,47 @@
+<div class="bg-gray-800 rounded-lg border border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">{{ cat.label }}</h2>
+        <button hx-get="{% url 'dashboard:choice_add' cat.key %}"
+                hx-target="#add-form-{{ cat.key }}"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Add Option</button>
+    </div>
+    <div id="add-form-{{ cat.key }}"></div>
+    <div class="divide-y divide-gray-700">
+        {% for opt in cat.options %}
+        <div class="px-4 py-3 flex items-center justify-between group" id="option-{{ opt.pk }}">
+            <div class="flex items-center gap-3">
+                <div class="flex flex-col gap-0.5">
+                    <button hx-post="{% url 'dashboard:choice_move' opt.pk 'up' %}"
+                            hx-target="#category-{{ cat.key }}"
+                            hx-swap="innerHTML"
+                            class="text-gray-500 hover:text-gray-300 text-xs leading-none">&uarr;</button>
+                    <button hx-post="{% url 'dashboard:choice_move' opt.pk 'down' %}"
+                            hx-target="#category-{{ cat.key }}"
+                            hx-swap="innerHTML"
+                            class="text-gray-500 hover:text-gray-300 text-xs leading-none">&darr;</button>
+                </div>
+                <div>
+                    <span class="text-sm text-gray-200{% if not opt.is_active %} line-through opacity-50{% endif %}">{{ opt.label }}</span>
+                    <span class="text-xs text-gray-500 ml-2">({{ opt.value }})</span>
+                    {% if not opt.is_active %}
+                    <span class="text-xs text-red-400 ml-1">inactive</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button hx-get="{% url 'dashboard:choice_edit' opt.pk %}"
+                        hx-target="#option-{{ opt.pk }}"
+                        hx-swap="outerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">Edit</button>
+                <button hx-post="{% url 'dashboard:choice_toggle' opt.pk %}"
+                        hx-target="#category-{{ cat.key }}"
+                        hx-swap="innerHTML"
+                        class="text-xs {% if opt.is_active %}text-yellow-400 hover:text-yellow-300{% else %}text-green-400 hover:text-green-300{% endif %}">{% if opt.is_active %}Deactivate{% else %}Activate{% endif %}</button>
+            </div>
+        </div>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No options defined</p>
+        {% endfor %}
+    </div>
+</div>

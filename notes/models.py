@@ -15,7 +15,7 @@ class Note(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField()
     date = models.DateTimeField()
-    note_type = models.CharField(max_length=15, choices=NOTE_TYPE_CHOICES, default="general")
+    note_type = models.CharField(max_length=30, default="general")
     participants = models.ManyToManyField(
         "stakeholders.Stakeholder", blank=True, related_name="notes_as_participant",
     )

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Manage Choices - Control Center{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <a href="{% url 'dashboard:index' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Dashboard</a>
+        <h1 class="text-2xl font-bold text-white mt-2">Manage Choices</h1>
+        <p class="text-sm text-gray-400 mt-1">Add, edit, reorder, and deactivate dropdown options used across the app.</p>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="mb-4 p-3 rounded-md text-sm {% if message.tags == 'success' %}bg-green-900/50 text-green-300 border border-green-700{% else %}bg-red-900/50 text-red-300 border border-red-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="space-y-6">
+        {% for cat in categories %}
+        <div id="category-{{ cat.key }}">
+            {% include "dashboard/partials/_choice_category.html" %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

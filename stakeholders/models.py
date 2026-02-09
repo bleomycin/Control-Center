@@ -15,7 +15,7 @@ class Stakeholder(models.Model):
     ]
 
     name = models.CharField(max_length=255)
-    entity_type = models.CharField(max_length=20, choices=ENTITY_TYPE_CHOICES, default="contact")
+    entity_type = models.CharField(max_length=30, default="contact")
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=30, blank=True)
     organization = models.CharField(max_length=255, blank=True)
@@ -72,7 +72,7 @@ class ContactLog(models.Model):
 
     stakeholder = models.ForeignKey(Stakeholder, on_delete=models.CASCADE, related_name="contact_logs")
     date = models.DateTimeField()
-    method = models.CharField(max_length=10, choices=METHOD_CHOICES)
+    method = models.CharField(max_length=30)
     summary = models.TextField()
     follow_up_needed = models.BooleanField(default=False)
     follow_up_date = models.DateField(null=True, blank=True)
