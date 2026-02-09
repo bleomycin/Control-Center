@@ -40,12 +40,28 @@
     </div>
 </div>
 
-{% if property.stakeholder %}
-<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
-    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Stakeholder</p>
-    <a href="{{ property.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ property.stakeholder }}</a>
+{% with ownerships=property.ownerships.all %}
+{% if ownerships %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Owners</p>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for ownership in ownerships %}
+        <div class="flex items-center justify-between px-4 py-3">
+            <div>
+                <a href="{{ ownership.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ ownership.stakeholder.name }}</a>
+                {% if ownership.role %}<span class="text-xs text-gray-400 ml-2">({{ ownership.role }})</span>{% endif %}
+            </div>
+            {% if ownership.ownership_percentage %}
+            <span class="text-sm font-medium text-green-400">{{ ownership.ownership_percentage }}%</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
 </div>
 {% endif %}
+{% endwith %}
 
 {% if property.notes_text %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
