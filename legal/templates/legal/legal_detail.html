@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{{ matter.title }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'legal:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Legal Matters</a>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ matter.title }}</h1>
+        <div class="flex items-center gap-2 mt-2">
+            <span class="text-xs px-2 py-0.5 rounded-full
+                {% if matter.status == 'active' %}bg-green-900/50 text-green-300
+                {% elif matter.status == 'pending' %}bg-yellow-900/50 text-yellow-300
+                {% elif matter.status == 'on_hold' %}bg-orange-900/50 text-orange-300
+                {% else %}bg-gray-700 text-gray-300{% endif %}">{{ matter.get_status_display }}</span>
+            <span class="text-xs text-gray-400">{{ matter.get_matter_type_display }}</span>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'legal:export_pdf' matter.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'legal:edit' matter.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'legal:delete' matter.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Case Number</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ matter.case_number|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Jurisdiction</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ matter.jurisdiction|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Court</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ matter.court|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Filing Date</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ matter.filing_date|date:"M j, Y"|default:"N/A" }}</p>
+    </div>
+</div>
+
+{% if matter.description %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Description</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ matter.description }}</p>
+</div>
+{% endif %}
+
+<!-- Attorneys -->
+{% if matter.attorneys.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Attorneys</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for atty in matter.attorneys.all %}
+        <a href="{{ atty.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-blue-400">{{ atty.name }}</span>
+            <span class="text-xs text-gray-400">{{ atty.organization|default:"" }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Stakeholders -->
+{% if matter.related_stakeholders.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Stakeholders</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for s in matter.related_stakeholders.all %}
+        <a href="{{ s.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ s.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Properties -->
+{% if matter.related_properties.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Properties</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for p in matter.related_properties.all %}
+        <a href="{{ p.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ p.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Evidence -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Evidence</h2>
+        <button hx-get="{% url 'legal:evidence_add' matter.pk %}" hx-target="#evidence-form-container" hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Evidence</button>
+    </div>
+    <div id="evidence-form-container"></div>
+    <div id="evidence-list">
+        {% include "legal/partials/_evidence_list.html" %}
+    </div>
+</div>
+
+<!-- Related Records -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Active Tasks</h2>
+            <a href="{% url 'tasks:create' %}?legal={{ matter.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for task in tasks %}
+            <a href="{{ task.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ task.title }}</span>
+                <span class="text-xs text-gray-400">{{ task.due_date|date:"M j"|default:"-" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">No active tasks</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <a href="{% url 'notes:create' %}?legal={{ matter.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for note in notes %}
+            <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ note.title }}</span>
+                <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">No notes</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

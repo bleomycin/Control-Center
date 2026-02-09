@@ -1,0 +1,34 @@
+{% load tz %}
+{% for task in tasks %}
+<tr class="hover:bg-gray-700/50 transition-colors {% if task.status == 'complete' %}opacity-50{% endif %}">
+    <td class="px-4 py-3">
+        <button hx-post="{% url 'tasks:toggle_complete' task.pk %}" hx-target="closest tr" hx-swap="outerHTML"
+                class="w-5 h-5 rounded border {% if task.status == 'complete' %}bg-blue-600 border-blue-600{% else %}border-gray-500 hover:border-blue-400{% endif %} flex items-center justify-center">
+            {% if task.status == "complete" %}<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>{% endif %}
+        </button>
+    </td>
+    <td class="px-4 py-3">
+        <a href="{{ task.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300 {% if task.status == 'complete' %}line-through{% endif %}">{{ task.title }}</a>
+    </td>
+    <td class="px-4 py-3 hidden sm:table-cell">
+        {% include "tasks/partials/_task_status_badge.html" %}
+    </td>
+    <td class="px-4 py-3 hidden sm:table-cell">
+        <span class="text-xs px-2 py-0.5 rounded-full
+            {% if task.priority == 'critical' %}bg-red-900/50 text-red-300
+            {% elif task.priority == 'high' %}bg-orange-900/50 text-orange-300
+            {% elif task.priority == 'medium' %}bg-yellow-900/50 text-yellow-300
+            {% else %}bg-gray-700 text-gray-300{% endif %}">{{ task.get_priority_display }}</span>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ task.due_date|date:"M j, Y"|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">
+        {% if task.related_stakeholder %}<a href="{{ task.related_stakeholder.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ task.related_stakeholder }}</a>{% else %}-{% endif %}
+    </td>
+</tr>
+{% empty %}
+<tr><td colspan="6" class="px-4 py-12 text-center">
+    <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+    <p class="text-sm text-gray-500 mb-3">No tasks found</p>
+    <a href="{% url 'tasks:create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Task</a>
+</td></tr>
+{% endfor %}

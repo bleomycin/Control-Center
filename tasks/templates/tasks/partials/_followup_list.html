@@ -1,0 +1,24 @@
+<div class="divide-y divide-gray-700">
+    {% for fu in follow_ups %}
+    <div class="px-4 py-3 flex items-start justify-between group">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ fu.get_method_display }}</span>
+                <a href="{{ fu.stakeholder.get_absolute_url }}" class="text-xs text-blue-400 hover:text-blue-300">{{ fu.stakeholder }}</a>
+                <span class="text-xs text-gray-400">{{ fu.outreach_date|date:"M j, Y g:i A" }}</span>
+            </div>
+            {% if fu.notes_text %}<p class="text-sm text-gray-300 mt-1">{{ fu.notes_text }}</p>{% endif %}
+            {% if fu.response_received %}
+            <p class="text-xs text-green-400 mt-1">Response received {{ fu.response_date|date:"M j"|default:"" }}</p>
+            {% else %}
+            <p class="text-xs text-yellow-400 mt-1">Awaiting response</p>
+            {% endif %}
+        </div>
+        <button hx-post="{% url 'tasks:followup_delete' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
+                hx-confirm="Delete this follow-up?"
+                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No follow-ups</p>
+    {% endfor %}
+</div>

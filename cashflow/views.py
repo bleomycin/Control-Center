@@ -1,0 +1,175 @@
+from decimal import Decimal
+
+from django.contrib import messages
+from django.db.models import Sum, Q
+from django.db.models.functions import TruncMonth
+from django.http import JsonResponse
+from django.urls import reverse_lazy
+from django.utils import timezone
+from django.views.generic import CreateView, DeleteView, ListView, UpdateView
+
+from .forms import CashFlowEntryForm
+from .models import CashFlowEntry
+
+
+def chart_data(request):
+    """JSON endpoint for Chart.js — monthly trend and category breakdown."""
+    today = timezone.localdate()
+    six_months_ago = today.replace(day=1)
+    for _ in range(5):
+        six_months_ago = (six_months_ago - __import__('datetime').timedelta(days=1)).replace(day=1)
+
+    # Monthly trend — last 6 months
+    monthly = (
+        CashFlowEntry.objects.filter(date__gte=six_months_ago, is_projected=False)
+        .annotate(month=TruncMonth("date"))
+        .values("month", "entry_type")
+        .annotate(total=Sum("amount"))
+        .order_by("month")
+    )
+    months_map = {}
+    for row in monthly:
+        label = row["month"].strftime("%b %Y")
+        if label not in months_map:
+            months_map[label] = {"inflow": 0, "outflow": 0}
+        months_map[label][row["entry_type"]] = float(row["total"])
+
+    month_labels = list(months_map.keys())
+    inflows = [months_map[m]["inflow"] for m in month_labels]
+    outflows = [months_map[m]["outflow"] for m in month_labels]
+
+    # Category breakdown — top categories by total amount
+    categories = (
+        CashFlowEntry.objects.filter(is_projected=False)
+        .exclude(category="")
+        .values("category")
+        .annotate(total=Sum("amount"))
+        .order_by("-total")[:8]
+    )
+    cat_labels = [c["category"] for c in categories]
+    cat_values = [float(c["total"]) for c in categories]
+
+    return JsonResponse({
+        "monthly": {"labels": month_labels, "inflows": inflows, "outflows": outflows},
+        "categories": {"labels": cat_labels, "values": cat_values},
+    })
+
+
+def export_csv(request):
+    from blaine.export import export_csv as do_export
+    qs = CashFlowEntry.objects.all()
+    fields = [
+        ("date", "Date"),
+        ("description", "Description"),
+        ("entry_type", "Type"),
+        ("category", "Category"),
+        ("amount", "Amount"),
+        ("is_projected", "Projected"),
+    ]
+    return do_export(qs, fields, "cashflow")
+
+
+class CashFlowListView(ListView):
+    model = CashFlowEntry
+    template_name = "cashflow/cashflow_list.html"
+    context_object_name = "entries"
+    paginate_by = 50
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        entry_type = self.request.GET.get("type")
+        if entry_type:
+            qs = qs.filter(entry_type=entry_type)
+        projected = self.request.GET.get("projected")
+        if projected == "actual":
+            qs = qs.filter(is_projected=False)
+        elif projected == "projected":
+            qs = qs.filter(is_projected=True)
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(description__icontains=q)
+        return qs
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["cashflow/partials/_cashflow_table_rows.html"]
+        return [self.template_name]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["search_query"] = self.request.GET.get("q", "")
+        ctx["selected_type"] = self.request.GET.get("type", "")
+        ctx["selected_projected"] = self.request.GET.get("projected", "")
+
+        # Running totals for currently filtered entries
+        qs = self.get_queryset()
+        totals = qs.aggregate(
+            total_inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+            total_outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+        )
+        ctx["total_inflows"] = totals["total_inflows"]
+        ctx["total_outflows"] = totals["total_outflows"]
+        ctx["net_flow"] = totals["total_inflows"] - totals["total_outflows"]
+
+        from cashflow.alerts import get_liquidity_alerts
+        ctx["liquidity_alerts"] = get_liquidity_alerts()
+        return ctx
+
+
+def export_pdf(request):
+    from blaine.pdf_export import render_pdf
+    entries = CashFlowEntry.objects.all()
+    totals = entries.aggregate(
+        total_inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+        total_outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+    )
+    net = totals["total_inflows"] - totals["total_outflows"]
+    sign = "+" if net >= 0 else ""
+    sections = [
+        {"heading": "Totals", "type": "table",
+         "headers": ["Metric", "Amount"],
+         "rows": [
+             ["Total Inflows", f"${totals['total_inflows']:,.0f}"],
+             ["Total Outflows", f"${totals['total_outflows']:,.0f}"],
+             ["Net Flow", f"{sign}${net:,.0f}"],
+         ]},
+        {"heading": "Entries", "type": "table",
+         "headers": ["Date", "Description", "Category", "Type", "Amount", "Status"],
+         "rows": [[e.date.strftime("%b %d, %Y"), e.description, e.category or "-",
+                    e.get_entry_type_display(),
+                    f"{'+'if e.entry_type == 'inflow' else '-'}${e.amount:,.0f}",
+                    "Projected" if e.is_projected else "Actual"] for e in entries]},
+    ]
+    return render_pdf(request, "cashflow-summary", "Cash Flow Summary", "", sections)
+
+
+class CashFlowCreateView(CreateView):
+    model = CashFlowEntry
+    form_class = CashFlowEntryForm
+    template_name = "cashflow/cashflow_form.html"
+    success_url = reverse_lazy("cashflow:list")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Entry created.")
+        return super().form_valid(form)
+
+
+class CashFlowUpdateView(UpdateView):
+    model = CashFlowEntry
+    form_class = CashFlowEntryForm
+    template_name = "cashflow/cashflow_form.html"
+    success_url = reverse_lazy("cashflow:list")
+
+    def form_valid(self, form):
+        messages.success(self.request, "Entry updated.")
+        return super().form_valid(form)
+
+
+class CashFlowDeleteView(DeleteView):
+    model = CashFlowEntry
+    template_name = "partials/_confirm_delete.html"
+    success_url = reverse_lazy("cashflow:list")
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Entry "{self.object}" deleted.')
+        return super().form_valid(form)

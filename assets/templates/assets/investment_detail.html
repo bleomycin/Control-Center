@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ investment.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'assets:investment_list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Investments</a>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ investment.name }}</h1>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'assets:investment_export_pdf' investment.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'assets:investment_edit' investment.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'assets:investment_delete' investment.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Current Value</p>
+        <p class="text-xl font-bold text-green-400 mt-1">${{ investment.current_value|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Type</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ investment.investment_type|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Institution</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ investment.institution|default:"N/A" }}</p>
+    </div>
+</div>
+{% if investment.stakeholder %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Stakeholder</p>
+    <a href="{{ investment.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ investment.stakeholder }}</a>
+</div>
+{% endif %}
+{% if investment.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ investment.notes_text }}</p>
+</div>
+{% endif %}
+{% endblock %}
