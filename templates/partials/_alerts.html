@@ -1,0 +1,13 @@
+{% for alert in liquidity_alerts %}
+<div class="mb-4 rounded-lg border p-4 flex items-start gap-3
+    {% if alert.level == 'critical' %}bg-red-900/30 border-red-700{% else %}bg-yellow-900/30 border-yellow-700{% endif %}">
+    <svg class="w-5 h-5 shrink-0 mt-0.5 {% if alert.level == 'critical' %}text-red-400{% else %}text-yellow-400{% endif %}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+    </svg>
+    <div class="flex-1 min-w-0">
+        <p class="text-sm font-semibold {% if alert.level == 'critical' %}text-red-300{% else %}text-yellow-300{% endif %}">{{ alert.title }}</p>
+        <p class="text-sm {% if alert.level == 'critical' %}text-red-200/80{% else %}text-yellow-200/80{% endif %} mt-0.5">{{ alert.message }}</p>
+    </div>
+    {% url 'cashflow:list' as cashflow_url %}{% if request.path != cashflow_url %}<a href="{{ cashflow_url }}" class="text-xs {% if alert.level == 'critical' %}text-red-400 hover:text-red-300{% else %}text-yellow-400 hover:text-yellow-300{% endif %} whitespace-nowrap">View Cash Flow &rarr;</a>{% endif %}
+</div>
+{% endfor %}

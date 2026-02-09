@@ -1,0 +1,15 @@
+<div class="divide-y divide-gray-700">
+    {% for att in attachment_list %}
+    <div class="px-4 py-3 flex items-start justify-between group">
+        <div>
+            <a href="{{ att.file.url }}" class="text-sm text-blue-400 hover:text-blue-300" target="_blank">{{ att.description|default:att.file.name }}</a>
+            <span class="text-xs text-gray-400 ml-2">{{ att.uploaded_at|date:"M j, Y" }}</span>
+        </div>
+        <button hx-post="{% url 'notes:attachment_delete' att.pk %}" hx-target="#attachment-list" hx-swap="innerHTML"
+                hx-confirm="Delete this attachment?"
+                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No attachments</p>
+    {% endfor %}
+</div>

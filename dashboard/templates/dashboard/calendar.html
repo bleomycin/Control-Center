@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Calendar - Control Center{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+<style>
+    /* Dark theme overrides for FullCalendar */
+    .fc {
+        --fc-border-color: #374151;
+        --fc-button-bg-color: #374151;
+        --fc-button-border-color: #4b5563;
+        --fc-button-hover-bg-color: #4b5563;
+        --fc-button-hover-border-color: #6b7280;
+        --fc-button-active-bg-color: #2563eb;
+        --fc-button-active-border-color: #2563eb;
+        --fc-today-bg-color: rgba(59, 130, 246, 0.1);
+        --fc-neutral-bg-color: #1f2937;
+        --fc-page-bg-color: #111827;
+        --fc-event-border-color: transparent;
+        --fc-list-event-hover-bg-color: #1f2937;
+    }
+    .fc .fc-col-header-cell-cushion,
+    .fc .fc-daygrid-day-number,
+    .fc .fc-toolbar-title {
+        color: #e5e7eb;
+    }
+    .fc .fc-button {
+        color: #e5e7eb;
+        font-size: 0.875rem;
+    }
+    .fc .fc-daygrid-day.fc-day-today {
+        background-color: rgba(59, 130, 246, 0.1);
+    }
+    .fc .fc-event {
+        cursor: pointer;
+        font-size: 0.75rem;
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+    .fc .fc-col-header-cell {
+        background-color: #1f2937;
+    }
+    .fc .fc-scrollgrid {
+        border-color: #374151;
+    }
+    .fc-theme-standard td, .fc-theme-standard th {
+        border-color: #374151;
+    }
+    /* List view dark theme */
+    .fc .fc-list {
+        border-color: #374151;
+    }
+    .fc .fc-list-day-cushion {
+        background-color: #1f2937;
+    }
+    .fc .fc-list-day-text,
+    .fc .fc-list-day-side-text {
+        color: #e5e7eb;
+    }
+    .fc .fc-list-event td {
+        border-color: #374151;
+    }
+    .fc .fc-list-event-title a {
+        color: #e5e7eb;
+    }
+    .fc .fc-list-empty {
+        background-color: #111827;
+        color: #9ca3af;
+    }
+    /* Mobile toolbar */
+    @media (max-width: 640px) {
+        .fc .fc-toolbar {
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .fc .fc-toolbar-title {
+            font-size: 1.1rem;
+        }
+        .fc .fc-button {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-white">Calendar</h1>
+    <p class="text-sm text-gray-400 mt-1">Tasks, payments, follow-ups, legal filings, and contact dates</p>
+</div>
+
+<!-- Legend -->
+<div class="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-xs text-gray-300">
+    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> Critical/Payment</span>
+    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block"></span> High</span>
+    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Medium</span>
+    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Follow-up</span>
+    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span> Legal</span>
+    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> Contact</span>
+</div>
+
+<div id="calendar" class="bg-gray-800 rounded-lg border border-gray-700 p-4"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var calendarEl = document.getElementById('calendar');
+        var isMobile = window.innerWidth < 640;
+        var calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: isMobile ? 'listWeek' : 'dayGridMonth',
+            headerToolbar: isMobile
+                ? { left: 'prev,next', center: 'title', right: 'listWeek,dayGridMonth' }
+                : { left: 'prev,next today', center: 'title', right: 'dayGridMonth,timeGridWeek,listWeek' },
+            events: '{% url "dashboard:calendar_events" %}',
+            eventClick: function(info) {
+                info.jsEvent.preventDefault();
+                if (info.event.url) {
+                    window.location.href = info.event.url;
+                }
+            },
+            height: 'auto',
+            firstDay: 0,
+        });
+        calendar.render();
+    });
+</script>
+{% endblock %}

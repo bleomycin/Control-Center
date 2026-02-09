@@ -1,0 +1,158 @@
+{% load humanize %}
+{% if not query %}
+<p class="text-gray-500 text-center py-12">Type to search across all modules</p>
+{% elif not has_results %}
+<p class="text-gray-500 text-center py-12">No results for "{{ query }}"</p>
+{% else %}
+
+{% if stakeholders %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Stakeholders ({{ stakeholders|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for s in stakeholders %}
+        <a href="{{ s.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ s.name }}</p>
+                {% if s.organization %}<p class="text-xs text-gray-400">{{ s.organization }}</p>{% endif %}
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ s.get_entity_type_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if tasks_results %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Tasks ({{ tasks_results|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for t in tasks_results %}
+        <a href="{{ t.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ t.title }}</p>
+                {% if t.due_date %}<p class="text-xs text-gray-400">Due {{ t.due_date|date:"M j, Y" }}</p>{% endif %}
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full
+                {% if t.priority == 'critical' %}bg-red-900/50 text-red-300
+                {% elif t.priority == 'high' %}bg-orange-900/50 text-orange-300
+                {% elif t.priority == 'medium' %}bg-yellow-900/50 text-yellow-300
+                {% else %}bg-gray-700 text-gray-300{% endif %}">{{ t.get_priority_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if notes %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes ({{ notes|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for n in notes %}
+        <a href="{{ n.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ n.title }}</p>
+                <p class="text-xs text-gray-400">{{ n.date|date:"M j, Y" }}</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ n.get_note_type_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if legal_matters %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters ({{ legal_matters|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for m in legal_matters %}
+        <a href="{{ m.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ m.title }}</p>
+                {% if m.case_number %}<p class="text-xs text-gray-400">{{ m.case_number }}</p>{% endif %}
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ m.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if properties %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Properties ({{ properties|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for p in properties %}
+        <a href="{{ p.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ p.name }}</p>
+                <p class="text-xs text-gray-400">{{ p.address|truncatechars:60 }}</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ p.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if investments %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Investments ({{ investments|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for i in investments %}
+        <a href="{{ i.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <p class="text-sm text-gray-200">{{ i.name }}</p>
+            <span class="text-xs text-gray-400">{{ i.investment_type }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if loans %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Loans ({{ loans|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for l in loans %}
+        <a href="{{ l.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <p class="text-sm text-gray-200">{{ l.name }}</p>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ l.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if cashflow_entries %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Cash Flow ({{ cashflow_entries|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for c in cashflow_entries %}
+        <a href="{{ c.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ c.description }}</p>
+                <p class="text-xs text-gray-400">{{ c.date|date:"M j, Y" }}</p>
+            </div>
+            <span class="text-sm font-medium {% if c.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">${{ c.amount|floatformat:0|intcomma }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endif %}

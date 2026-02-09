@@ -1,0 +1,18 @@
+{% for note in notes %}
+<tr class="hover:bg-gray-700/50 transition-colors">
+    <td class="px-4 py-3">
+        <a href="{{ note.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ note.title }}</a>
+        <p class="text-xs text-gray-400 sm:hidden">{{ note.get_note_type_display }}</p>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">
+        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ note.get_note_type_display }}</span>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ note.date|date:"M j, Y g:i A" }}</td>
+</tr>
+{% empty %}
+<tr><td colspan="3" class="px-4 py-12 text-center">
+    <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+    <p class="text-sm text-gray-500 mb-3">No notes found</p>
+    <a href="{% url 'notes:create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Note</a>
+</td></tr>
+{% endfor %}

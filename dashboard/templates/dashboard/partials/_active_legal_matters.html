@@ -1,0 +1,21 @@
+<div class="bg-gray-800 rounded-lg border border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-blue-400 uppercase tracking-wide">Active Legal Matters</h2>
+        <span class="text-xs bg-blue-900/50 text-blue-300 px-2 py-0.5 rounded-full">{{ active_legal_matters|length }}</span>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for matter in active_legal_matters %}
+        <a href="{{ matter.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ matter.title }}</p>
+                <p class="text-xs text-gray-400">{{ matter.get_matter_type_display }}{% if matter.case_number %} &middot; {{ matter.case_number }}{% endif %}</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full
+                {% if matter.status == 'active' %}bg-green-900/50 text-green-300
+                {% else %}bg-yellow-900/50 text-yellow-300{% endif %}">{{ matter.get_status_display }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-6 text-sm text-gray-500 text-center">No active legal matters</p>
+        {% endfor %}
+    </div>
+</div>

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ property.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'assets:realestate_list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Real Estate</a>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ property.name }}</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ property.address }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'assets:realestate_export_pdf' property.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'assets:realestate_edit' property.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'assets:realestate_delete' property.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Value</p>
+        <p class="text-xl font-bold text-green-400 mt-1">${{ property.estimated_value|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ property.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Type</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ property.property_type|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Acquired</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ property.acquisition_date|date:"M j, Y"|default:"N/A" }}</p>
+    </div>
+</div>
+
+{% if property.stakeholder %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Stakeholder</p>
+    <a href="{{ property.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ property.stakeholder }}</a>
+</div>
+{% endif %}
+
+{% if property.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ property.notes_text }}</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for m in legal_matters %}
+            <a href="{{ m.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ m.title }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full {% if m.status == 'active' %}bg-green-900/50 text-green-300{% else %}bg-gray-700 text-gray-300{% endif %}">{{ m.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Active Tasks</h2>
+            <a href="{% url 'tasks:create' %}?property={{ property.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for task in tasks %}
+            <a href="{{ task.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ task.title }}</span>
+                <span class="text-xs text-gray-400">{{ task.due_date|date:"M j"|default:"-" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <a href="{% url 'notes:create' %}?property={{ property.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for note in notes %}
+            <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ note.title }}</span>
+                <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Cash Flow</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for entry in cash_flow_entries %}
+            <div class="flex items-center justify-between px-4 py-3">
+                <span class="text-sm text-gray-200">{{ entry.description }}</span>
+                <span class="text-sm {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
+                    {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}
+                </span>
+            </div>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

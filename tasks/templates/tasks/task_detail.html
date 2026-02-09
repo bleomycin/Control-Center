@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ task.title }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'tasks:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Tasks</a>
+        <h1 class="text-2xl font-bold text-white mt-2 {% if task.status == 'complete' %}line-through opacity-60{% endif %}">{{ task.title }}</h1>
+        <div class="flex items-center gap-2 mt-2">
+            {% include "tasks/partials/_task_status_badge.html" %}
+            <span class="text-xs px-2 py-0.5 rounded-full
+                {% if task.priority == 'critical' %}bg-red-900/50 text-red-300
+                {% elif task.priority == 'high' %}bg-orange-900/50 text-orange-300
+                {% elif task.priority == 'medium' %}bg-yellow-900/50 text-yellow-300
+                {% else %}bg-gray-700 text-gray-300{% endif %}">{{ task.get_priority_display }}</span>
+            <span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <button hx-post="{% url 'tasks:toggle_complete' task.pk %}" hx-target="#task-status-area" hx-swap="innerHTML"
+                class="px-3 py-1.5 bg-green-900/50 hover:bg-green-900 text-green-300 text-sm rounded-md transition-colors whitespace-nowrap">
+            {% if task.status == "complete" %}Reopen{% else %}Complete{% endif %}
+        </button>
+        <a href="{% url 'tasks:export_pdf' task.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'tasks:edit' task.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'tasks:delete' task.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Due Date</p>
+        <p class="text-sm text-gray-200">{{ task.due_date|date:"F j, Y"|default:"Not set" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Stakeholder</p>
+        {% if task.related_stakeholder %}
+        <a href="{{ task.related_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ task.related_stakeholder }}</a>
+        {% else %}<p class="text-sm text-gray-500">None</p>{% endif %}
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Legal Matter</p>
+        {% if task.related_legal_matter %}
+        <a href="{{ task.related_legal_matter.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ task.related_legal_matter }}</a>
+        {% else %}<p class="text-sm text-gray-500">None</p>{% endif %}
+    </div>
+</div>
+
+{% if task.description %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Description</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.description }}</p>
+</div>
+{% endif %}
+
+<!-- Follow-ups -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Follow-ups</h2>
+        <button hx-get="{% url 'tasks:followup_add' task.pk %}" hx-target="#followup-form-container" hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Follow-up</button>
+    </div>
+    <div id="followup-form-container"></div>
+    <div id="followup-list">
+        {% include "tasks/partials/_followup_list.html" %}
+    </div>
+</div>
+
+<!-- Related Notes -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+        <a href="{% url 'notes:create' %}?task={{ task.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add Note</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for note in notes %}
+        <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ note.title }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No notes</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

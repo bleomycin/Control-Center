@@ -1,0 +1,25 @@
+<div class="divide-y divide-gray-700">
+    {% for log in contact_logs %}
+    <div class="px-4 py-3 flex items-start justify-between group">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ log.get_method_display }}</span>
+                <span class="text-xs text-gray-400">{{ log.date|date:"M j, Y g:i A" }}</span>
+            </div>
+            <p class="text-sm text-gray-200 mt-1">{{ log.summary }}</p>
+            {% if log.follow_up_needed %}
+            <p class="text-xs text-yellow-400 mt-1">Follow-up: {{ log.follow_up_date|date:"M j"|default:"TBD" }}</p>
+            {% endif %}
+        </div>
+        <button hx-post="{% url 'stakeholders:contact_log_delete' log.pk %}"
+                hx-target="#contact-log-list"
+                hx-swap="innerHTML"
+                hx-confirm="Delete this contact log entry?"
+                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+            &times;
+        </button>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No contact log entries</p>
+    {% endfor %}
+</div>

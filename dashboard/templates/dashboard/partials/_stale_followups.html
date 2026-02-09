@@ -1,0 +1,19 @@
+<div class="bg-gray-800 rounded-lg border border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-yellow-400 uppercase tracking-wide">Stale Follow-ups</h2>
+        <span class="text-xs bg-yellow-900/50 text-yellow-300 px-2 py-0.5 rounded-full">{{ stale_followups|length }}</span>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for fu in stale_followups %}
+        <a href="{{ fu.task.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ fu.task.title }}</p>
+                <p class="text-xs text-gray-400">{{ fu.stakeholder }} &middot; {{ fu.get_method_display }}</p>
+            </div>
+            <p class="text-xs text-yellow-400">{{ fu.outreach_date|date:"M j" }}</p>
+        </a>
+        {% empty %}
+        <p class="px-4 py-6 text-sm text-gray-500 text-center">No stale follow-ups</p>
+        {% endfor %}
+    </div>
+</div>

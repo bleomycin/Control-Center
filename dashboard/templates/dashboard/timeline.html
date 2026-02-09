@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Activity Timeline - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-white">Activity Timeline</h1>
+    <p class="text-sm text-gray-400 mt-1">All activity across modules in chronological order</p>
+</div>
+
+<div class="max-w-3xl">
+    {% include "dashboard/partials/_timeline_items.html" %}
+</div>
+{% endblock %}

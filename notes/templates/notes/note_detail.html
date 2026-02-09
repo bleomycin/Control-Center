@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ note.title }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'notes:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Notes</a>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ note.title }}</h1>
+        <div class="flex items-center gap-2 mt-2">
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ note.get_note_type_display }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"F j, Y g:i A" }}</span>
+        </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'notes:export_pdf' note.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'notes:edit' note.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'notes:delete' note.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+    <div class="prose prose-invert prose-sm max-w-none">
+        <p class="text-gray-300 whitespace-pre-wrap">{{ note.content }}</p>
+    </div>
+</div>
+
+<!-- Related Records -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {% if note.participants.exists %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Participants</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for s in note.participants.all %}
+            <a href="{{ s.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ s.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if note.related_stakeholders.exists %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Stakeholders</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for s in note.related_stakeholders.all %}
+            <a href="{{ s.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ s.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if note.related_legal_matters.exists %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for m in note.related_legal_matters.all %}
+            <a href="{{ m.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ m.title }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if note.related_properties.exists %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Properties</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for p in note.related_properties.all %}
+            <a href="{{ p.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ p.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if note.related_tasks.exists %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Tasks</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for t in note.related_tasks.all %}
+            <a href="{{ t.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ t.title }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Attachments (HTMX inline add/delete) -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mt-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Attachments</h2>
+        <button hx-get="{% url 'notes:attachment_add' note.pk %}" hx-target="#attachment-form-container" hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
+    </div>
+    <div id="attachment-form-container"></div>
+    <div id="attachment-list">
+        {% include "notes/partials/_attachment_list.html" %}
+    </div>
+</div>
+{% endblock %}

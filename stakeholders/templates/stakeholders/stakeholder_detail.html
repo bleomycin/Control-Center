@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ stakeholder.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'stakeholders:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Stakeholders</a>
+        <h1 class="text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ stakeholder.get_entity_type_display }}{% if stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}</p>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'stakeholders:export_pdf' stakeholder.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'stakeholders:edit' stakeholder.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'stakeholders:delete' stakeholder.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<!-- Info Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Contact</p>
+        {% if stakeholder.email %}<p class="text-sm text-gray-200">{{ stakeholder.email }}</p>{% endif %}
+        {% if stakeholder.phone %}<p class="text-sm text-gray-200">{{ stakeholder.phone }}</p>{% endif %}
+        {% if not stakeholder.email and not stakeholder.phone %}<p class="text-sm text-gray-500">No contact info</p>{% endif %}
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Trust Rating</p>
+        <p class="text-2xl font-bold {% if stakeholder.trust_rating %}{% if stakeholder.trust_rating >= 4 %}text-green-400{% elif stakeholder.trust_rating >= 3 %}text-yellow-400{% else %}text-red-400{% endif %}{% else %}text-gray-500{% endif %}">
+            {{ stakeholder.trust_rating|default:"N/A" }}{% if stakeholder.trust_rating %}/5{% endif %}
+        </p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Risk Rating</p>
+        <p class="text-2xl font-bold {% if stakeholder.risk_rating %}{% if stakeholder.risk_rating >= 4 %}text-red-400{% elif stakeholder.risk_rating >= 3 %}text-yellow-400{% else %}text-green-400{% endif %}{% else %}text-gray-500{% endif %}">
+            {{ stakeholder.risk_rating|default:"N/A" }}{% if stakeholder.risk_rating %}/5{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if stakeholder.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ stakeholder.notes_text }}</p>
+</div>
+{% endif %}
+
+<!-- Contact Logs -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Contact Log</h2>
+        <button hx-get="{% url 'stakeholders:contact_log_add' stakeholder.pk %}"
+                hx-target="#contact-log-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Entry</button>
+    </div>
+    <div id="contact-log-form-container"></div>
+    <div id="contact-log-list">
+        {% include "stakeholders/partials/_contact_log_list.html" %}
+    </div>
+</div>
+
+<!-- Relationships -->
+{% if relationships_from or relationships_to %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Relationships</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for rel in relationships_from %}
+        <div class="px-4 py-3 flex items-center justify-between">
+            <div>
+                <a href="{{ rel.to_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ rel.to_stakeholder }}</a>
+                <span class="text-xs text-gray-400 ml-2">{{ rel.relationship_type }}</span>
+            </div>
+        </div>
+        {% endfor %}
+        {% for rel in relationships_to %}
+        <div class="px-4 py-3 flex items-center justify-between">
+            <div>
+                <a href="{{ rel.from_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ rel.from_stakeholder }}</a>
+                <span class="text-xs text-gray-400 ml-2">{{ rel.relationship_type }} (incoming)</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Related Records Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Tasks -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Active Tasks</h2>
+            <a href="{% url 'tasks:create' %}?stakeholder={{ stakeholder.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for task in tasks %}
+            <a href="{{ task.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ task.title }}</span>
+                <span class="text-xs text-gray-400">{{ task.due_date|date:"M j"|default:"No date" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">No active tasks</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Notes -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <a href="{% url 'notes:create' %}?stakeholder={{ stakeholder.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for note in notes %}
+            <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ note.title }}</span>
+                <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">No notes</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Legal Matters -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for matter in legal_matters %}
+            <a href="{{ matter.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ matter.title }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full
+                    {% if matter.status == 'active' %}bg-green-900/50 text-green-300
+                    {% elif matter.status == 'pending' %}bg-yellow-900/50 text-yellow-300
+                    {% else %}bg-gray-700 text-gray-300{% endif %}">{{ matter.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">No legal matters</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Properties -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Properties</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for prop in properties %}
+            <a href="{{ prop.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ prop.name }}</span>
+                <span class="text-xs text-gray-400">${{ prop.estimated_value|floatformat:0|intcomma|default:"-" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">No properties</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

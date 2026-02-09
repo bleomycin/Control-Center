@@ -1,0 +1,30 @@
+<div class="bg-gray-800 rounded-lg border border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Recent Activity</h2>
+        <a href="{% url 'dashboard:timeline' %}" class="text-xs text-blue-400 hover:text-blue-300">View all</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for item in recent_activity %}
+        <a href="{{ item.url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div class="flex items-center gap-3 min-w-0">
+                <span class="flex-shrink-0 w-2 h-2 rounded-full
+                    {% if item.color == 'blue' %}bg-blue-500
+                    {% elif item.color == 'indigo' %}bg-indigo-500
+                    {% elif item.color == 'yellow' %}bg-yellow-500
+                    {% elif item.color == 'amber' %}bg-amber-500
+                    {% elif item.color == 'green' %}bg-green-500
+                    {% elif item.color == 'red' %}bg-red-500
+                    {% elif item.color == 'purple' %}bg-purple-500
+                    {% else %}bg-gray-500{% endif %}"></span>
+                <div class="min-w-0">
+                    <p class="text-sm text-gray-200 truncate">{{ item.title }}</p>
+                    <p class="text-xs text-gray-400">{{ item.type }}</p>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 flex-shrink-0 ml-2">{{ item.date|date:"M j" }}</p>
+        </a>
+        {% empty %}
+        <p class="px-4 py-6 text-sm text-gray-500 text-center">No recent activity</p>
+        {% endfor %}
+    </div>
+</div>
