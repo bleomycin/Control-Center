@@ -25,7 +25,7 @@
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ task.due_date|date:"M j, Y"|default:"-" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">
-        {% if task.related_stakeholder %}<a href="{{ task.related_stakeholder.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ task.related_stakeholder }}</a>{% else %}-{% endif %}
+        {% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<a href="{{ stakeholders.0.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholders.0 }}</a>{% if stakeholders.count > 1 %} <span class="text-xs text-gray-500">+{{ stakeholders.count|add:"-1" }}</span>{% endif %}{% else %}-{% endif %}{% endwith %}
     </td>
 </tr>
 {% empty %}

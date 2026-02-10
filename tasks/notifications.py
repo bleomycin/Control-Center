@@ -36,7 +36,7 @@ def check_overdue_tasks():
         due_date__lt=today,
     ).exclude(
         status="complete",
-    ).select_related("related_stakeholder")
+    ).prefetch_related("related_stakeholders")
 
     if not overdue.exists():
         return "No overdue tasks."
@@ -45,7 +45,8 @@ def check_overdue_tasks():
     lines = []
     for task in overdue:
         days = (today - task.due_date).days
-        stakeholder = f" ({task.related_stakeholder.name})" if task.related_stakeholder else ""
+        names = ", ".join(s.name for s in task.related_stakeholders.all())
+        stakeholder = f" ({names})" if names else ""
         prefix = direction_prefix.get(task.direction, "")
         lines.append(f"  - {prefix}{task.title}{stakeholder} — {days} day(s) overdue")
 
@@ -85,14 +86,15 @@ def check_upcoming_reminders():
         reminder_date__lte=now + timedelta(hours=24),
     ).exclude(
         status="complete",
-    ).select_related("related_stakeholder")
+    ).prefetch_related("related_stakeholders")
 
     if not upcoming.exists():
         return "No upcoming reminders."
 
     lines = []
     for task in upcoming:
-        stakeholder = f" ({task.related_stakeholder.name})" if task.related_stakeholder else ""
+        names = ", ".join(s.name for s in task.related_stakeholders.all())
+        stakeholder = f" ({names})" if names else ""
         lines.append(f"  - {task.title}{stakeholder} — reminder at {task.reminder_date:%Y-%m-%d %H:%M}")
 
     body = f"Upcoming reminders ({upcoming.count()}):\n\n" + "\n".join(lines)

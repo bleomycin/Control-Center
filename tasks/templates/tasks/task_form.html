@@ -16,8 +16,8 @@
         {% csrf_token %}
         {% for field in form %}
         {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" %}
-        <div{% if field.name == "related_stakeholder" %} id="stakeholder-field-wrapper"{% endif %}>
-            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1"{% if field.name == "related_stakeholder" %} id="stakeholder-label"{% endif %}>
+        <div{% if field.name == "related_stakeholders" %} id="stakeholder-field-wrapper"{% endif %}>
+            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1"{% if field.name == "related_stakeholders" %} id="stakeholder-label"{% endif %}>
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
             </label>
             {{ field }}
@@ -94,7 +94,7 @@
                     if (label) {
                         if (val === 'outbound') label.textContent = 'Requested From';
                         else if (val === 'inbound') label.textContent = 'Requested By';
-                        else label.textContent = 'Related stakeholder';
+                        else label.textContent = 'Related stakeholders';
                     }
                     {% if not object %}
                     var fuBlock = document.getElementById('fu-section-block');

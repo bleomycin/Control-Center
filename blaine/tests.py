@@ -89,19 +89,26 @@ class ExportCsvTests(TestCase):
         self.assertIn("Org A", lines[1])
 
     def test_nested_field(self):
-        from tasks.models import Task
-        t = Task.objects.create(title="Nested Test", related_stakeholder=self.s1)
-        qs = Task.objects.filter(pk=t.pk)
-        fields = [("title", "Title"), ("related_stakeholder__name", "Stakeholder")]
+        from cashflow.models import CashFlowEntry
+        entry = CashFlowEntry.objects.create(
+            description="Nested Test", amount=100, entry_type="inflow",
+            category="Rental Income", date="2025-01-01",
+            related_stakeholder=self.s1,
+        )
+        qs = CashFlowEntry.objects.filter(pk=entry.pk)
+        fields = [("description", "Description"), ("related_stakeholder__name", "Stakeholder")]
         resp = export_csv(qs, fields, "test")
         content = resp.content.decode()
         self.assertIn("Alice", content)
 
     def test_none_becomes_empty(self):
-        from tasks.models import Task
-        t = Task.objects.create(title="No FK")
-        qs = Task.objects.filter(pk=t.pk)
-        fields = [("title", "Title"), ("related_stakeholder__name", "Stakeholder")]
+        from cashflow.models import CashFlowEntry
+        entry = CashFlowEntry.objects.create(
+            description="No FK", amount=50, entry_type="outflow",
+            category="Other", date="2025-01-01",
+        )
+        qs = CashFlowEntry.objects.filter(pk=entry.pk)
+        fields = [("description", "Description"), ("related_stakeholder__name", "Stakeholder")]
         resp = export_csv(qs, fields, "test")
         lines = resp.content.decode().strip().split("\r\n")
         self.assertTrue(lines[1].endswith(","))
