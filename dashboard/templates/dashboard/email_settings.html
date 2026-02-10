@@ -3,7 +3,7 @@
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <div class="mb-6">
-        <a href="{% url 'dashboard:index' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Dashboard</a>
+        <a href="{% url 'dashboard:settings_hub' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Settings</a>
         <h1 class="text-2xl font-bold text-white mt-2">Email Settings</h1>
         <p class="text-sm text-gray-400 mt-1">Configure SMTP server for email notifications.</p>
     </div>
@@ -128,7 +128,7 @@
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
                 </svg>
             </button>
-            <a href="{% url 'dashboard:index' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
+            <a href="{% url 'dashboard:settings_hub' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
         </div>
     </form>
 
