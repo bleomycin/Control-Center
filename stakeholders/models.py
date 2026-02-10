@@ -14,8 +14,8 @@ class Stakeholder(models.Model):
         ("other", "Other"),
     ]
 
-    name = models.CharField(max_length=255)
-    entity_type = models.CharField(max_length=30, default="contact")
+    name = models.CharField(max_length=255, db_index=True)
+    entity_type = models.CharField(max_length=30, default="contact", db_index=True)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=30, blank=True)
     organization = models.CharField(max_length=255, blank=True)

@@ -10,9 +10,9 @@ class CashFlowEntry(models.Model):
 
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
-    entry_type = models.CharField(max_length=10, choices=ENTRY_TYPE_CHOICES)
+    entry_type = models.CharField(max_length=10, choices=ENTRY_TYPE_CHOICES, db_index=True)
     category = models.CharField(max_length=100, blank=True)
-    date = models.DateField()
+    date = models.DateField(db_index=True)
     is_projected = models.BooleanField(default=False)
     related_stakeholder = models.ForeignKey(
         "stakeholders.Stakeholder", on_delete=models.SET_NULL,

@@ -30,9 +30,9 @@ class Task(models.Model):
 
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    due_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField(null=True, blank=True, db_index=True)
     reminder_date = models.DateTimeField(null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_started")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_started", db_index=True)
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
     task_type = models.CharField(max_length=10, choices=TASK_TYPE_CHOICES, default="one_time")
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="personal")

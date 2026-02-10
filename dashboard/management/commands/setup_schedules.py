@@ -25,6 +25,12 @@ class Command(BaseCommand):
                 "schedule_type": Schedule.DAILY,
                 "minutes": 0,
             },
+            {
+                "name": "Daily Backup",
+                "func": "dashboard.backup_task.run_backup",
+                "schedule_type": Schedule.DAILY,
+                "minutes": 0,
+            },
         ]
 
         for sched in schedules:

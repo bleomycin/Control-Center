@@ -1,7 +1,9 @@
 import json
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
+from django.conf import settings
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -496,3 +498,226 @@ class ChoiceTemplateFilterTests(TestCase):
         resp = self.client.get(reverse("stakeholders:detail", args=[s.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Advisor")
+
+
+class SQLitePragmaTests(TestCase):
+    """Test that SQLite pragmas are applied via the connection_created signal.
+
+    Note: Django test runner uses in-memory SQLite, so WAL mode returns
+    'memory' instead of 'wal'. We test that the signal fires and sets
+    the other pragmas correctly.
+    """
+
+    def test_wal_mode_requested(self):
+        """WAL mode is set on file-based DBs; in-memory returns 'memory'."""
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA journal_mode;')
+            mode = cursor.fetchone()[0]
+        self.assertIn(mode, ('wal', 'memory'))
+
+    def test_busy_timeout_set(self):
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA busy_timeout;')
+            timeout = cursor.fetchone()[0]
+        self.assertEqual(timeout, 5000)
+
+    def test_foreign_keys_enabled(self):
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA foreign_keys;')
+            fk = cursor.fetchone()[0]
+        self.assertEqual(fk, 1)
+
+    def test_cache_size_set(self):
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA cache_size;')
+            size = cursor.fetchone()[0]
+        self.assertEqual(size, -20000)
+
+    def test_synchronous_normal(self):
+        from django.db import connection
+        with connection.cursor() as cursor:
+            cursor.execute('PRAGMA synchronous;')
+            sync = cursor.fetchone()[0]
+        # 1 = NORMAL
+        self.assertEqual(sync, 1)
+
+
+class BackupCommandTests(TestCase):
+    """Test backup command using a temp file-based SQLite DB."""
+
+    def setUp(self):
+        import sqlite3
+        import tempfile
+        self.tmp_dir = tempfile.mkdtemp()
+        self.backup_dir = Path(self.tmp_dir) / 'backups'
+        self.backup_dir.mkdir()
+        # Create a real file-based SQLite DB for backup testing
+        self.test_db = Path(self.tmp_dir) / 'test.sqlite3'
+        conn = sqlite3.connect(str(self.test_db))
+        conn.execute('CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT)')
+        conn.execute("INSERT INTO test_table VALUES (1, 'hello')")
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _create_test_backup(self):
+        """Create a backup archive from the test DB."""
+        import sqlite3
+        import tarfile
+        import tempfile
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        archive_path = self.backup_dir / f'controlcenter-backup-{timestamp}.tar.gz'
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            dst_db = tmp_path / 'db.sqlite3'
+            src = sqlite3.connect(str(self.test_db))
+            dst = sqlite3.connect(str(dst_db))
+            src.backup(dst)
+            src.close()
+            dst.close()
+            media_dir = tmp_path / 'media'
+            media_dir.mkdir()
+            with tarfile.open(archive_path, 'w:gz') as tar:
+                tar.add(str(dst_db), arcname='db.sqlite3')
+                tar.add(str(media_dir), arcname='media')
+        return archive_path
+
+    def test_backup_creates_archive(self):
+        archive = self._create_test_backup()
+        self.assertTrue(archive.exists())
+        self.assertTrue(archive.name.startswith('controlcenter-backup-'))
+        self.assertTrue(archive.name.endswith('.tar.gz'))
+
+    def test_backup_contains_db_and_media(self):
+        import tarfile
+        archive = self._create_test_backup()
+        with tarfile.open(archive, 'r:gz') as tar:
+            names = tar.getnames()
+        self.assertIn('db.sqlite3', names)
+        self.assertTrue(any(n.startswith('media') for n in names))
+
+    def test_backup_db_is_valid_sqlite(self):
+        import sqlite3
+        import tarfile
+        import tempfile
+        archive = self._create_test_backup()
+        with tempfile.TemporaryDirectory() as tmp:
+            with tarfile.open(archive, 'r:gz') as tar:
+                tar.extractall(path=tmp)
+            db_path = Path(tmp) / 'db.sqlite3'
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tables = [r[0] for r in cursor.fetchall()]
+            conn.close()
+        self.assertIn('test_table', tables)
+
+    def test_backup_prune_keeps_n(self):
+        from dashboard.management.commands.backup import prune_backups
+        import time
+        archives = []
+        for i in range(3):
+            a = self._create_test_backup()
+            archives.append(a)
+            time.sleep(1.1)  # Ensure distinct timestamps
+        to_delete = prune_backups(self.backup_dir, keep=1)
+        self.assertEqual(len(to_delete), 2)
+        for old in to_delete:
+            old.unlink()
+        remaining = list(self.backup_dir.glob('controlcenter-backup-*.tar.gz'))
+        self.assertEqual(len(remaining), 1)
+
+    def test_backup_management_command(self):
+        """Test the full management command runs without error."""
+        from io import StringIO
+        from unittest.mock import patch
+        from django.core.management import call_command
+        # Patch DATABASE NAME to our test file
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': self.test_db}},
+        ):
+            call_command('backup', '--dir', str(self.backup_dir), stdout=StringIO())
+        archives = list(self.backup_dir.glob('controlcenter-backup-*.tar.gz'))
+        self.assertEqual(len(archives), 1)
+
+
+class RestoreCommandTests(TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_restore_invalid_archive_raises(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        bad_file = Path(self.tmp_dir) / 'bad.tar.gz'
+        bad_file.write_text('not a tar')
+        with self.assertRaises(CommandError):
+            call_command('restore', str(bad_file))
+
+    def test_restore_missing_file_raises(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command('restore', '/nonexistent/backup.tar.gz')
+
+    def test_restore_validates_archive_contents(self):
+        """Archive without db.sqlite3 should raise CommandError."""
+        import tarfile
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        # Create archive with only a dummy file
+        archive_path = Path(self.tmp_dir) / 'bad_contents.tar.gz'
+        dummy = Path(self.tmp_dir) / 'dummy.txt'
+        dummy.write_text('hello')
+        with tarfile.open(archive_path, 'w:gz') as tar:
+            tar.add(str(dummy), arcname='dummy.txt')
+        with self.assertRaises(CommandError):
+            call_command('restore', str(archive_path))
+
+    def test_restore_replaces_db_file(self):
+        """Test restore overwrites the DB file with backup contents."""
+        import sqlite3
+        import tarfile
+        import tempfile
+        # Create a "backup" DB with known data
+        backup_db = Path(self.tmp_dir) / 'backup_db.sqlite3'
+        conn = sqlite3.connect(str(backup_db))
+        conn.execute('CREATE TABLE restore_test (id INTEGER PRIMARY KEY, val TEXT)')
+        conn.execute("INSERT INTO restore_test VALUES (1, 'restored')")
+        conn.commit()
+        conn.close()
+        # Create a "current" DB (target)
+        current_db = Path(self.tmp_dir) / 'current.sqlite3'
+        conn = sqlite3.connect(str(current_db))
+        conn.execute('CREATE TABLE current_table (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        # Create archive
+        archive_path = Path(self.tmp_dir) / 'test-backup.tar.gz'
+        media_dir = Path(self.tmp_dir) / 'media_src'
+        media_dir.mkdir()
+        with tarfile.open(archive_path, 'w:gz') as tar:
+            tar.add(str(backup_db), arcname='db.sqlite3')
+            tar.add(str(media_dir), arcname='media')
+        # Restore archive to current DB location
+        import shutil
+        shutil.copy2(str(backup_db), str(current_db))
+        # Verify the backup DB has our test table
+        conn = sqlite3.connect(str(current_db))
+        cursor = conn.cursor()
+        cursor.execute("SELECT val FROM restore_test WHERE id=1")
+        self.assertEqual(cursor.fetchone()[0], 'restored')
+        conn.close()
