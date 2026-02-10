@@ -8,14 +8,18 @@ class StakeholderForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Stakeholder
         fields = ["name", "entity_type", "email", "phone", "organization",
-                  "trust_rating", "risk_rating", "notes_text"]
+                  "parent_organization", "trust_rating", "risk_rating", "notes_text"]
         widgets = {
             "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+        labels = {
+            "parent_organization": "Firm",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["entity_type"].widget = forms.Select(choices=get_choices("entity_type"))
+        self.fields["parent_organization"].queryset = Stakeholder.objects.filter(entity_type="firm")
 
 
 class ContactLogForm(TailwindFormMixin, forms.ModelForm):

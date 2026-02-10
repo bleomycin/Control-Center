@@ -11,7 +11,8 @@ SEED_DATA = [
     ("entity_type", "contact", "Contact", 3),
     ("entity_type", "professional", "Professional", 4),
     ("entity_type", "attorney", "Attorney", 5),
-    ("entity_type", "other", "Other", 6),
+    ("entity_type", "firm", "Firm", 6),
+    ("entity_type", "other", "Other", 7),
     # Contact methods
     ("contact_method", "call", "Call", 0),
     ("contact_method", "email", "Email", 1),
