@@ -15,7 +15,7 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
-        {% if field.name|slice:":3" != "fu_" %}
+        {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
@@ -25,6 +25,20 @@
         </div>
         {% endif %}
         {% endfor %}
+
+        <!-- Task reminder toggle -->
+        <div class="border-t border-gray-700 pt-4 mt-4">
+            <div class="flex items-center gap-2 mb-3">
+                <input type="checkbox" id="reminder-toggle" class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                       {% if form.reminder_date.value %}checked{% endif %}>
+                <label for="reminder-toggle" class="text-sm font-medium text-gray-300 cursor-pointer">Set a reminder for this task</label>
+            </div>
+            <div id="reminder-field" class="{% if not form.reminder_date.value %}hidden{% endif %}">
+                <label for="{{ form.reminder_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Reminder date &amp; time</label>
+                {{ form.reminder_date }}
+                {% if form.reminder_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reminder_date.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
 
         {% if not object %}
         <!-- Follow-up section (create only) -->
@@ -60,15 +74,25 @@
                 <p class="text-xs text-gray-500">A follow-up will be created using the stakeholder selected above. If no stakeholder is selected, no follow-up will be created.</p>
             </div>
         </div>
+        {% endif %}
+
         <script>
+            document.getElementById('reminder-toggle').addEventListener('change', function() {
+                var field = document.getElementById('reminder-field');
+                field.classList.toggle('hidden', !this.checked);
+                if (!this.checked) {
+                    document.getElementById('{{ form.reminder_date.id_for_label }}').value = '';
+                }
+            });
+            {% if not object %}
             document.getElementById('{{ form.fu_create.id_for_label }}').addEventListener('change', function() {
                 document.getElementById('fu-fields').classList.toggle('hidden', !this.checked);
             });
             document.getElementById('{{ form.fu_reminder_enabled.id_for_label }}').addEventListener('change', function() {
                 document.getElementById('fu-days-field').classList.toggle('hidden', !this.checked);
             });
+            {% endif %}
         </script>
-        {% endif %}
 
         <div class="flex gap-3 pt-4">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
