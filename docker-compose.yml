@@ -8,8 +8,10 @@ services:
     volumes:
       - blaine-data:/app/data
       - blaine-media:/app/media
+      - blaine-backups:/app/backups
     restart: unless-stopped
 
 volumes:
   blaine-data:
   blaine-media:
+  blaine-backups:
