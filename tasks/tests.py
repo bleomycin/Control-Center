@@ -522,6 +522,21 @@ class FollowUpRespondViewTests(TestCase):
         self.assertTrue(fu.response_received)
         self.assertIsNotNone(fu.response_date)
 
+    def test_followup_respond_undo(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=2),
+            method="email",
+            response_received=True,
+            response_date=timezone.now(),
+        )
+        resp = self.client.post(reverse("tasks:followup_respond", args=[fu.pk]))
+        self.assertEqual(resp.status_code, 200)
+        fu.refresh_from_db()
+        self.assertFalse(fu.response_received)
+        self.assertIsNone(fu.response_date)
+
     def test_task_create_with_followup(self):
         resp = self.client.post(reverse("tasks:create"), {
             "title": "Task With FU",
