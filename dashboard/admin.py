@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ChoiceOption, EmailSettings, Notification
+from .models import ChoiceOption, EmailSettings, Notification, SampleDataStatus
 
 
 @admin.register(ChoiceOption)
@@ -24,6 +24,17 @@ class EmailSettingsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Only allow one instance
         return not EmailSettings.objects.exists()
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(SampleDataStatus)
+class SampleDataStatusAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "is_loaded", "loaded_at")
+
+    def has_add_permission(self, request):
+        return not SampleDataStatus.objects.exists()
 
     def has_delete_permission(self, request, obj=None):
         return False

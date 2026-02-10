@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from dashboard.choices import get_choice_label
+from dashboard.models import SampleDataStatus
 from assets.models import Investment, Loan, RealEstate
 from cashflow.models import CashFlowEntry
 from legal.models import Evidence, LegalMatter
@@ -564,4 +565,72 @@ def choice_move(request, pk, direction):
     cat_label = dict(CATEGORY_CHOICES).get(option.category, option.category)
     return render(request, "dashboard/partials/_choice_category.html", {
         "cat": {"key": option.category, "label": cat_label, "options": options},
+    })
+
+
+def settings_hub(request):
+    status = SampleDataStatus.load()
+    return render(request, "dashboard/settings_hub.html", {"sample_status": status})
+
+
+@require_POST
+def sample_data_load(request):
+    from django.core.management import call_command
+    from io import StringIO
+
+    out = StringIO()
+    call_command("load_sample_data", stdout=out)
+    status = SampleDataStatus.load()
+    return render(request, "dashboard/partials/_sample_data_card.html", {
+        "sample_status": status,
+        "message": out.getvalue().strip(),
+    })
+
+
+@require_POST
+def sample_data_remove(request):
+    from django.apps import apps
+
+    status = SampleDataStatus.load()
+    if not status.is_loaded or not status.manifest:
+        status.is_loaded = False
+        status.manifest = {}
+        status.loaded_at = None
+        status.save()
+        return render(request, "dashboard/partials/_sample_data_card.html", {
+            "sample_status": status,
+        })
+
+    # Delete in reverse-dependency order (children before parents)
+    deletion_order = [
+        "notes.note",
+        "cashflow.cashflowentry",
+        "tasks.followup",
+        "tasks.task",
+        "legal.evidence",
+        "legal.legalmatter",
+        "assets.loanparty",
+        "assets.investmentparticipant",
+        "assets.propertyownership",
+        "assets.loan",
+        "assets.investment",
+        "assets.realestate",
+        "stakeholders.contactlog",
+        "stakeholders.relationship",
+        "stakeholders.stakeholder",
+    ]
+
+    for model_label in deletion_order:
+        pks = status.manifest.get(model_label, [])
+        if pks:
+            Model = apps.get_model(model_label)
+            Model.objects.filter(pk__in=pks).delete()
+
+    status.is_loaded = False
+    status.manifest = {}
+    status.loaded_at = None
+    status.save()
+
+    return render(request, "dashboard/partials/_sample_data_card.html", {
+        "sample_status": status,
     })
