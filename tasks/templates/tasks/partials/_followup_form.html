@@ -3,7 +3,7 @@
     {% csrf_token %}
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         {% for field in form %}
-        {% if field.name != "notes_text" %}
+        {% if field.name != "notes_text" and field.name != "reminder_enabled" and field.name != "follow_up_days" %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ field.label }}</label>
             {{ field }}
@@ -11,6 +11,24 @@
         {% endif %}
         {% endfor %}
     </div>
+    <div class="flex items-center gap-3 mb-3">
+        <div class="flex items-center gap-2">
+            {{ form.reminder_enabled }}
+            <label for="{{ form.reminder_enabled.id_for_label }}" class="text-xs font-medium text-gray-400 cursor-pointer">Enable reminder</label>
+        </div>
+        <div id="fu-days-inline" class="{% if not form.reminder_enabled.value %}hidden{% endif %}">
+            <div class="flex items-center gap-2">
+                <label for="{{ form.follow_up_days.id_for_label }}" class="text-xs font-medium text-gray-400">after</label>
+                <div class="w-20">{{ form.follow_up_days }}</div>
+                <span class="text-xs text-gray-400">days</span>
+            </div>
+        </div>
+    </div>
+    <script>
+        document.getElementById('{{ form.reminder_enabled.id_for_label }}').addEventListener('change', function() {
+            document.getElementById('fu-days-inline').classList.toggle('hidden', !this.checked);
+        });
+    </script>
     <div class="mb-3">
         <label for="{{ form.notes_text.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Notes</label>
         {{ form.notes_text }}
