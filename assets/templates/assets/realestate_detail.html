@@ -54,6 +54,32 @@
     </div>
 </div>
 
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Loans</p>
+        <a href="{% url 'assets:loan_create' %}?property={{ property.pk }}"
+           class="text-xs text-blue-400 hover:text-blue-300">+ Add Loan</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for loan in loans %}
+        <a href="{{ loan.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <div class="flex-1">
+                <span class="text-sm text-gray-200">{{ loan.name }}</span>
+                {% for party in loan.parties.all %}
+                    <span class="text-xs text-gray-400 ml-1">({{ party.stakeholder.name }}{% if party.role %} — {{ party.role }}{% endif %})</span>
+                {% endfor %}
+            </div>
+            <div class="text-right">
+                <span class="text-sm font-medium text-orange-400">${{ loan.current_balance|floatformat:0|intcomma|default:"—" }}</span>
+                <span class="text-xs text-gray-400 block">{{ loan.interest_rate|default:"" }}{% if loan.interest_rate %}% · ${{ loan.monthly_payment|floatformat:0|intcomma|default:"—" }}/mo{% endif %}</span>
+            </div>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No loans linked to this property</p>
+        {% endfor %}
+    </div>
+</div>
+
 {% if property.notes_text %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
     <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>

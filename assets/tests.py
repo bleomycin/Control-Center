@@ -237,3 +237,101 @@ class AssetViewTests(TestCase):
     def test_loan_pdf(self):
         resp = self.client.get(reverse("assets:loan_export_pdf", args=[self.loan.pk]))
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class LoanAssetLinkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Linked Property", address="1 Main")
+        cls.inv = Investment.objects.create(name="Linked Investment")
+        cls.loan = Loan.objects.create(
+            name="Property Mortgage", status="active",
+            related_property=cls.prop,
+            current_balance=Decimal("200000.00"),
+            interest_rate=Decimal("5.000"),
+            monthly_payment=Decimal("1200.00"),
+        )
+        cls.inv_loan = Loan.objects.create(
+            name="Margin Loan", status="active",
+            related_investment=cls.inv,
+        )
+
+    def test_property_detail_shows_linked_loan(self):
+        resp = self.client.get(reverse("assets:realestate_detail", args=[self.prop.pk]))
+        self.assertContains(resp, "Property Mortgage")
+        self.assertContains(resp, "200,000")
+
+    def test_investment_detail_shows_linked_loan(self):
+        resp = self.client.get(reverse("assets:investment_detail", args=[self.inv.pk]))
+        self.assertContains(resp, "Margin Loan")
+
+    def test_loan_detail_shows_linked_property(self):
+        resp = self.client.get(reverse("assets:loan_detail", args=[self.loan.pk]))
+        self.assertContains(resp, "Linked Property")
+        self.assertContains(resp, self.prop.get_absolute_url())
+
+    def test_loan_detail_shows_linked_investment(self):
+        resp = self.client.get(reverse("assets:loan_detail", args=[self.inv_loan.pk]))
+        self.assertContains(resp, "Linked Investment")
+        self.assertContains(resp, self.inv.get_absolute_url())
+
+    def test_loan_create_prefills_property(self):
+        resp = self.client.get(reverse("assets:loan_create"), {"property": self.prop.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f'selected>{self.prop.name}')
+
+    def test_loan_create_prefills_investment(self):
+        resp = self.client.get(reverse("assets:loan_create"), {"investment": self.inv.pk})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f'selected>{self.inv.name}')
+
+    def test_property_set_null_on_delete(self):
+        self.prop.delete()
+        self.loan.refresh_from_db()
+        self.assertIsNone(self.loan.related_property)
+
+
+class AssetCreateWithInitialOwnerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Legacy", entity_type="contact")
+
+    def test_property_create_with_initial_owner(self):
+        resp = self.client.post(reverse("assets:realestate_create"), {
+            "name": "New House", "address": "42 Oak", "status": "owned",
+            "initial_stakeholder": self.stakeholder.pk,
+            "initial_role": "Owner",
+            "initial_percentage": "100.00",
+        })
+        self.assertEqual(resp.status_code, 302)
+        prop = RealEstate.objects.get(name="New House")
+        ownership = PropertyOwnership.objects.get(property=prop)
+        self.assertEqual(ownership.stakeholder, self.stakeholder)
+        self.assertEqual(ownership.role, "Owner")
+        self.assertEqual(ownership.ownership_percentage, Decimal("100.00"))
+
+    def test_property_create_without_initial_owner(self):
+        resp = self.client.post(reverse("assets:realestate_create"), {
+            "name": "Empty Lot", "address": "99 Elm", "status": "owned",
+        })
+        self.assertEqual(resp.status_code, 302)
+        prop = RealEstate.objects.get(name="Empty Lot")
+        self.assertEqual(prop.ownerships.count(), 0)
+
+    def test_investment_create_with_initial_participant(self):
+        resp = self.client.post(reverse("assets:investment_create"), {
+            "name": "New Fund",
+            "initial_stakeholder": self.stakeholder.pk,
+            "initial_role": "Lead Investor",
+            "initial_percentage": "50.00",
+        })
+        self.assertEqual(resp.status_code, 302)
+        inv = Investment.objects.get(name="New Fund")
+        participant = InvestmentParticipant.objects.get(investment=inv)
+        self.assertEqual(participant.stakeholder, self.stakeholder)
+        self.assertEqual(participant.role, "Lead Investor")
+
+    def test_property_edit_hides_initial_owner_fields(self):
+        prop = RealEstate.objects.create(name="Existing", address="1 St")
+        resp = self.client.get(reverse("assets:realestate_edit", args=[prop.pk]))
+        self.assertNotContains(resp, "Initial Owner")

@@ -15,6 +15,11 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
+            {% if field.name == "initial_stakeholder" %}
+            <div class="border-t border-gray-700 pt-4 mt-4">
+                <p class="text-xs text-gray-400 uppercase tracking-wide mb-3">Initial Owner <span class="text-gray-500 normal-case">(optional)</span></p>
+            </div>
+            {% endif %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
