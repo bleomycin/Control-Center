@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -8,6 +9,15 @@ from dashboard.choices import get_choice_label, get_choices
 from .forms import ContactLogForm, StakeholderForm
 from .models import ContactLog, Relationship, Stakeholder
 
+TAB_DEFINITIONS = {
+    "all": {"label": "All"},
+    "firms": {"label": "Firms & Teams"},
+    "attorneys": {"label": "Attorneys", "types": ["attorney"]},
+    "lenders": {"label": "Lenders", "types": ["lender"]},
+    "advisors": {"label": "Advisors", "types": ["advisor", "professional"]},
+    "other": {"label": "Other", "types": ["business_partner", "contact", "other"]},
+}
+
 
 class StakeholderListView(ListView):
     model = Stakeholder
@@ -15,14 +25,39 @@ class StakeholderListView(ListView):
     context_object_name = "stakeholders"
     paginate_by = 25
 
+    def get_current_tab(self):
+        tab = self.request.GET.get("tab", "all")
+        return tab if tab in TAB_DEFINITIONS else "all"
+
     def get_queryset(self):
+        tab = self.get_current_tab()
+
+        # Firms tab is handled separately (card layout, no table queryset needed)
+        if tab == "firms":
+            return Stakeholder.objects.none()
+
         qs = super().get_queryset().select_related("parent_organization")
+
+        # Tab-specific filtering
+        if tab == "all":
+            qs = qs.filter(parent_organization__isnull=True)
+        else:
+            tab_types = TAB_DEFINITIONS[tab].get("types", [])
+            if tab_types:
+                qs = qs.filter(entity_type__in=tab_types, parent_organization__isnull=True)
+
+        # Search
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
-        entity_types = self.request.GET.getlist("type")
-        if entity_types:
-            qs = qs.filter(entity_type__in=entity_types)
+
+        # Type filter (only on "all" tab)
+        if tab == "all":
+            entity_types = self.request.GET.getlist("type")
+            if entity_types:
+                qs = qs.filter(entity_type__in=entity_types)
+
+        # Sorting
         ALLOWED_SORTS = {"name", "entity_type", "organization", "trust_rating", "risk_rating"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
@@ -30,19 +65,53 @@ class StakeholderListView(ListView):
             qs = qs.order_by(f"{direction}{sort}")
         return qs
 
+    def get_firms_queryset(self):
+        """Get firms with prefetched employees, optionally filtered by search."""
+        qs = Stakeholder.objects.filter(entity_type="firm").prefetch_related("employees")
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(Q(name__icontains=q) | Q(employees__name__icontains=q)).distinct()
+        return qs
+
     def get_template_names(self):
         if self.request.headers.get("HX-Request"):
-            return ["stakeholders/partials/_stakeholder_table_rows.html"]
+            return ["stakeholders/partials/_tab_content.html"]
         return [self.template_name]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        tab = self.get_current_tab()
+        ctx["current_tab"] = tab
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["entity_types"] = get_choices("entity_type")
         ctx["selected_type"] = self.request.GET.get("type", "")
         ctx["selected_types"] = self.request.GET.getlist("type")
         ctx["current_sort"] = self.request.GET.get("sort", "")
         ctx["current_dir"] = self.request.GET.get("dir", "")
+
+        # Tab counts
+        all_qs = Stakeholder.objects.filter(parent_organization__isnull=True)
+        ctx["total_count"] = Stakeholder.objects.count()
+        tab_counts = {
+            "all": all_qs.count(),
+            "firms": Stakeholder.objects.filter(entity_type="firm").count(),
+            "attorneys": all_qs.filter(entity_type__in=["attorney"]).count(),
+            "lenders": all_qs.filter(entity_type__in=["lender"]).count(),
+            "advisors": all_qs.filter(entity_type__in=["advisor", "professional"]).count(),
+            "other": all_qs.filter(entity_type__in=["business_partner", "contact", "other"]).count(),
+        }
+        ctx["tab_counts"] = tab_counts
+
+        # Build tabs list for template iteration
+        ctx["tabs"] = [
+            {"key": key, "label": defn["label"], "count": tab_counts[key]}
+            for key, defn in TAB_DEFINITIONS.items()
+        ]
+
+        # Firms data for firms tab
+        if tab == "firms":
+            ctx["firms"] = self.get_firms_queryset()
+
         return ctx
 
 
