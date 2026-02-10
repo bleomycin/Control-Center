@@ -233,6 +233,42 @@ class TaskViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(FollowUp.objects.filter(pk=fu.pk).exists())
 
+    def test_followup_edit_get(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now(),
+            method="call",
+            notes_text="Original note",
+        )
+        resp = self.client.get(reverse("tasks:followup_edit", args=[fu.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Original note")
+
+    def test_followup_edit_post(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now(),
+            method="call",
+            notes_text="Original note",
+        )
+        resp = self.client.post(
+            reverse("tasks:followup_edit", args=[fu.pk]),
+            {
+                "stakeholder": self.stakeholder.pk,
+                "outreach_date": "2025-01-20T14:00",
+                "method": "email",
+                "follow_up_days": "5",
+                "notes_text": "Updated note",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        fu.refresh_from_db()
+        self.assertEqual(fu.method, "email")
+        self.assertEqual(fu.notes_text, "Updated note")
+        self.assertEqual(fu.follow_up_days, 5)
+
 
 class NotificationTests(TestCase):
     @classmethod

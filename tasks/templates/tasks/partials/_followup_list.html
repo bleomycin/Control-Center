@@ -23,6 +23,8 @@
             <button hx-post="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
                     class="text-xs px-2 py-1 bg-green-700 hover:bg-green-600 text-green-100 rounded-md transition-colors opacity-0 group-hover:opacity-100">Mark Responded</button>
             {% endif %}
+            <button hx-get="{% url 'tasks:followup_edit' fu.pk %}" hx-target="#followup-form-container" hx-swap="innerHTML"
+                    class="text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">Edit</button>
             <button hx-post="{% url 'tasks:followup_delete' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
                     hx-confirm="Delete this follow-up?"
                     class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>

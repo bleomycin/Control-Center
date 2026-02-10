@@ -14,6 +14,7 @@ urlpatterns = [
     path("<int:pk>/delete/", views.TaskDeleteView.as_view(), name="delete"),
     path("<int:pk>/toggle/", views.toggle_complete, name="toggle_complete"),
     path("<int:pk>/followup/add/", views.followup_add, name="followup_add"),
+    path("followup/<int:pk>/edit/", views.followup_edit, name="followup_edit"),
     path("followup/<int:pk>/delete/", views.followup_delete, name="followup_delete"),
     path("followup/<int:pk>/respond/", views.followup_respond, name="followup_respond"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
