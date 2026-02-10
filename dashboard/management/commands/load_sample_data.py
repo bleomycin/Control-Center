@@ -20,6 +20,15 @@ class Command(BaseCommand):
     help = "Load comprehensive sample data for demo purposes"
 
     def handle(self, *args, **options):
+        from dashboard.models import SampleDataStatus
+
+        sample_status = SampleDataStatus.load()
+        if sample_status.is_loaded:
+            self.stdout.write(self.style.WARNING(
+                "Sample data is already loaded. Remove it first via Settings before reloading."
+            ))
+            return
+
         today = date.today()
         now = timezone.now()
 
@@ -511,8 +520,9 @@ class Command(BaseCommand):
             ("Property tax - all properties", Decimal("8200.00"), "outflow", "Taxes", today + timedelta(days=45), True,
              None, None, None, "Quarterly property tax bill across all holdings."),
         ]
+        cashflow_pks = []
         for desc, amt, etype, cat, dt, proj, sh_name, prop_name, loan_name, notes in cf_data:
-            CashFlowEntry.objects.create(
+            cf = CashFlowEntry.objects.create(
                 description=desc, amount=amt, entry_type=etype, category=cat,
                 date=dt, is_projected=proj,
                 related_stakeholder=stakeholders.get(sh_name),
@@ -520,6 +530,7 @@ class Command(BaseCommand):
                 related_loan=loans.get(loan_name) if loan_name else None,
                 notes_text=notes,
             )
+            cashflow_pks.append(cf.pk)
 
         self.stdout.write("Creating notes...")
         note_data = [
@@ -657,10 +668,12 @@ class Command(BaseCommand):
              "Will reassess remaining position after.",
              [], [], [], [], ["Research Bitcoin exit strategy"]),
         ]
+        note_pks = []
         for title, ntype, dt, content, participants, rel_sh, rel_lm, rel_props, rel_tasks in note_data:
             note = Note.objects.create(
                 title=title, note_type=ntype, date=dt, content=content,
             )
+            note_pks.append(note.pk)
             for name in participants:
                 note.participants.add(stakeholders[name])
             for name in rel_sh:
@@ -672,19 +685,72 @@ class Command(BaseCommand):
             for t in rel_tasks:
                 note.related_tasks.add(tasks[t])
 
+        # Build manifest of created PKs
+        manifest = {
+            "stakeholders.stakeholder": [s.pk for s in stakeholders.values()],
+            "stakeholders.relationship": list(
+                Relationship.objects.filter(
+                    from_stakeholder__in=stakeholders.values()
+                ).values_list("pk", flat=True)
+            ),
+            "stakeholders.contactlog": list(
+                ContactLog.objects.filter(
+                    stakeholder__in=stakeholders.values()
+                ).values_list("pk", flat=True)
+            ),
+            "assets.realestate": [p.pk for p in properties.values()],
+            "assets.investment": [i.pk for i in investments.values()],
+            "assets.loan": [ln.pk for ln in loans.values()],
+            "assets.propertyownership": list(
+                PropertyOwnership.objects.filter(
+                    property__in=properties.values()
+                ).values_list("pk", flat=True)
+            ),
+            "assets.investmentparticipant": list(
+                InvestmentParticipant.objects.filter(
+                    investment__in=investments.values()
+                ).values_list("pk", flat=True)
+            ),
+            "assets.loanparty": list(
+                LoanParty.objects.filter(
+                    loan__in=loans.values()
+                ).values_list("pk", flat=True)
+            ),
+            "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
+            "legal.evidence": list(
+                Evidence.objects.filter(
+                    legal_matter__in=legal_matters.values()
+                ).values_list("pk", flat=True)
+            ),
+            "tasks.task": [t.pk for t in tasks.values()],
+            "tasks.followup": list(
+                FollowUp.objects.filter(
+                    task__in=tasks.values()
+                ).values_list("pk", flat=True)
+            ),
+            "cashflow.cashflowentry": cashflow_pks,
+            "notes.note": note_pks,
+        }
+
+        # Save manifest to SampleDataStatus
+        sample_status.is_loaded = True
+        sample_status.manifest = manifest
+        sample_status.loaded_at = timezone.now()
+        sample_status.save()
+
         # Print summary
         self.stdout.write(self.style.SUCCESS(
             f"\nSample data loaded successfully!\n"
-            f"  Stakeholders:   {Stakeholder.objects.count()}\n"
-            f"  Relationships:  {Relationship.objects.count()}\n"
-            f"  Contact Logs:   {ContactLog.objects.count()}\n"
-            f"  Properties:     {RealEstate.objects.count()}\n"
-            f"  Investments:    {Investment.objects.count()}\n"
-            f"  Loans:          {Loan.objects.count()}\n"
-            f"  Legal Matters:  {LegalMatter.objects.count()}\n"
-            f"  Evidence:       {Evidence.objects.count()}\n"
-            f"  Tasks:          {Task.objects.count()}\n"
-            f"  Follow-ups:     {FollowUp.objects.count()}\n"
-            f"  Cash Flow:      {CashFlowEntry.objects.count()}\n"
-            f"  Notes:          {Note.objects.count()}"
+            f"  Stakeholders:   {len(manifest['stakeholders.stakeholder'])}\n"
+            f"  Relationships:  {len(manifest['stakeholders.relationship'])}\n"
+            f"  Contact Logs:   {len(manifest['stakeholders.contactlog'])}\n"
+            f"  Properties:     {len(manifest['assets.realestate'])}\n"
+            f"  Investments:    {len(manifest['assets.investment'])}\n"
+            f"  Loans:          {len(manifest['assets.loan'])}\n"
+            f"  Legal Matters:  {len(manifest['legal.legalmatter'])}\n"
+            f"  Evidence:       {len(manifest['legal.evidence'])}\n"
+            f"  Tasks:          {len(manifest['tasks.task'])}\n"
+            f"  Follow-ups:     {len(manifest['tasks.followup'])}\n"
+            f"  Cash Flow:      {len(manifest['cashflow.cashflowentry'])}\n"
+            f"  Notes:          {len(manifest['notes.note'])}"
         ))
