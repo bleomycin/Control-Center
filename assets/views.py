@@ -181,8 +181,17 @@ class RealEstateCreateView(CreateView):
     template_name = "assets/realestate_form.html"
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        stakeholder = form.cleaned_data.get("initial_stakeholder")
+        if stakeholder:
+            PropertyOwnership.objects.create(
+                property=self.object,
+                stakeholder=stakeholder,
+                role=form.cleaned_data.get("initial_role", ""),
+                ownership_percentage=form.cleaned_data.get("initial_percentage"),
+            )
         messages.success(self.request, "Property created.")
-        return super().form_valid(form)
+        return response
 
 
 class RealEstateDetailView(DetailView):
@@ -193,6 +202,7 @@ class RealEstateDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         obj = self.object
+        ctx["loans"] = obj.loans.prefetch_related("parties__stakeholder").all()
         ctx["legal_matters"] = obj.legal_matters.all()[:5]
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
         ctx["notes"] = obj.notes.all()[:5]
@@ -204,6 +214,13 @@ class RealEstateUpdateView(UpdateView):
     model = RealEstate
     form_class = RealEstateForm
     template_name = "assets/realestate_form.html"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        del form.fields["initial_stakeholder"]
+        del form.fields["initial_role"]
+        del form.fields["initial_percentage"]
+        return form
 
     def form_valid(self, form):
         messages.success(self.request, "Property updated.")
@@ -258,8 +275,17 @@ class InvestmentCreateView(CreateView):
     template_name = "assets/investment_form.html"
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        stakeholder = form.cleaned_data.get("initial_stakeholder")
+        if stakeholder:
+            InvestmentParticipant.objects.create(
+                investment=self.object,
+                stakeholder=stakeholder,
+                role=form.cleaned_data.get("initial_role", ""),
+                ownership_percentage=form.cleaned_data.get("initial_percentage"),
+            )
         messages.success(self.request, "Investment created.")
-        return super().form_valid(form)
+        return response
 
 
 class InvestmentDetailView(DetailView):
@@ -267,11 +293,23 @@ class InvestmentDetailView(DetailView):
     template_name = "assets/investment_detail.html"
     context_object_name = "investment"
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
+        return ctx
+
 
 class InvestmentUpdateView(UpdateView):
     model = Investment
     form_class = InvestmentForm
     template_name = "assets/investment_form.html"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        del form.fields["initial_stakeholder"]
+        del form.fields["initial_role"]
+        del form.fields["initial_percentage"]
+        return form
 
     def form_valid(self, form):
         messages.success(self.request, "Investment updated.")
@@ -338,6 +376,14 @@ class LoanCreateView(CreateView):
     model = Loan
     form_class = LoanForm
     template_name = "assets/loan_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("property"):
+            initial["related_property"] = self.request.GET["property"]
+        if self.request.GET.get("investment"):
+            initial["related_investment"] = self.request.GET["investment"]
+        return initial
 
     def form_valid(self, form):
         messages.success(self.request, "Loan created.")
