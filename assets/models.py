@@ -114,6 +114,14 @@ class Loan(models.Model):
     ]
 
     name = models.CharField(max_length=255)
+    related_property = models.ForeignKey(
+        RealEstate, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="loans", verbose_name="Property",
+    )
+    related_investment = models.ForeignKey(
+        Investment, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="loans", verbose_name="Investment",
+    )
     stakeholders = models.ManyToManyField(
         "stakeholders.Stakeholder",
         through="LoanParty",
