@@ -191,7 +191,7 @@ class StakeholderViewTests(TestCase):
             HTTP_HX_REQUEST="true",
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertTemplateUsed(resp, "stakeholders/partials/_stakeholder_table_rows.html")
+        self.assertTemplateUsed(resp, "stakeholders/partials/_tab_content.html")
 
     def test_create_get(self):
         resp = self.client.get(reverse("stakeholders:create"))
@@ -352,3 +352,74 @@ class StakeholderHierarchyTests(TestCase):
             {"parent_organization": self.firm.pk},
         )
         self.assertEqual(resp.status_code, 200)
+
+
+class StakeholderTabTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.firm = Stakeholder.objects.create(
+            name="Test Firm", entity_type="firm", email="firm@test.com",
+            trust_rating=5, risk_rating=1,
+        )
+        cls.employee = Stakeholder.objects.create(
+            name="Employee One", entity_type="professional",
+            parent_organization=cls.firm, email="emp@test.com",
+        )
+        cls.attorney = Stakeholder.objects.create(
+            name="Test Attorney", entity_type="attorney",
+        )
+        cls.lender = Stakeholder.objects.create(
+            name="Test Lender", entity_type="lender",
+        )
+        cls.advisor = Stakeholder.objects.create(
+            name="Test Advisor", entity_type="advisor",
+        )
+        cls.contact = Stakeholder.objects.create(
+            name="Test Contact", entity_type="contact",
+        )
+
+    def test_all_tab_excludes_employees(self):
+        resp = self.client.get(reverse("stakeholders:list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["current_tab"], "all")
+        stakeholder_names = [s.name for s in resp.context["stakeholders"]]
+        self.assertNotIn("Employee One", stakeholder_names)
+        self.assertIn("Test Firm", stakeholder_names)
+        self.assertIn("Test Attorney", stakeholder_names)
+
+    def test_firms_tab_returns_firm_cards(self):
+        resp = self.client.get(
+            reverse("stakeholders:list"), {"tab": "firms"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "stakeholders/partials/_firm_cards.html")
+        self.assertContains(resp, "Test Firm")
+        self.assertContains(resp, "Employee One")
+
+    def test_attorneys_tab_shows_only_attorneys(self):
+        resp = self.client.get(reverse("stakeholders:list"), {"tab": "attorneys"})
+        self.assertEqual(resp.status_code, 200)
+        stakeholder_names = [s.name for s in resp.context["stakeholders"]]
+        self.assertIn("Test Attorney", stakeholder_names)
+        self.assertNotIn("Test Lender", stakeholder_names)
+        self.assertNotIn("Test Firm", stakeholder_names)
+
+    def test_firms_tab_search_matches_employee_name(self):
+        resp = self.client.get(
+            reverse("stakeholders:list"), {"tab": "firms", "q": "Employee"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test Firm")
+
+    def test_tab_counts_correct(self):
+        resp = self.client.get(reverse("stakeholders:list"))
+        counts = resp.context["tab_counts"]
+        # All = non-employees (firm + attorney + lender + advisor + contact = 5)
+        self.assertEqual(counts["all"], 5)
+        self.assertEqual(counts["firms"], 1)
+        self.assertEqual(counts["attorneys"], 1)
+        self.assertEqual(counts["lenders"], 1)
+        self.assertEqual(counts["advisors"], 1)  # advisor only (professional is employee)
+        self.assertEqual(counts["other"], 1)  # contact
