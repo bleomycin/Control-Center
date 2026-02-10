@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize static %}
 {% block title %}Dashboard - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
@@ -7,38 +7,23 @@
     <p class="text-sm text-gray-400 mt-1">Your command center</p>
 </div>
 
-<!-- Liquidity Alerts -->
+<!-- Liquidity Alerts (dismissable) -->
 {% include "partials/_alerts.html" %}
 
-<!-- Net Worth -->
+<!-- Summary Row (4 cards) -->
 {% include "dashboard/partials/_net_worth.html" %}
 
-<!-- Cash Flow Summary Bar -->
-<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <p class="text-xs text-gray-400 uppercase tracking-wide">Actual Inflows</p>
-        <p class="text-xl font-bold text-green-400 mt-1">${{ cashflow.actual_inflows|default:"0"|floatformat:0|intcomma }}</p>
-    </div>
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <p class="text-xs text-gray-400 uppercase tracking-wide">Actual Outflows</p>
-        <p class="text-xl font-bold text-red-400 mt-1">${{ cashflow.actual_outflows|default:"0"|floatformat:0|intcomma }}</p>
-    </div>
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <p class="text-xs text-gray-400 uppercase tracking-wide">Projected In</p>
-        <p class="text-xl font-bold text-green-300 mt-1">${{ cashflow.projected_inflows|default:"0"|floatformat:0|intcomma }}</p>
-    </div>
-    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <p class="text-xs text-gray-400 uppercase tracking-wide">Projected Out</p>
-        <p class="text-xl font-bold text-red-300 mt-1">${{ cashflow.projected_outflows|default:"0"|floatformat:0|intcomma }}</p>
-    </div>
-</div>
-
-<!-- 2x2 Grid -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<!-- Primary Row: Overdue Tasks | Active Legal | Asset Overview -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     {% include "dashboard/partials/_overdue_tasks.html" %}
     {% include "dashboard/partials/_active_legal_matters.html" %}
-    {% include "dashboard/partials/_recent_activity.html" %}
+    {% include "dashboard/partials/_asset_summary.html" %}
+</div>
+
+<!-- Secondary Row: Stale Follow-ups | Recent Activity -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     {% include "dashboard/partials/_stale_followups.html" %}
+    {% include "dashboard/partials/_recent_activity.html" %}
 </div>
 
 <!-- Upcoming Deadlines -->
@@ -46,4 +31,6 @@
 
 <!-- Asset Risk Alerts -->
 {% include "dashboard/partials/_asset_risk.html" %}
+
+<script src="{% static 'js/dismiss-alerts.js' %}"></script>
 {% endblock %}

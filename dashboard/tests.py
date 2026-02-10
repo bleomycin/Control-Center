@@ -28,8 +28,9 @@ class DashboardViewTests(TestCase):
     def test_context_keys(self):
         resp = self.client.get(reverse("dashboard:index"))
         for key in ("overdue_tasks", "upcoming_tasks", "stale_followups",
-                     "recent_activity", "liquidity_alerts", "cashflow",
-                     "net_worth", "upcoming_deadlines"):
+                     "recent_activity", "liquidity_alerts", "monthly_net_flow",
+                     "net_worth", "upcoming_deadlines", "property_count",
+                     "investment_count", "active_loan_count"):
             self.assertIn(key, resp.context, f"Missing context key: {key}")
 
     def test_overdue_tasks_in_context(self):
@@ -61,7 +62,7 @@ class DashboardViewTests(TestCase):
         resp = self.client.get(reverse("dashboard:index"))
         self.assertTrue(resp.context["stale_followups"].exists())
 
-    def test_cashflow_summary(self):
+    def test_monthly_net_flow(self):
         today = timezone.localdate()
         CashFlowEntry.objects.create(
             description="Income", amount=Decimal("3000"),
@@ -72,9 +73,7 @@ class DashboardViewTests(TestCase):
             entry_type="outflow", date=today, is_projected=False,
         )
         resp = self.client.get(reverse("dashboard:index"))
-        cf = resp.context["cashflow"]
-        self.assertEqual(cf["actual_inflows"], Decimal("3000"))
-        self.assertEqual(cf["actual_outflows"], Decimal("1000"))
+        self.assertEqual(resp.context["monthly_net_flow"], Decimal("2000"))
 
 
 class GlobalSearchTests(TestCase):
