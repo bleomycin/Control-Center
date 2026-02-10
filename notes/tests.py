@@ -250,6 +250,27 @@ class NoteViewTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(Link.objects.filter(description="Test Doc").exists())
 
+    def test_link_edit_get(self):
+        link = Link.objects.create(
+            note=self.note, url="https://example.com", description="Old Name"
+        )
+        resp = self.client.get(reverse("notes:link_edit", args=[link.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Old Name")
+
+    def test_link_edit_post(self):
+        link = Link.objects.create(
+            note=self.note, url="https://example.com", description="Old Name"
+        )
+        resp = self.client.post(
+            reverse("notes:link_edit", args=[link.pk]),
+            {"url": "https://example.com/new", "description": "New Name"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        link.refresh_from_db()
+        self.assertEqual(link.description, "New Name")
+        self.assertEqual(link.url, "https://example.com/new")
+
     def test_link_delete(self):
         link = Link.objects.create(
             note=self.note, url="https://example.com", description="Del Link"
