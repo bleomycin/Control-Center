@@ -14,6 +14,7 @@ urlpatterns = [
     path("<int:pk>/attachment/add/", views.attachment_add, name="attachment_add"),
     path("attachment/<int:pk>/delete/", views.attachment_delete, name="attachment_delete"),
     path("<int:pk>/link/add/", views.link_add, name="link_add"),
+    path("link/<int:pk>/edit/", views.link_edit, name="link_edit"),
     path("link/<int:pk>/delete/", views.link_delete, name="link_delete"),
     path("quick-capture/", views.quick_capture, name="quick_capture"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
