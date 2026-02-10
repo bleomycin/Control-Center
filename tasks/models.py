@@ -22,6 +22,11 @@ class Task(models.Model):
         ("one_time", "One-Time"),
         ("reference", "Reference"),
     ]
+    DIRECTION_CHOICES = [
+        ("personal", "Personal"),
+        ("outbound", "Outbound Request"),
+        ("inbound", "Inbound Request"),
+    ]
 
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -30,6 +35,7 @@ class Task(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_started")
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
     task_type = models.CharField(max_length=10, choices=TASK_TYPE_CHOICES, default="one_time")
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="personal")
     related_stakeholder = models.ForeignKey(
         "stakeholders.Stakeholder", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="tasks",

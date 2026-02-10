@@ -294,3 +294,61 @@ class StakeholderViewTests(TestCase):
         self.assertEqual(len(data["nodes"]), 2)
         self.assertEqual(len(data["edges"]), 1)
         self.assertEqual(data["edges"][0]["label"], "colleague")
+
+
+class StakeholderHierarchyTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.firm = Stakeholder.objects.create(
+            name="Acme Firm", entity_type="firm", email="info@acme.com",
+        )
+        cls.employee1 = Stakeholder.objects.create(
+            name="Alice Employee", entity_type="professional",
+            parent_organization=cls.firm,
+        )
+        cls.employee2 = Stakeholder.objects.create(
+            name="Bob Employee", entity_type="professional",
+            parent_organization=cls.firm,
+        )
+
+    def test_firm_employees_reverse_lookup(self):
+        employees = list(self.firm.employees.all())
+        self.assertEqual(len(employees), 2)
+        self.assertIn(self.employee1, employees)
+        self.assertIn(self.employee2, employees)
+
+    def test_delete_firm_nullifies_employees(self):
+        self.firm.delete()
+        self.employee1.refresh_from_db()
+        self.employee2.refresh_from_db()
+        self.assertIsNone(self.employee1.parent_organization)
+        self.assertIsNone(self.employee2.parent_organization)
+
+    def test_firm_detail_shows_team_members(self):
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.firm.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Team Members")
+        self.assertContains(resp, "Alice Employee")
+        self.assertContains(resp, "Bob Employee")
+
+    def test_employee_detail_links_to_firm(self):
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.employee1.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Acme Firm")
+        self.assertContains(resp, self.firm.get_absolute_url())
+
+    def test_graph_data_includes_employees(self):
+        resp = self.client.get(reverse("stakeholders:graph_data", args=[self.firm.pk]))
+        data = json.loads(resp.content)
+        node_names = [n["name"] for n in data["nodes"]]
+        self.assertIn("Alice Employee", node_names)
+        self.assertIn("Bob Employee", node_names)
+        edge_labels = [e["label"] for e in data["edges"]]
+        self.assertIn("employs", edge_labels)
+
+    def test_create_with_parent_organization_prefill(self):
+        resp = self.client.get(
+            reverse("stakeholders:create"),
+            {"parent_organization": self.firm.pk},
+        )
+        self.assertEqual(resp.status_code, 200)

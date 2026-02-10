@@ -27,6 +27,10 @@ class Stakeholder(models.Model):
         null=True, blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(5)],
     )
+    parent_organization = models.ForeignKey(
+        "self", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="employees",
+    )
     notes_text = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
