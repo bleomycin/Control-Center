@@ -7,6 +7,7 @@ from .models import Task, FollowUp
 class TaskForm(TailwindFormMixin, forms.ModelForm):
     fu_create = forms.BooleanField(required=False, label="Create follow-up for this task")
     fu_method = forms.ChoiceField(required=False, label="Method")
+    fu_reminder_enabled = forms.BooleanField(required=False, label="Enable reminder")
     fu_follow_up_days = forms.IntegerField(
         required=False, initial=3, min_value=1, max_value=90,
         label="Remind after (days)",
@@ -41,12 +42,13 @@ class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
 class FollowUpForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = FollowUp
-        fields = ["stakeholder", "outreach_date", "method", "follow_up_days", "notes_text"]
+        fields = ["stakeholder", "outreach_date", "method", "reminder_enabled", "follow_up_days", "notes_text"]
         widgets = {
             "outreach_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "notes_text": forms.Textarea(attrs={"rows": 2}),
         }
         labels = {
+            "reminder_enabled": "Enable reminder",
             "follow_up_days": "Remind after (days)",
         }
 

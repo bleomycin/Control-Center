@@ -36,14 +36,21 @@
                 </label>
             </div>
             <div id="fu-fields" class="space-y-3 hidden">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
-                        {{ form.fu_method }}
+                <div>
+                    <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
+                    {{ form.fu_method }}
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        {{ form.fu_reminder_enabled }}
+                        <label for="{{ form.fu_reminder_enabled.id_for_label }}" class="text-xs font-medium text-gray-400 cursor-pointer">{{ form.fu_reminder_enabled.label }}</label>
                     </div>
-                    <div>
-                        <label for="{{ form.fu_follow_up_days.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_follow_up_days.label }}</label>
-                        {{ form.fu_follow_up_days }}
+                    <div id="fu-days-field" class="hidden">
+                        <div class="flex items-center gap-2">
+                            <label for="{{ form.fu_follow_up_days.id_for_label }}" class="text-xs font-medium text-gray-400">after</label>
+                            <div class="w-20">{{ form.fu_follow_up_days }}</div>
+                            <span class="text-xs text-gray-400">days</span>
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -56,6 +63,9 @@
         <script>
             document.getElementById('{{ form.fu_create.id_for_label }}').addEventListener('change', function() {
                 document.getElementById('fu-fields').classList.toggle('hidden', !this.checked);
+            });
+            document.getElementById('{{ form.fu_reminder_enabled.id_for_label }}').addEventListener('change', function() {
+                document.getElementById('fu-days-field').classList.toggle('hidden', !this.checked);
             });
         </script>
         {% endif %}

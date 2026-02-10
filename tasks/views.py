@@ -85,6 +85,7 @@ class TaskCreateView(CreateView):
                 stakeholder=task.related_stakeholder,
                 outreach_date=timezone.now(),
                 method=form.cleaned_data.get("fu_method", ""),
+                reminder_enabled=form.cleaned_data.get("fu_reminder_enabled", False),
                 follow_up_days=form.cleaned_data.get("fu_follow_up_days") or 3,
                 notes_text=form.cleaned_data.get("fu_notes", ""),
             )
@@ -176,10 +177,10 @@ def export_pdf_detail(request, pk):
     follow_ups = t.follow_ups.select_related("stakeholder").all()
     if follow_ups:
         sections.append({"heading": "Follow-ups", "type": "table",
-                         "headers": ["Date", "Stakeholder", "Method", "Remind (days)", "Response", "Notes"],
+                         "headers": ["Date", "Stakeholder", "Method", "Reminder", "Response", "Notes"],
                          "rows": [[fu.outreach_date.strftime("%b %d, %Y"), fu.stakeholder.name,
                                    get_choice_label("contact_method", fu.method),
-                                   str(fu.follow_up_days),
+                                   f"{fu.follow_up_days} days" if fu.reminder_enabled else "Off",
                                    f"Yes ({fu.response_date.strftime('%b %d')})" if fu.response_received else "Pending",
                                    (fu.notes_text[:60] + "...") if len(fu.notes_text) > 60 else fu.notes_text or "-"]
                                   for fu in follow_ups]})

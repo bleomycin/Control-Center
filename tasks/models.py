@@ -71,6 +71,7 @@ class FollowUp(models.Model):
     )
     outreach_date = models.DateTimeField()
     method = models.CharField(max_length=30)
+    reminder_enabled = models.BooleanField(default=False)
     follow_up_days = models.PositiveIntegerField(default=3)
     response_received = models.BooleanField(default=False)
     response_date = models.DateTimeField(null=True, blank=True)
@@ -82,7 +83,7 @@ class FollowUp(models.Model):
 
     @property
     def is_stale(self):
-        return not self.response_received and timezone.now() > self.reminder_due_date
+        return self.reminder_enabled and not self.response_received and timezone.now() > self.reminder_due_date
 
     def __str__(self):
         return f"Follow-up: {self.task} → {self.stakeholder} ({self.outreach_date:%Y-%m-%d})"

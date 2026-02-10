@@ -308,6 +308,7 @@ class NotificationTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=5),
             method="email",
+            reminder_enabled=True,
             response_received=False,
         )
         check_stale_followups()
@@ -325,6 +326,7 @@ class NotificationTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=10),
             method="email",
+            reminder_enabled=True,
             follow_up_days=3,
             response_received=False,
         )
@@ -339,6 +341,7 @@ class NotificationTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=4),
             method="call",
+            reminder_enabled=True,
             follow_up_days=7,
             response_received=False,
         )
@@ -353,11 +356,26 @@ class NotificationTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=4),
             method="call",
+            reminder_enabled=True,
             follow_up_days=2,
             response_received=False,
         )
         check_stale_followups()
         self.assertEqual(len(mail.outbox), 1)
+
+    def test_stale_skips_reminder_disabled(self):
+        task = Task.objects.create(title="No Reminder Task")
+        FollowUp.objects.create(
+            task=task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=10),
+            method="email",
+            reminder_enabled=False,
+            follow_up_days=3,
+            response_received=False,
+        )
+        result = check_stale_followups()
+        self.assertIn("No stale", result)
 
 
 class FollowUpModelExtendedTests(TestCase):
@@ -374,6 +392,15 @@ class FollowUpModelExtendedTests(TestCase):
             method="email",
         )
         self.assertEqual(fu.follow_up_days, 3)
+
+    def test_reminder_enabled_default_false(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now(),
+            method="email",
+        )
+        self.assertFalse(fu.reminder_enabled)
 
     def test_reminder_due_date(self):
         outreach = timezone.now() - timedelta(days=5)
@@ -393,6 +420,7 @@ class FollowUpModelExtendedTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=5),
             method="email",
+            reminder_enabled=True,
             follow_up_days=3,
             response_received=False,
         )
@@ -404,6 +432,7 @@ class FollowUpModelExtendedTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=1),
             method="email",
+            reminder_enabled=True,
             follow_up_days=3,
             response_received=False,
         )
@@ -415,9 +444,22 @@ class FollowUpModelExtendedTests(TestCase):
             stakeholder=self.stakeholder,
             outreach_date=timezone.now() - timedelta(days=10),
             method="email",
+            reminder_enabled=True,
             follow_up_days=3,
             response_received=True,
             response_date=timezone.now(),
+        )
+        self.assertFalse(fu.is_stale)
+
+    def test_is_stale_false_when_reminder_disabled(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=10),
+            method="email",
+            reminder_enabled=False,
+            follow_up_days=3,
+            response_received=False,
         )
         self.assertFalse(fu.is_stale)
 
@@ -451,6 +493,7 @@ class FollowUpRespondViewTests(TestCase):
             "related_stakeholder": self.stakeholder.pk,
             "fu_create": "on",
             "fu_method": "call",
+            "fu_reminder_enabled": "on",
             "fu_follow_up_days": "5",
             "fu_notes": "Test follow-up note",
         })
@@ -460,8 +503,25 @@ class FollowUpRespondViewTests(TestCase):
         fu = task.follow_ups.first()
         self.assertEqual(fu.stakeholder, self.stakeholder)
         self.assertEqual(fu.method, "call")
+        self.assertTrue(fu.reminder_enabled)
         self.assertEqual(fu.follow_up_days, 5)
         self.assertEqual(fu.notes_text, "Test follow-up note")
+
+    def test_task_create_followup_reminder_defaults_off(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Task FU No Reminder",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "one_time",
+            "related_stakeholder": self.stakeholder.pk,
+            "fu_create": "on",
+            "fu_method": "email",
+            "fu_follow_up_days": "3",
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.get(title="Task FU No Reminder")
+        fu = task.follow_ups.first()
+        self.assertFalse(fu.reminder_enabled)
 
     def test_task_create_without_followup(self):
         resp = self.client.post(reverse("tasks:create"), {

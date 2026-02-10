@@ -124,6 +124,7 @@ def check_stale_followups():
     now = timezone.now()
     pending = FollowUp.objects.filter(
         response_received=False,
+        reminder_enabled=True,
     ).exclude(
         task__status="complete",
     ).select_related("task", "stakeholder")
