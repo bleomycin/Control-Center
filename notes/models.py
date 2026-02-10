@@ -55,3 +55,16 @@ class Attachment(models.Model):
 
     def get_absolute_url(self):
         return reverse("notes:detail", kwargs={"pk": self.note.pk})
+
+
+class Link(models.Model):
+    note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name="links")
+    url = models.URLField(max_length=2000)
+    description = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.description
+
+    def get_absolute_url(self):
+        return reverse("notes:detail", kwargs={"pk": self.note.pk})
