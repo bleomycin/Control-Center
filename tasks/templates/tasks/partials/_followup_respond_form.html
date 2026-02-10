@@ -1,0 +1,20 @@
+<div class="px-4 py-3 border-b border-gray-700 bg-gray-800/50">
+    <form hx-post="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML" class="space-y-3">
+        {% csrf_token %}
+        <p class="text-sm text-gray-300">
+            Recording response from <span class="font-medium text-white">{{ fu.stakeholder }}</span>
+            <span class="text-gray-500">— {{ fu.method }} on {{ fu.outreach_date|date:"M j, Y" }}</span>
+        </p>
+        <div>
+            <label for="response_notes_{{ fu.pk }}" class="block text-xs text-gray-400 mb-1">What did they say? <span class="text-gray-600">(optional)</span></label>
+            <textarea id="response_notes_{{ fu.pk }}" name="response_notes" rows="2"
+                      class="w-full rounded-md bg-gray-900 border-gray-600 text-gray-200 text-sm focus:border-blue-500 focus:ring-blue-500 placeholder-gray-600"
+                      placeholder="Brief summary of their response..."></textarea>
+        </div>
+        <div class="flex items-center gap-2">
+            <button type="submit" class="text-xs px-3 py-1.5 bg-green-700 hover:bg-green-600 text-green-100 rounded-md transition-colors">Save Response</button>
+            <button type="button" onclick="document.getElementById('followup-form-container').innerHTML=''"
+                    class="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors">Cancel</button>
+        </div>
+    </form>
+</div>
