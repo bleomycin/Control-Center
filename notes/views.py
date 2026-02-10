@@ -214,6 +214,24 @@ def link_add(request, pk):
                   {"form": form, "note": note})
 
 
+def link_edit(request, pk):
+    link = get_object_or_404(Link, pk=pk)
+    note = link.note
+    if request.method == "POST":
+        form = LinkForm(request.POST, instance=link)
+        if form.is_valid():
+            form.save()
+            return render(request, "notes/partials/_link_list.html",
+                          {"link_list": note.links.all(), "note": note})
+    else:
+        form = LinkForm(instance=link)
+    from django.urls import reverse
+    return render(request, "notes/partials/_link_form.html",
+                  {"form": form, "note": note,
+                   "form_url": reverse("notes:link_edit", args=[pk]),
+                   "edit_mode": True})
+
+
 def link_delete(request, pk):
     link = get_object_or_404(Link, pk=pk)
     note = link.note

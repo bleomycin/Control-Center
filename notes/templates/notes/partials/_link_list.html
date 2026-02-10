@@ -6,9 +6,13 @@
             <a href="{{ link.url }}" class="text-sm text-blue-400 hover:text-blue-300" target="_blank" rel="noopener noreferrer">{{ link.description }}</a>
             <span class="text-xs text-gray-400">{{ link.created_at|date:"M j, Y" }}</span>
         </div>
-        <button hx-post="{% url 'notes:link_delete' link.pk %}" hx-target="#link-list" hx-swap="innerHTML"
-                hx-confirm="Delete this link?"
-                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button hx-get="{% url 'notes:link_edit' link.pk %}" hx-target="#link-form-container" hx-swap="innerHTML"
+                    class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+            <button hx-post="{% url 'notes:link_delete' link.pk %}" hx-target="#link-list" hx-swap="innerHTML"
+                    hx-confirm="Delete this link?"
+                    class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+        </div>
     </div>
     {% empty %}
     <p class="px-4 py-4 text-sm text-gray-500 text-center">No links</p>
