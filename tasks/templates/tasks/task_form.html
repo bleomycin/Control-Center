@@ -15,6 +15,7 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
+        {% if field.name|slice:":3" != "fu_" %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
@@ -22,7 +23,43 @@
             {{ field }}
             {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
         </div>
+        {% endif %}
         {% endfor %}
+
+        {% if not object %}
+        <!-- Follow-up section (create only) -->
+        <div class="border-t border-gray-700 pt-4 mt-4">
+            <div class="flex items-center gap-2 mb-3">
+                {{ form.fu_create }}
+                <label for="{{ form.fu_create.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">
+                    {{ form.fu_create.label }}
+                </label>
+            </div>
+            <div id="fu-fields" class="space-y-3 hidden">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
+                        {{ form.fu_method }}
+                    </div>
+                    <div>
+                        <label for="{{ form.fu_follow_up_days.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_follow_up_days.label }}</label>
+                        {{ form.fu_follow_up_days }}
+                    </div>
+                </div>
+                <div>
+                    <label for="{{ form.fu_notes.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_notes.label }}</label>
+                    {{ form.fu_notes }}
+                </div>
+                <p class="text-xs text-gray-500">A follow-up will be created using the stakeholder selected above. If no stakeholder is selected, no follow-up will be created.</p>
+            </div>
+        </div>
+        <script>
+            document.getElementById('{{ form.fu_create.id_for_label }}').addEventListener('change', function() {
+                document.getElementById('fu-fields').classList.toggle('hidden', !this.checked);
+            });
+        </script>
+        {% endif %}
+
         <div class="flex gap-3 pt-4">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
                 {% if object %}Update{% else %}Create{% endif %} Task
