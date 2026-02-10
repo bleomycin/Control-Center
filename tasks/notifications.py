@@ -41,11 +41,13 @@ def check_overdue_tasks():
     if not overdue.exists():
         return "No overdue tasks."
 
+    direction_prefix = {"outbound": "[OUTBOUND] ", "inbound": "[INBOUND] "}
     lines = []
     for task in overdue:
         days = (today - task.due_date).days
         stakeholder = f" ({task.related_stakeholder.name})" if task.related_stakeholder else ""
-        lines.append(f"  - {task.title}{stakeholder} — {days} day(s) overdue")
+        prefix = direction_prefix.get(task.direction, "")
+        lines.append(f"  - {prefix}{task.title}{stakeholder} — {days} day(s) overdue")
 
     body = f"You have {overdue.count()} overdue task(s):\n\n" + "\n".join(lines)
 
@@ -59,8 +61,9 @@ def check_overdue_tasks():
 
     from dashboard.models import Notification
     for task in overdue:
+        prefix = direction_prefix.get(task.direction, "")
         Notification.objects.create(
-            message=f"Overdue: {task.title} ({(today - task.due_date).days} days)",
+            message=f"Overdue: {prefix}{task.title} ({(today - task.due_date).days} days)",
             level="warning",
             link=task.get_absolute_url(),
         )

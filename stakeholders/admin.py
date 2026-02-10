@@ -18,8 +18,8 @@ class RelationshipFromInline(admin.TabularInline):
 
 @admin.register(Stakeholder)
 class StakeholderAdmin(admin.ModelAdmin):
-    list_display = ["name", "entity_type", "organization", "email", "phone", "trust_rating", "risk_rating"]
-    list_filter = ["entity_type", "trust_rating", "risk_rating"]
+    list_display = ["name", "entity_type", "organization", "parent_organization", "email", "phone", "trust_rating", "risk_rating"]
+    list_filter = ["entity_type", "trust_rating", "risk_rating", "parent_organization"]
     search_fields = ["name", "email", "organization", "notes_text"]
     inlines = [ContactLogInline, RelationshipFromInline]
 

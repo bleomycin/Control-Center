@@ -8,7 +8,7 @@
         <p class="text-xs text-gray-400 sm:hidden">{{ s.entity_type|choice_label:"entity_type" }}</p>
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ s.entity_type|choice_label:"entity_type" }}</td>
-    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ s.organization|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{% if s.parent_organization %}<a href="{{ s.parent_organization.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ s.parent_organization.name }}</a>{% else %}{{ s.organization|default:"-" }}{% endif %}</td>
     <td class="px-4 py-3 text-sm hidden lg:table-cell">
         {% if s.trust_rating %}
         <span class="{% if s.trust_rating >= 4 %}text-green-400{% elif s.trust_rating >= 3 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ s.trust_rating }}/5</span>

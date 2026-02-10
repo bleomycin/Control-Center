@@ -67,6 +67,33 @@ class Command(BaseCommand):
             )
             stakeholders[name] = s
 
+        # Firm: Armanino LLP
+        self.stdout.write("Creating firm and employees...")
+        armanino = Stakeholder.objects.create(
+            name="Armanino LLP", entity_type="firm",
+            email="info@armanino.com", phone="555-700-1000",
+            organization="", trust_rating=5, risk_rating=1,
+            notes_text="Full-service accounting and consulting firm. Handles family office services, "
+                       "forensic accounting, tax preparation, and advisory.",
+        )
+        stakeholders["Armanino LLP"] = armanino
+
+        employee_data = [
+            ("Sarah Chen", "professional", "schen@armanino.com", "555-700-1001",
+             "Senior account manager. Primary day-to-day contact for all matters."),
+            ("Michael Torres", "professional", "mtorres@armanino.com", "555-700-1002",
+             "Partner. Oversees the family office engagement. Quarterly strategic reviews."),
+            ("Lisa Park", "professional", "lpark@armanino.com", "555-700-1003",
+             "Forensic accounting specialist. Handles transaction analysis and due diligence reviews."),
+        ]
+        for name, etype, email, phone, notes in employee_data:
+            emp = Stakeholder.objects.create(
+                name=name, entity_type=etype, email=email, phone=phone,
+                parent_organization=armanino, trust_rating=5, risk_rating=1,
+                notes_text=notes,
+            )
+            stakeholders[name] = emp
+
         self.stdout.write("Creating relationships...")
         rels = [
             ("Marcus Reed", "Sandra Liu", "colleague", "Both in legal, refer work to each other"),
@@ -74,6 +101,8 @@ class Command(BaseCommand):
             ("Janet Cobb", "Alicia Moreno", "professional contact", "Bank refers title work to her"),
             ("Derek Vasquez", "Dr. Helen Park", "referral partner", "Cross-refer wealth management clients"),
             ("James Calloway", "Tom Driscoll", "contractor", "Calloway does rehab work for Driscoll projects"),
+            ("Michael Torres", "Derek Vasquez", "professional contact", "Coordinate on tax and investment strategy"),
+            ("Lisa Park", "Marcus Reed", "professional contact", "Collaborate on forensic financial analysis for litigation"),
         ]
         for f, t, rtype, desc in rels:
             Relationship.objects.create(
@@ -315,57 +344,85 @@ class Command(BaseCommand):
 
         self.stdout.write("Creating tasks...")
         tasks = {}
+        # Format: (title, desc, due, status, priority, ttype, direction, sh_name, lm_title, prop_name)
         task_data = [
             ("Follow up with Marcus on Holston hearing date", "Call Marcus Reed to confirm hearing date and discuss strategy.",
-             today + timedelta(days=3), "not_started", "high", "one_time",
+             today + timedelta(days=3), "not_started", "high", "one_time", "outbound",
              "Marcus Reed", "Holston Eviction - 1200 Oak Ave", "1200 Oak Avenue"),
             ("Pay Oak Ave mortgage", "Monthly mortgage payment to First National.",
-             today + timedelta(days=22), "not_started", "high", "one_time",
+             today + timedelta(days=22), "not_started", "high", "one_time", "personal",
              None, None, "1200 Oak Avenue"),
             ("Pay Elm St mortgage", "Monthly mortgage payment to First National. Split with Tom.",
-             today + timedelta(days=15), "not_started", "high", "one_time",
+             today + timedelta(days=15), "not_started", "high", "one_time", "personal",
              "Tom Driscoll", None, "450 Elm Street"),
             ("Schedule roof inspection - Elm St", "Get 2-3 quotes for roof inspection on the duplex.",
-             today + timedelta(days=10), "in_progress", "medium", "one_time",
+             today + timedelta(days=10), "in_progress", "medium", "one_time", "outbound",
              "James Calloway", None, "450 Elm Street"),
             ("Review Magnolia closing documents", "Final review of all closing docs before signing.",
-             today + timedelta(days=5), "waiting", "critical", "one_time",
+             today + timedelta(days=5), "waiting", "critical", "one_time", "outbound",
              "Sandra Liu", "Magnolia Blvd Acquisition - Due Diligence", "3300 Magnolia Blvd"),
             ("Refinance Huang bridge loan", "Find permanent financing to replace the 9.5% bridge loan.",
-             today + timedelta(days=30), "not_started", "critical", "one_time",
+             today + timedelta(days=30), "not_started", "critical", "one_time", "outbound",
              "Janet Cobb", None, None),
             ("Prepare zoning hearing materials", "Compile community support letters and development plan for hearing.",
-             today + timedelta(days=14), "in_progress", "high", "one_time",
+             today + timedelta(days=14), "in_progress", "high", "one_time", "personal",
              None, "Riverside Zoning Application", "15 Riverside Dr"),
             ("Quarterly portfolio review follow-up", "Review Derek's bond allocation recommendation and make decision.",
-             today + timedelta(days=7), "not_started", "medium", "one_time",
+             today + timedelta(days=7), "not_started", "medium", "one_time", "personal",
              "Derek Vasquez", None, None),
             ("Send Holston back rent to collections", "If eviction proceeds, send $4,200 balance to collections agency.",
-             today + timedelta(days=45), "not_started", "medium", "one_time",
+             today + timedelta(days=45), "not_started", "medium", "one_time", "outbound",
              "Ray Holston", "Holston Eviction - 1200 Oak Ave", None),
             ("Oak Ave bathroom renovation check-in", "Verify Calloway is on schedule. Due in 2 weeks.",
-             today + timedelta(days=5), "not_started", "medium", "one_time",
+             today + timedelta(days=5), "not_started", "medium", "one_time", "outbound",
              "James Calloway", None, "1200 Oak Avenue"),
             ("Update estate plan documents", "Sign updated trust and POA documents at Helen's office.",
-             today + timedelta(days=20), "waiting", "medium", "one_time",
+             today + timedelta(days=20), "waiting", "medium", "one_time", "personal",
              "Dr. Helen Park", "Estate Plan Update", None),
             ("Review Q4 Elm St expense report", "Tom sent Q4 expenses. Verify amounts and approve.",
-             today - timedelta(days=5), "not_started", "medium", "one_time",
+             today - timedelta(days=5), "not_started", "medium", "one_time", "inbound",
              "Tom Driscoll", None, "450 Elm Street"),
             ("Pay Huang bridge loan interest", "Monthly interest-only payment due.",
-             today + timedelta(days=8), "not_started", "high", "one_time",
+             today + timedelta(days=8), "not_started", "high", "one_time", "personal",
              "Victor Huang", None, None),
             ("File property tax protest - Cedar Lane", "Assessed value seems high given boundary dispute. File protest.",
-             today - timedelta(days=10), "not_started", "low", "one_time",
+             today - timedelta(days=10), "not_started", "low", "one_time", "personal",
              None, "Cedar Lane Boundary Dispute", "890 Cedar Lane"),
             ("Research Bitcoin exit strategy", "Price is near target. Set limit orders or hold?",
-             today + timedelta(days=2), "not_started", "low", "one_time",
+             today + timedelta(days=2), "not_started", "low", "one_time", "personal",
              None, None, None),
+            # Armanino outbound tasks
+            ("Request Polaris Risk background report via Armanino",
+             "Asked Lisa Park to run a background/forensic report on Polaris Risk Group before considering their investment proposal.",
+             today + timedelta(days=12), "not_started", "high", "one_time", "outbound",
+             "Lisa Park", None, None),
+            ("Request 2024 Elm St transaction review",
+             "Asked Sarah Chen to pull all 2024 transactions for 450 Elm St and prepare a summary for tax season.",
+             today + timedelta(days=18), "not_started", "medium", "one_time", "outbound",
+             "Sarah Chen", None, "450 Elm Street"),
+            ("Request Magnolia Blvd tax review",
+             "Asked Michael Torres to review the tax implications of the Magnolia Blvd acquisition structure.",
+             today + timedelta(days=25), "not_started", "medium", "one_time", "outbound",
+             "Michael Torres", "Magnolia Blvd Acquisition - Due Diligence", "3300 Magnolia Blvd"),
+            # Armanino inbound tasks
+            ("Schedule meeting with Michael Torres",
+             "Michael Torres requested a meeting to discuss Q4 tax planning strategy and year-end adjustments.",
+             today + timedelta(days=7), "not_started", "medium", "one_time", "inbound",
+             "Michael Torres", None, None),
+            ("Send Oak Ave receipts to Sarah",
+             "Sarah Chen asked me to send all renovation receipts for 1200 Oak Ave for the capital improvement deduction.",
+             today + timedelta(days=5), "not_started", "high", "one_time", "inbound",
+             "Sarah Chen", None, "1200 Oak Avenue"),
+            ("Contact Nina about entity formation",
+             "Lisa Park flagged that Nina Patel needs to provide entity formation docs for the Magnolia closing.",
+             today + timedelta(days=10), "not_started", "medium", "one_time", "inbound",
+             "Lisa Park", "Magnolia Blvd Acquisition - Due Diligence", None),
         ]
-        for title, desc, due, status, priority, ttype, sh_name, lm_title, prop_name in task_data:
+        for title, desc, due, status, priority, ttype, direction, sh_name, lm_title, prop_name in task_data:
             t = Task.objects.create(
                 title=title, description=desc, due_date=due,
                 status=status, priority=priority, task_type=ttype,
+                direction=direction,
                 related_stakeholder=stakeholders.get(sh_name),
                 related_legal_matter=legal_matters.get(lm_title) if lm_title else None,
                 related_property=properties.get(prop_name) if prop_name else None,
@@ -391,6 +448,10 @@ class Command(BaseCommand):
              "Attempted contact one more time before going to collections. No answer."),
             ("Update estate plan documents", "Dr. Helen Park", -20, "meeting", False, 5, True, now - timedelta(days=18),
              "Met to review draft documents. A few changes needed before signing."),
+            ("Request Polaris Risk background report via Armanino", "Lisa Park", -2, "email", True, 5, False, None,
+             "Sent request to Lisa with details on Polaris Risk Group. Awaiting initial findings."),
+            ("Request 2024 Elm St transaction review", "Sarah Chen", -3, "email", True, 7, False, None,
+             "Emailed Sarah with access to the Elm St bank statements. She'll compile the summary."),
         ]
         for task_title, sh_name, days_ago, method, reminder_on, fu_days, responded, resp_date, notes in followup_data:
             FollowUp.objects.create(

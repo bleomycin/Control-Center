@@ -12,7 +12,9 @@
             <span class="text-gray-200">{{ stakeholder.name }}</span>
         </nav>
         <h1 class="text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
-        <p class="text-sm text-gray-400 mt-1">{{ stakeholder.entity_type|choice_label:"entity_type" }}{% if stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}</p>
+        <p class="text-sm text-gray-400 mt-1">
+            {{ stakeholder.entity_type|choice_label:"entity_type" }}{% if stakeholder.parent_organization %} &middot; <a href="{{ stakeholder.parent_organization.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholder.parent_organization.name }}</a>{% elif stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}
+        </p>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
         <a href="{% url 'stakeholders:export_pdf' stakeholder.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
@@ -47,6 +49,28 @@
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
     <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
     <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ stakeholder.notes_text }}</p>
+</div>
+{% endif %}
+
+{% if employees %}
+<!-- Team Members (Firm) -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Team Members <span class="text-xs text-gray-400 font-normal">({{ employees.count }})</span></h2>
+        <a href="{% url 'stakeholders:create' %}?parent_organization={{ stakeholder.pk }}"
+           class="text-xs text-blue-400 hover:text-blue-300">+ Add Employee</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for emp in employees %}
+        <a href="{{ emp.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <div>
+                <span class="text-sm text-gray-200">{{ emp.name }}</span>
+                <span class="text-xs text-gray-400 ml-2">{{ emp.entity_type|choice_label:"entity_type" }}</span>
+            </div>
+            <span class="text-xs text-gray-400">{{ emp.email|default:"" }}</span>
+        </a>
+        {% endfor %}
+    </div>
 </div>
 {% endif %}
 
@@ -231,10 +255,15 @@
     </div>
 
     <div class="tab-content hidden" id="tab-tasks">
+        <div class="px-4 py-2 border-b border-gray-700 flex flex-wrap gap-2">
+            <a href="{% url 'tasks:create' %}?stakeholder={{ stakeholder.pk }}&direction=outbound" class="text-xs px-2 py-1 bg-cyan-900/50 hover:bg-cyan-900 text-cyan-300 rounded-md transition-colors">+ Request from them</a>
+            <a href="{% url 'tasks:create' %}?stakeholder={{ stakeholder.pk }}&direction=inbound" class="text-xs px-2 py-1 bg-amber-900/50 hover:bg-amber-900 text-amber-300 rounded-md transition-colors">+ They requested</a>
+        </div>
         <div class="divide-y divide-gray-700">
             {% for task in all_tasks %}
             <a href="{{ task.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
                 <div class="flex-1">
+                    {% if task.direction == "outbound" %}<span class="text-xs text-cyan-400 mr-1">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-xs text-amber-400 mr-1">&swarr;</span>{% endif %}
                     <span class="text-sm text-gray-200">{{ task.title }}</span>
                     <span class="text-xs px-2 py-0.5 rounded-full ml-2
                         {% if task.priority == 'critical' %}bg-red-900/50 text-red-300

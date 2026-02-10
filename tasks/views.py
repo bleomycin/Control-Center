@@ -34,7 +34,10 @@ class TaskListView(ListView):
         date_to = self.request.GET.get("date_to")
         if date_to:
             qs = qs.filter(due_date__lte=date_to)
-        ALLOWED_SORTS = {"title", "status", "priority", "due_date"}
+        directions = self.request.GET.getlist("direction")
+        if directions:
+            qs = qs.filter(direction__in=directions)
+        ALLOWED_SORTS = {"title", "status", "priority", "due_date", "direction"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
             direction = "" if self.request.GET.get("dir") == "asc" else "-"
@@ -58,6 +61,8 @@ class TaskListView(ListView):
         ctx["selected_statuses"] = self.request.GET.getlist("status")
         ctx["current_sort"] = self.request.GET.get("sort", "")
         ctx["current_dir"] = self.request.GET.get("dir", "")
+        ctx["direction_choices"] = Task.DIRECTION_CHOICES
+        ctx["selected_directions"] = self.request.GET.getlist("direction")
         return ctx
 
 
@@ -74,6 +79,8 @@ class TaskCreateView(CreateView):
             initial["related_legal_matter"] = self.request.GET["legal"]
         if self.request.GET.get("property"):
             initial["related_property"] = self.request.GET["property"]
+        if self.request.GET.get("direction"):
+            initial["direction"] = self.request.GET["direction"]
         return initial
 
     def form_valid(self, form):
@@ -145,6 +152,7 @@ def export_csv(request):
     qs = Task.objects.select_related("related_stakeholder").all()
     fields = [
         ("title", "Title"),
+        ("direction", "Direction"),
         ("status", "Status"),
         ("priority", "Priority"),
         ("due_date", "Due Date"),
@@ -157,8 +165,15 @@ def export_csv(request):
 def export_pdf_detail(request, pk):
     from legacy.pdf_export import render_pdf
     t = get_object_or_404(Task, pk=pk)
+    direction_label = t.get_direction_display()
+    stakeholder_label = "Stakeholder"
+    if t.direction == "outbound":
+        stakeholder_label = "Requested From"
+    elif t.direction == "inbound":
+        stakeholder_label = "Requested By"
     sections = [
         {"heading": "Task Information", "type": "info", "rows": [
+            ("Direction", direction_label),
             ("Due Date", t.due_date.strftime("%b %d, %Y") if t.due_date else "None"),
             ("Type", t.get_task_type_display()),
             ("Created", t.created_at.strftime("%b %d, %Y %I:%M %p")),
@@ -167,7 +182,7 @@ def export_pdf_detail(request, pk):
     if t.completed_at:
         sections[0]["rows"].append(("Completed", t.completed_at.strftime("%b %d, %Y %I:%M %p")))
     if t.related_stakeholder:
-        sections[0]["rows"].append(("Stakeholder", t.related_stakeholder.name))
+        sections[0]["rows"].append((stakeholder_label, t.related_stakeholder.name))
     if t.related_legal_matter:
         sections[0]["rows"].append(("Legal Matter", t.related_legal_matter.title))
     if t.related_property:

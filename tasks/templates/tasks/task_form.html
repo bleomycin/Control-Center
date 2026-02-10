@@ -16,8 +16,8 @@
         {% csrf_token %}
         {% for field in form %}
         {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" %}
-        <div>
-            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+        <div{% if field.name == "related_stakeholder" %} id="stakeholder-field-wrapper"{% endif %}>
+            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1"{% if field.name == "related_stakeholder" %} id="stakeholder-label"{% endif %}>
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
             </label>
             {{ field }}
@@ -42,7 +42,7 @@
 
         {% if not object %}
         <!-- Follow-up section (create only) -->
-        <div class="border-t border-gray-700 pt-4 mt-4">
+        <div id="fu-section-block" class="border-t border-gray-700 pt-4 mt-4">
             <div class="flex items-center gap-2 mb-3">
                 {{ form.fu_create }}
                 <label for="{{ form.fu_create.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">
@@ -84,6 +84,26 @@
                     document.getElementById('{{ form.reminder_date.id_for_label }}').value = '';
                 }
             });
+            // Direction-dependent UI
+            var directionSelect = document.getElementById('{{ form.direction.id_for_label }}');
+            if (directionSelect) {
+                function updateDirectionUI() {
+                    var val = directionSelect.value;
+                    var label = document.getElementById('stakeholder-label');
+                    var fuSection = document.querySelector('.border-t.border-gray-700.pt-4.mt-4:last-of-type');
+                    if (label) {
+                        if (val === 'outbound') label.textContent = 'Requested From';
+                        else if (val === 'inbound') label.textContent = 'Requested By';
+                        else label.textContent = 'Related stakeholder';
+                    }
+                    {% if not object %}
+                    var fuBlock = document.getElementById('fu-section-block');
+                    if (fuBlock) fuBlock.style.display = val === 'inbound' ? 'none' : '';
+                    {% endif %}
+                }
+                directionSelect.addEventListener('change', updateDirectionUI);
+                updateDirectionUI();
+            }
             {% if not object %}
             document.getElementById('{{ form.fu_create.id_for_label }}').addEventListener('change', function() {
                 document.getElementById('fu-fields').classList.toggle('hidden', !this.checked);
