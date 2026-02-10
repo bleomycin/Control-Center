@@ -1,5 +1,41 @@
 {% extends "base.html" %}
 {% block title %}{% if object %}Edit {{ object }}{% else %}New Note{% endif %} - Control Center{% endblock %}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.20.0/dist/easymde.min.css">
+<style>
+    .EasyMDEContainer .CodeMirror {
+        background: rgb(31 41 55); /* bg-gray-800 */
+        color: rgb(209 213 219); /* text-gray-300 */
+        border-color: rgb(75 85 99); /* border-gray-600 */
+    }
+    .EasyMDEContainer .CodeMirror-cursor { border-left-color: rgb(209 213 219); }
+    .EasyMDEContainer .editor-toolbar {
+        background: rgb(55 65 81); /* bg-gray-700 */
+        border-color: rgb(75 85 99);
+    }
+    .EasyMDEContainer .editor-toolbar button { color: rgb(209 213 219) !important; }
+    .EasyMDEContainer .editor-toolbar button:hover,
+    .EasyMDEContainer .editor-toolbar button.active { background: rgb(75 85 99); }
+    .EasyMDEContainer .editor-toolbar i.separator { border-left-color: rgb(107 114 128); }
+    .EasyMDEContainer .editor-preview {
+        background: rgb(31 41 55);
+        color: rgb(209 213 219);
+    }
+    .EasyMDEContainer .editor-preview-side {
+        background: rgb(31 41 55);
+        color: rgb(209 213 219);
+        border-color: rgb(75 85 99);
+    }
+    .EasyMDEContainer .CodeMirror-selected { background: rgb(55 65 81); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-tag { color: rgb(147 197 253); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-header { color: rgb(249 250 251); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-link { color: rgb(96 165 250); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-url { color: rgb(156 163 175); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-string { color: rgb(134 239 172); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-comment { color: rgb(156 163 175); }
+    .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-formatting { color: rgb(107 114 128); }
+</style>
+{% endblock %}
 {% block content %}
 <div class="max-w-2xl mx-auto">
     <div class="mb-6">
@@ -31,4 +67,27 @@
         </div>
     </form>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/easymde@2.20.0/dist/easymde.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    var ta = document.getElementById("id_content");
+    if (ta) {
+        new EasyMDE({
+            element: ta,
+            spellChecker: false,
+            status: false,
+            autoDownloadFontAwesome: true,
+            toolbar: [
+                "bold", "italic", "strikethrough", "|",
+                "heading-1", "heading-2", "heading-3", "|",
+                "unordered-list", "ordered-list", "checklist", "|",
+                "link", "quote", "code", "|",
+                "preview", "side-by-side", "|",
+                "guide"
+            ],
+            minHeight: "200px",
+        });
+    }
+});
+</script>
 {% endblock %}

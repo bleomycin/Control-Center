@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load choice_labels %}
+{% load choice_labels markdown_filter %}
 {% block title %}{{ note.title }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
@@ -25,8 +25,8 @@
 </div>
 
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
-    <div class="prose prose-invert prose-sm max-w-none">
-        <p class="text-gray-300 whitespace-pre-wrap">{{ note.content }}</p>
+    <div class="prose prose-invert prose-sm max-w-none text-gray-300">
+        {{ note.content|render_markdown }}
     </div>
 </div>
 
