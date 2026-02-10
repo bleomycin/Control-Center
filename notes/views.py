@@ -86,7 +86,14 @@ class NoteCreateView(CreateView):
 
     def get_initial(self):
         initial = super().get_initial()
-        initial["date"] = timezone.now()
+        initial["date"] = self.request.GET.get("date") or timezone.now()
+        for field in ("title", "content", "note_type"):
+            if self.request.GET.get(field):
+                initial[field] = self.request.GET[field]
+        if self.request.GET.get("task"):
+            initial["related_tasks"] = [self.request.GET["task"]]
+        if self.request.GET.get("stakeholder"):
+            initial["participants"] = [self.request.GET["stakeholder"]]
         return initial
 
     def form_valid(self, form):

@@ -81,6 +81,7 @@ class FollowUp(models.Model):
     follow_up_days = models.PositiveIntegerField(default=3)
     response_received = models.BooleanField(default=False)
     response_date = models.DateTimeField(null=True, blank=True)
+    response_notes = models.TextField(blank=True)
     notes_text = models.TextField(blank=True)
 
     @property
