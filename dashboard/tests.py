@@ -16,7 +16,7 @@ from stakeholders.models import ContactLog, Stakeholder
 from tasks.models import FollowUp, Task
 
 from .choices import get_choice_label, get_choices, invalidate_choice_cache
-from .models import ChoiceOption, Notification
+from .models import ChoiceOption, Notification, SampleDataStatus
 from .views import _parse_date, get_activity_timeline
 
 
@@ -720,3 +720,93 @@ class RestoreCommandTests(TestCase):
         cursor.execute("SELECT val FROM restore_test WHERE id=1")
         self.assertEqual(cursor.fetchone()[0], 'restored')
         conn.close()
+
+
+class SampleDataStatusModelTests(TestCase):
+    def test_singleton_load(self):
+        status = SampleDataStatus.load()
+        self.assertEqual(status.pk, 1)
+        # Calling load again returns the same instance
+        status2 = SampleDataStatus.load()
+        self.assertEqual(status2.pk, 1)
+        self.assertEqual(SampleDataStatus.objects.count(), 1)
+
+    def test_default_values(self):
+        status = SampleDataStatus.load()
+        self.assertFalse(status.is_loaded)
+        self.assertEqual(status.manifest, {})
+        self.assertIsNone(status.loaded_at)
+
+    def test_str(self):
+        status = SampleDataStatus.load()
+        self.assertEqual(str(status), "Sample Data Status")
+
+
+class SettingsHubViewTests(TestCase):
+    def test_settings_hub_status_code(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_settings_hub_contains_cards(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertContains(resp, "Sample Data")
+        self.assertContains(resp, "Manage Choices")
+        self.assertContains(resp, "Email Settings")
+        self.assertContains(resp, "Django Admin")
+
+    def test_settings_hub_has_sample_status_context(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertIn("sample_status", resp.context)
+
+
+class SampleDataToggleTests(TestCase):
+    def test_load_creates_data_and_sets_status(self):
+        resp = self.client.post(reverse("dashboard:sample_data_load"))
+        self.assertEqual(resp.status_code, 200)
+        status = SampleDataStatus.load()
+        self.assertTrue(status.is_loaded)
+        self.assertIsNotNone(status.loaded_at)
+        self.assertIn("stakeholders.stakeholder", status.manifest)
+        self.assertTrue(len(status.manifest["stakeholders.stakeholder"]) > 0)
+        # Verify actual data was created
+        self.assertTrue(Stakeholder.objects.exists())
+
+    def test_double_load_is_idempotent(self):
+        self.client.post(reverse("dashboard:sample_data_load"))
+        count_after_first = Stakeholder.objects.count()
+        self.client.post(reverse("dashboard:sample_data_load"))
+        count_after_second = Stakeholder.objects.count()
+        self.assertEqual(count_after_first, count_after_second)
+
+    def test_remove_deletes_sample_data(self):
+        self.client.post(reverse("dashboard:sample_data_load"))
+        self.assertTrue(Stakeholder.objects.exists())
+        self.client.post(reverse("dashboard:sample_data_remove"))
+        status = SampleDataStatus.load()
+        self.assertFalse(status.is_loaded)
+        self.assertEqual(status.manifest, {})
+        self.assertIsNone(status.loaded_at)
+        # Sample stakeholders should be gone
+        self.assertFalse(Stakeholder.objects.exists())
+
+    def test_remove_preserves_real_data(self):
+        # Create "real" data first
+        real = Stakeholder.objects.create(name="Real Person", entity_type="contact")
+        # Load sample data
+        self.client.post(reverse("dashboard:sample_data_load"))
+        self.assertTrue(Stakeholder.objects.count() > 1)
+        # Remove sample data
+        self.client.post(reverse("dashboard:sample_data_remove"))
+        # Real data survives
+        self.assertTrue(Stakeholder.objects.filter(pk=real.pk).exists())
+        self.assertEqual(Stakeholder.objects.get(pk=real.pk).name, "Real Person")
+
+    def test_remove_with_empty_manifest_is_safe(self):
+        resp = self.client.post(reverse("dashboard:sample_data_remove"))
+        self.assertEqual(resp.status_code, 200)
+        status = SampleDataStatus.load()
+        self.assertFalse(status.is_loaded)
+
+    def test_load_returns_partial(self):
+        resp = self.client.post(reverse("dashboard:sample_data_load"))
+        self.assertContains(resp, "Loaded")
