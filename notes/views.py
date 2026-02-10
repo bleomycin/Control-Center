@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -6,6 +7,7 @@ from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from dashboard.choices import get_choice_label, get_choices
+from stakeholders.models import Stakeholder
 from .forms import AttachmentForm, NoteForm, QuickNoteForm
 from .models import Attachment, Note
 
@@ -29,10 +31,13 @@ class NoteListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().prefetch_related(
+            "participants", "related_stakeholders",
+            "related_legal_matters", "related_properties", "related_tasks",
+        ).annotate(attachment_count=Count("attachments"))
         q = self.request.GET.get("q", "").strip()
         if q:
-            qs = qs.filter(title__icontains=q)
+            qs = qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
         note_types = self.request.GET.getlist("type")
         if note_types:
             qs = qs.filter(note_type__in=note_types)
@@ -42,6 +47,11 @@ class NoteListView(ListView):
         date_to = self.request.GET.get("date_to")
         if date_to:
             qs = qs.filter(date__date__lte=date_to)
+        stakeholder = self.request.GET.get("stakeholder", "").strip()
+        if stakeholder:
+            qs = qs.filter(
+                Q(participants__pk=stakeholder) | Q(related_stakeholders__pk=stakeholder)
+            ).distinct()
         ALLOWED_SORTS = {"title", "note_type", "date"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
@@ -51,7 +61,7 @@ class NoteListView(ListView):
 
     def get_template_names(self):
         if self.request.headers.get("HX-Request"):
-            return ["notes/partials/_note_table_rows.html"]
+            return ["notes/partials/_note_cards.html"]
         return [self.template_name]
 
     def get_context_data(self, **kwargs):
@@ -64,6 +74,8 @@ class NoteListView(ListView):
         ctx["selected_types"] = self.request.GET.getlist("type")
         ctx["current_sort"] = self.request.GET.get("sort", "")
         ctx["current_dir"] = self.request.GET.get("dir", "")
+        ctx["stakeholders"] = Stakeholder.objects.all().order_by("name")
+        ctx["selected_stakeholder"] = self.request.GET.get("stakeholder", "")
         return ctx
 
 
