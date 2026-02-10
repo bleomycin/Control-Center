@@ -127,6 +127,7 @@ Seven Django apps, all relationally linked:
 - **Editable Choices**: `dashboard/models.py` — `ChoiceOption` model stores dropdown options in DB (replaces hardcoded `choices=` on model fields). 4 categories: `entity_type` (Stakeholder), `contact_method` (ContactLog/FollowUp), `matter_type` (LegalMatter), `note_type` (Note). `dashboard/choices.py` provides `get_choices(category)` (cached DB lookup returning Django choice tuples), `get_choice_label(category, value)` (display label with raw-value fallback), `invalidate_choice_cache()`. Template filter: `{% load choice_labels %}` then `{{ value|choice_label:"category" }}`. Forms load choices dynamically in `__init__`. Settings UI at `/settings/choices/` with HTMX add/edit/toggle-active/reorder per category. Seed data in migration `0004_seed_choice_options.py`. Status/workflow fields (task status, priority, loan status, etc.) are NOT included — their values are referenced in business logic.
 - **Multi-Stakeholder Ownership**: Properties, investments, and loans support multiple stakeholders via M2M through models (`PropertyOwnership`, `InvestmentParticipant`, `LoanParty`). Each link stores ownership percentage and role. Detail pages show all stakeholders with color-coded percentages (green for properties, purple for investments, orange for loans). HTMX inline add/delete on all 3 detail pages (same pattern as contact logs). Admin also has inline editors.
 - **Stakeholder Detail Tabs**: Tabbed "All Connections" interface replaces individual preview cards on stakeholder detail page. 8 tabs with count badges showing all related entities (no 5-item limits). Cash flow entries included. Zero information redundancy with the relationship graph.
+- **Follow-Up Reminders**: `FollowUp` model has `follow_up_days` (default=3) for per-follow-up configurable reminder windows. `reminder_due_date` and `is_stale` properties drive UI indicators (yellow "awaiting", red "overdue") and notification checks. HTMX "Mark Responded" button on pending follow-ups (`followup_respond` view). Task create form has optional inline follow-up section (checkbox toggle) that auto-creates a follow-up using the task's stakeholder. `check_stale_followups()` uses per-follow-up days instead of hardcoded 3 and excludes completed tasks.
 - **Docker**: Single container runs Gunicorn (foreground) + qcluster (background). `entrypoint.sh` handles migrate, collectstatic, createsuperuser, sample data loading. Named volumes for SQLite (`legacy-data`) and media (`legacy-media`)
 
 ## Current Status
@@ -161,7 +162,7 @@ Seven Django apps, all relationally linked:
 - HTMX loading indicators on all list page filters/searches
 - Colour-coded action buttons (purple exports, blue edit, green complete, red delete)
 - Docker deployment — single container with Gunicorn + WhiteNoise, env var config, named volumes
-- Unit/integration tests (248 tests across all modules)
+- Unit/integration tests (260 tests across all modules)
 - Tailwind CSS switched from CDN to standalone CLI (v3.4.17) — compiled at build time, no Node.js required
 - GitHub repo: `trialskid/control-center`
 - Security hardening — conditional SECRET_KEY, production SSL/HSTS/cookie security headers (gated behind `not DEBUG`)
@@ -176,6 +177,7 @@ Seven Django apps, all relationally linked:
 - Enhanced stakeholder detail page — comprehensive relationship view with tabbed "All Connections" interface (8 tabs with count badges), expanded Cytoscape.js graph showing all entity types (stakeholders, properties, investments, loans, legal matters, tasks) with color-coded shapes, cash flow entries added to detail view
 - Multi-stakeholder support — M2M through models (`PropertyOwnership`, `InvestmentParticipant`, `LoanParty`) replacing single FKs on properties, investments, and loans. Each link stores ownership percentage and role. Graph edges display "Role (X%)" labels. Admin inline editors. Sample data updated with co-owners and co-borrowers.
 - Inline stakeholder management on asset detail pages — HTMX add/delete for owners (properties), participants (investments), and parties (loans) directly from detail pages. 6 new views, 6 URL patterns, 6 template partials following the contact log inline pattern.
+- Per-follow-up configurable reminders — `follow_up_days` field (default=3) replaces hardcoded 3-day stale threshold. Task create form has optional inline follow-up creation (checkbox toggle). "Mark Responded" HTMX button on pending follow-ups. Stale notification excludes completed tasks. 12 new tests.
 
 ### Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)

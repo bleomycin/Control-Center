@@ -77,8 +77,19 @@ class TaskCreateView(CreateView):
         return initial
 
     def form_valid(self, form):
+        response = super().form_valid(form)
+        task = self.object
+        if form.cleaned_data.get("fu_create") and task.related_stakeholder:
+            FollowUp.objects.create(
+                task=task,
+                stakeholder=task.related_stakeholder,
+                outreach_date=timezone.now(),
+                method=form.cleaned_data.get("fu_method", ""),
+                follow_up_days=form.cleaned_data.get("fu_follow_up_days") or 3,
+                notes_text=form.cleaned_data.get("fu_notes", ""),
+            )
         messages.success(self.request, "Task created.")
-        return super().form_valid(form)
+        return response
 
 
 class TaskDetailView(DetailView):
@@ -165,9 +176,10 @@ def export_pdf_detail(request, pk):
     follow_ups = t.follow_ups.select_related("stakeholder").all()
     if follow_ups:
         sections.append({"heading": "Follow-ups", "type": "table",
-                         "headers": ["Date", "Stakeholder", "Method", "Response", "Notes"],
+                         "headers": ["Date", "Stakeholder", "Method", "Remind (days)", "Response", "Notes"],
                          "rows": [[fu.outreach_date.strftime("%b %d, %Y"), fu.stakeholder.name,
                                    get_choice_label("contact_method", fu.method),
+                                   str(fu.follow_up_days),
                                    f"Yes ({fu.response_date.strftime('%b %d')})" if fu.response_received else "Pending",
                                    (fu.notes_text[:60] + "...") if len(fu.notes_text) > 60 else fu.notes_text or "-"]
                                   for fu in follow_ups]})
@@ -203,9 +215,23 @@ def followup_add(request, pk):
             return render(request, "tasks/partials/_followup_list.html",
                           {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
     else:
-        form = FollowUpForm()
+        initial = {"outreach_date": timezone.now().strftime("%Y-%m-%dT%H:%M")}
+        if task.related_stakeholder:
+            initial["stakeholder"] = task.related_stakeholder.pk
+        form = FollowUpForm(initial=initial)
     return render(request, "tasks/partials/_followup_form.html",
                   {"form": form, "task": task})
+
+
+def followup_respond(request, pk):
+    fu = get_object_or_404(FollowUp, pk=pk)
+    if request.method == "POST":
+        fu.response_received = True
+        fu.response_date = timezone.now()
+        fu.save()
+    task = fu.task
+    return render(request, "tasks/partials/_followup_list.html",
+                  {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
 
 
 def followup_delete(request, pk):

@@ -5,6 +5,14 @@ from .models import Task, FollowUp
 
 
 class TaskForm(TailwindFormMixin, forms.ModelForm):
+    fu_create = forms.BooleanField(required=False, label="Create follow-up for this task")
+    fu_method = forms.ChoiceField(required=False, label="Method")
+    fu_follow_up_days = forms.IntegerField(
+        required=False, initial=3, min_value=1, max_value=90,
+        label="Remind after (days)",
+    )
+    fu_notes = forms.CharField(required=False, label="Notes", widget=forms.Textarea(attrs={"rows": 2}))
+
     class Meta:
         model = Task
         fields = ["title", "description", "due_date", "reminder_date", "status",
@@ -15,6 +23,10 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
             "reminder_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "description": forms.Textarea(attrs={"rows": 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["fu_method"].choices = get_choices("contact_method")
 
 
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
@@ -29,12 +41,13 @@ class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
 class FollowUpForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = FollowUp
-        fields = ["stakeholder", "outreach_date", "method", "response_received",
-                  "response_date", "notes_text"]
+        fields = ["stakeholder", "outreach_date", "method", "follow_up_days", "notes_text"]
         widgets = {
             "outreach_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
-            "response_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "notes_text": forms.Textarea(attrs={"rows": 2}),
+        }
+        labels = {
+            "follow_up_days": "Remind after (days)",
         }
 
     def __init__(self, *args, **kwargs):
