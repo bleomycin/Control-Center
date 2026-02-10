@@ -374,28 +374,28 @@ class Command(BaseCommand):
 
         self.stdout.write("Creating follow-ups...")
         followup_data = [
-            ("Follow up with Marcus on Holston hearing date", "Marcus Reed", -2, "call", False, None,
+            ("Follow up with Marcus on Holston hearing date", "Marcus Reed", -2, "call", 3, False, None,
              "Left voicemail. Will try again tomorrow."),
-            ("Review Q4 Elm St expense report", "Tom Driscoll", -5, "email", False, None,
+            ("Review Q4 Elm St expense report", "Tom Driscoll", -5, "email", 5, False, None,
              "Sent email asking for supporting receipts."),
-            ("Review Q4 Elm St expense report", "Tom Driscoll", -12, "call", False, None,
+            ("Review Q4 Elm St expense report", "Tom Driscoll", -12, "call", 3, False, None,
              "Called to discuss expense report. He said he'd send it over."),
-            ("Schedule roof inspection - Elm St", "James Calloway", -4, "call", True, now - timedelta(days=2),
+            ("Schedule roof inspection - Elm St", "James Calloway", -4, "call", 7, True, now - timedelta(days=2),
              "Called Calloway for a quote. He'll send one by Friday."),
-            ("Schedule roof inspection - Elm St", "James Calloway", -1, "email", False, None,
+            ("Schedule roof inspection - Elm St", "James Calloway", -1, "email", 5, False, None,
              "Following up on the quote. No response yet."),
-            ("Review Magnolia closing documents", "Sandra Liu", -5, "email", True, now - timedelta(days=3),
+            ("Review Magnolia closing documents", "Sandra Liu", -5, "email", 3, True, now - timedelta(days=3),
              "Sandra confirmed docs are ready for review. Picking up Thursday."),
-            ("Send Holston back rent to collections", "Ray Holston", -10, "call", False, None,
+            ("Send Holston back rent to collections", "Ray Holston", -10, "call", 7, False, None,
              "Attempted contact one more time before going to collections. No answer."),
-            ("Update estate plan documents", "Dr. Helen Park", -20, "meeting", True, now - timedelta(days=18),
+            ("Update estate plan documents", "Dr. Helen Park", -20, "meeting", 5, True, now - timedelta(days=18),
              "Met to review draft documents. A few changes needed before signing."),
         ]
-        for task_title, sh_name, days_ago, method, responded, resp_date, notes in followup_data:
+        for task_title, sh_name, days_ago, method, fu_days, responded, resp_date, notes in followup_data:
             FollowUp.objects.create(
                 task=tasks[task_title], stakeholder=stakeholders[sh_name],
                 outreach_date=now + timedelta(days=days_ago),
-                method=method, response_received=responded,
+                method=method, follow_up_days=fu_days, response_received=responded,
                 response_date=resp_date, notes_text=notes,
             )
 

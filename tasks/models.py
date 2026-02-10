@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
 
 class Task(models.Model):
@@ -68,9 +71,18 @@ class FollowUp(models.Model):
     )
     outreach_date = models.DateTimeField()
     method = models.CharField(max_length=30)
+    follow_up_days = models.PositiveIntegerField(default=3)
     response_received = models.BooleanField(default=False)
     response_date = models.DateTimeField(null=True, blank=True)
     notes_text = models.TextField(blank=True)
+
+    @property
+    def reminder_due_date(self):
+        return self.outreach_date + timedelta(days=self.follow_up_days)
+
+    @property
+    def is_stale(self):
+        return not self.response_received and timezone.now() > self.reminder_due_date
 
     def __str__(self):
         return f"Follow-up: {self.task} → {self.stakeholder} ({self.outreach_date:%Y-%m-%d})"
