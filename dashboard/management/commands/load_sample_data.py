@@ -423,10 +423,11 @@ class Command(BaseCommand):
                 title=title, description=desc, due_date=due,
                 status=status, priority=priority, task_type=ttype,
                 direction=direction,
-                related_stakeholder=stakeholders.get(sh_name),
                 related_legal_matter=legal_matters.get(lm_title) if lm_title else None,
                 related_property=properties.get(prop_name) if prop_name else None,
             )
+            if sh_name and sh_name in stakeholders:
+                t.related_stakeholders.add(stakeholders[sh_name])
             tasks[title] = t
 
         self.stdout.write("Creating follow-ups...")

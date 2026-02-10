@@ -41,10 +41,12 @@
         <p class="text-sm text-gray-200">{{ task.due_date|date:"F j, Y"|default:"Not set" }}</p>
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.direction == "outbound" %}Requested From{% elif task.direction == "inbound" %}Requested By{% else %}Stakeholder{% endif %}</p>
-        {% if task.related_stakeholder %}
-        <a href="{{ task.related_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ task.related_stakeholder }}</a>
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.direction == "outbound" %}Requested From{% elif task.direction == "inbound" %}Requested By{% else %}Stakeholders{% endif %}</p>
+        {% with stakeholders=task.related_stakeholders.all %}
+        {% if stakeholders %}
+        <div class="text-sm">{% for s in stakeholders %}<a href="{{ s.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ s }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}</div>
         {% else %}<p class="text-sm text-gray-500">None</p>{% endif %}
+        {% endwith %}
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Legal Matter</p>

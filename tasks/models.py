@@ -36,9 +36,8 @@ class Task(models.Model):
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
     task_type = models.CharField(max_length=10, choices=TASK_TYPE_CHOICES, default="one_time")
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="personal")
-    related_stakeholder = models.ForeignKey(
-        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
-        null=True, blank=True, related_name="tasks",
+    related_stakeholders = models.ManyToManyField(
+        "stakeholders.Stakeholder", blank=True, related_name="tasks",
     )
     related_legal_matter = models.ForeignKey(
         "legal.LegalMatter", on_delete=models.SET_NULL,

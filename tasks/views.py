@@ -18,7 +18,7 @@ class TaskListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().prefetch_related("related_stakeholders")
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
@@ -74,7 +74,7 @@ class TaskCreateView(CreateView):
     def get_initial(self):
         initial = super().get_initial()
         if self.request.GET.get("stakeholder"):
-            initial["related_stakeholder"] = self.request.GET["stakeholder"]
+            initial["related_stakeholders"] = [self.request.GET["stakeholder"]]
         if self.request.GET.get("legal"):
             initial["related_legal_matter"] = self.request.GET["legal"]
         if self.request.GET.get("property"):
@@ -86,10 +86,11 @@ class TaskCreateView(CreateView):
     def form_valid(self, form):
         response = super().form_valid(form)
         task = self.object
-        if form.cleaned_data.get("fu_create") and task.related_stakeholder:
+        first_stakeholder = task.related_stakeholders.first()
+        if form.cleaned_data.get("fu_create") and first_stakeholder:
             FollowUp.objects.create(
                 task=task,
-                stakeholder=task.related_stakeholder,
+                stakeholder=first_stakeholder,
                 outreach_date=timezone.now(),
                 method=form.cleaned_data.get("fu_method", ""),
                 reminder_enabled=form.cleaned_data.get("fu_reminder_enabled", False),
@@ -149,24 +150,31 @@ def quick_create(request):
 
 def export_csv(request):
     from legacy.export import export_csv as do_export
-    qs = Task.objects.select_related("related_stakeholder").all()
+    qs = Task.objects.prefetch_related("related_stakeholders").all()
     fields = [
         ("title", "Title"),
         ("direction", "Direction"),
         ("status", "Status"),
         ("priority", "Priority"),
         ("due_date", "Due Date"),
-        ("related_stakeholder__name", "Stakeholder"),
+        ("_stakeholder_names", "Stakeholders"),
         ("description", "Description"),
     ]
-    return do_export(qs, fields, "tasks")
+    # Annotate tasks with a joined stakeholder names string
+    tasks_list = []
+    for task in qs:
+        task._stakeholder_names = ", ".join(
+            s.name for s in task.related_stakeholders.all()
+        ) or ""
+        tasks_list.append(task)
+    return do_export(tasks_list, fields, "tasks")
 
 
 def export_pdf_detail(request, pk):
     from legacy.pdf_export import render_pdf
-    t = get_object_or_404(Task, pk=pk)
+    t = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
     direction_label = t.get_direction_display()
-    stakeholder_label = "Stakeholder"
+    stakeholder_label = "Stakeholders"
     if t.direction == "outbound":
         stakeholder_label = "Requested From"
     elif t.direction == "inbound":
@@ -181,8 +189,9 @@ def export_pdf_detail(request, pk):
     ]
     if t.completed_at:
         sections[0]["rows"].append(("Completed", t.completed_at.strftime("%b %d, %Y %I:%M %p")))
-    if t.related_stakeholder:
-        sections[0]["rows"].append((stakeholder_label, t.related_stakeholder.name))
+    stakeholder_names = ", ".join(s.name for s in t.related_stakeholders.all())
+    if stakeholder_names:
+        sections[0]["rows"].append((stakeholder_label, stakeholder_names))
     if t.related_legal_matter:
         sections[0]["rows"].append(("Legal Matter", t.related_legal_matter.title))
     if t.related_property:
@@ -241,8 +250,9 @@ def followup_add(request, pk):
                           {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
     else:
         initial = {"outreach_date": timezone.now().strftime("%Y-%m-%dT%H:%M")}
-        if task.related_stakeholder:
-            initial["stakeholder"] = task.related_stakeholder.pk
+        first_stakeholder = task.related_stakeholders.first()
+        if first_stakeholder:
+            initial["stakeholder"] = first_stakeholder.pk
         form = FollowUpForm(initial=initial)
     from django.urls import reverse
     return render(request, "tasks/partials/_followup_form.html",

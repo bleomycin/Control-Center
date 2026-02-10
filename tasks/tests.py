@@ -38,15 +38,28 @@ class TaskModelTests(TestCase):
         tasks = list(Task.objects.filter(due_date__isnull=False))
         self.assertTrue(tasks[0].due_date <= tasks[1].due_date)
 
-    def test_optional_fks_set_null(self):
+    def test_m2m_stakeholders(self):
+        s = Stakeholder.objects.create(name="M2M Test")
+        self.task.related_stakeholders.add(s)
+        self.assertIn(s, self.task.related_stakeholders.all())
+        self.task.related_stakeholders.remove(s)
+        self.assertNotIn(s, self.task.related_stakeholders.all())
+
+    def test_m2m_stakeholder_delete_does_not_cascade(self):
         s = Stakeholder.objects.create(name="Temp")
-        task = Task.objects.create(title="FK Test", related_stakeholder=s)
+        self.task.related_stakeholders.add(s)
         s.delete()
-        task.refresh_from_db()
-        self.assertIsNone(task.related_stakeholder)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.related_stakeholders.count(), 0)
 
     def test_completed_at_nullable(self):
         self.assertIsNone(self.task.completed_at)
+
+    def test_multiple_stakeholders(self):
+        s1 = Stakeholder.objects.create(name="Person A")
+        s2 = Stakeholder.objects.create(name="Person B")
+        self.task.related_stakeholders.add(s1, s2)
+        self.assertEqual(self.task.related_stakeholders.count(), 2)
 
 
 class FollowUpModelTests(TestCase):
@@ -145,6 +158,20 @@ class TaskViewTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(Task.objects.filter(title="New Task").exists())
 
+    def test_create_post_with_stakeholders(self):
+        s2 = Stakeholder.objects.create(name="Second SH")
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Multi SH Task",
+            "direction": "personal",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "one_time",
+            "related_stakeholders": [self.stakeholder.pk, s2.pk],
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.get(title="Multi SH Task")
+        self.assertEqual(task.related_stakeholders.count(), 2)
+
     def test_detail(self):
         resp = self.client.get(reverse("tasks:detail", args=[self.task.pk]))
         self.assertEqual(resp.status_code, 200)
@@ -177,7 +204,7 @@ class TaskViewTests(TestCase):
         self.assertEqual(resp["Content-Type"], "text/csv")
         content = resp.content.decode()
         self.assertIn("Title", content)
-        self.assertIn("Stakeholder", content)
+        self.assertIn("Stakeholders", content)
 
     def test_pdf(self):
         resp = self.client.get(reverse("tasks:export_pdf", args=[self.task.pk]))
@@ -268,6 +295,13 @@ class TaskViewTests(TestCase):
         self.assertEqual(fu.method, "email")
         self.assertEqual(fu.notes_text, "Updated note")
         self.assertEqual(fu.follow_up_days, 5)
+
+    def test_grouped_choices_in_form(self):
+        Stakeholder.objects.create(name="Attorney A", entity_type="attorney")
+        Stakeholder.objects.create(name="Lender B", entity_type="lender")
+        resp = self.client.get(reverse("tasks:create"))
+        content = resp.content.decode()
+        self.assertIn("<optgroup", content)
 
 
 class NotificationTests(TestCase):
@@ -544,7 +578,7 @@ class FollowUpRespondViewTests(TestCase):
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
-            "related_stakeholder": self.stakeholder.pk,
+            "related_stakeholders": [self.stakeholder.pk],
             "fu_create": "on",
             "fu_method": "call",
             "fu_reminder_enabled": "on",
@@ -568,7 +602,7 @@ class FollowUpRespondViewTests(TestCase):
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
-            "related_stakeholder": self.stakeholder.pk,
+            "related_stakeholders": [self.stakeholder.pk],
             "fu_create": "on",
             "fu_method": "email",
             "fu_follow_up_days": "3",
@@ -585,7 +619,7 @@ class FollowUpRespondViewTests(TestCase):
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
-            "related_stakeholder": self.stakeholder.pk,
+            "related_stakeholders": [self.stakeholder.pk],
         })
         self.assertEqual(resp.status_code, 302)
         task = Task.objects.get(title="Task Without FU")
@@ -623,7 +657,7 @@ class TaskDirectionTests(TestCase):
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
-            "related_stakeholder": self.stakeholder.pk,
+            "related_stakeholders": [self.stakeholder.pk],
         })
         self.assertEqual(resp.status_code, 302)
         task = Task.objects.get(title="Outbound Task")
@@ -636,7 +670,7 @@ class TaskDirectionTests(TestCase):
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
-            "related_stakeholder": self.stakeholder.pk,
+            "related_stakeholders": [self.stakeholder.pk],
         })
         self.assertEqual(resp.status_code, 302)
         task = Task.objects.get(title="Inbound Task")
