@@ -6,7 +6,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from dashboard.choices import get_choice_label, get_choices
-from .forms import ContactLogForm, StakeholderForm
+from .forms import ContactLogForm, StakeholderForm, StakeholderPropertyForm, StakeholderInvestmentForm, StakeholderLoanForm
 from .models import ContactLog, Relationship, Stakeholder
 
 TAB_DEFINITIONS = {
@@ -151,10 +151,10 @@ class StakeholderDetailView(DetailView):
         ctx["all_legal_matters"] = obj.legal_matters.all()
 
         # Properties, investments, loans via through models
-        from assets.models import RealEstate, Investment, Loan
-        ctx["all_properties"] = RealEstate.objects.filter(ownerships__stakeholder=obj).distinct()
-        ctx["all_investments"] = Investment.objects.filter(participants__stakeholder=obj).distinct()
-        ctx["all_loans"] = Loan.objects.filter(parties__stakeholder=obj).distinct()
+        from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty
+        ctx["property_ownerships"] = PropertyOwnership.objects.filter(stakeholder=obj).select_related("property")
+        ctx["investment_participants"] = InvestmentParticipant.objects.filter(stakeholder=obj).select_related("investment")
+        ctx["loan_parties"] = LoanParty.objects.filter(stakeholder=obj).select_related("loan")
         ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
 
         # Firm/employee hierarchy
@@ -168,9 +168,9 @@ class StakeholderDetailView(DetailView):
         employee_count = ctx["employees"].count() if ctx["employees"] is not None else 0
         ctx["counts"] = {
             "stakeholders": ctx["relationships_from"].count() + ctx["relationships_to"].count(),
-            "properties": ctx["all_properties"].count(),
-            "investments": ctx["all_investments"].count(),
-            "loans": ctx["all_loans"].count(),
+            "properties": ctx["property_ownerships"].count(),
+            "investments": ctx["investment_participants"].count(),
+            "loans": ctx["loan_parties"].count(),
             "legal_matters": ctx["all_legal_matters"].count(),
             "tasks": ctx["all_tasks"].count(),
             "notes": ctx["all_notes"].count(),
@@ -449,3 +449,92 @@ def bulk_export_csv(request):
         ("risk_rating", "Risk Rating"),
     ]
     return do_export(qs, fields, "stakeholders_selected")
+
+
+# --- Inline asset ownership management (stakeholder-side) ---
+
+def property_ownership_add(request, pk):
+    from assets.models import PropertyOwnership
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderPropertyForm(request.POST)
+        if form.is_valid():
+            ownership = form.save(commit=False)
+            ownership.stakeholder = stakeholder
+            ownership.save()
+            return render(request, "stakeholders/partials/_sh_ownership_list.html",
+                          {"ownerships": PropertyOwnership.objects.filter(stakeholder=stakeholder).select_related("property"),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderPropertyForm()
+    return render(request, "stakeholders/partials/_sh_ownership_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def property_ownership_delete(request, pk):
+    from assets.models import PropertyOwnership
+    ownership = get_object_or_404(PropertyOwnership, pk=pk)
+    stakeholder = ownership.stakeholder
+    if request.method == "POST":
+        ownership.delete()
+    return render(request, "stakeholders/partials/_sh_ownership_list.html",
+                  {"ownerships": PropertyOwnership.objects.filter(stakeholder=stakeholder).select_related("property"),
+                   "stakeholder": stakeholder})
+
+
+def investment_participant_add(request, pk):
+    from assets.models import InvestmentParticipant
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderInvestmentForm(request.POST)
+        if form.is_valid():
+            participant = form.save(commit=False)
+            participant.stakeholder = stakeholder
+            participant.save()
+            return render(request, "stakeholders/partials/_sh_participant_list.html",
+                          {"participants": InvestmentParticipant.objects.filter(stakeholder=stakeholder).select_related("investment"),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderInvestmentForm()
+    return render(request, "stakeholders/partials/_sh_participant_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def investment_participant_delete(request, pk):
+    from assets.models import InvestmentParticipant
+    participant = get_object_or_404(InvestmentParticipant, pk=pk)
+    stakeholder = participant.stakeholder
+    if request.method == "POST":
+        participant.delete()
+    return render(request, "stakeholders/partials/_sh_participant_list.html",
+                  {"participants": InvestmentParticipant.objects.filter(stakeholder=stakeholder).select_related("investment"),
+                   "stakeholder": stakeholder})
+
+
+def loan_party_add(request, pk):
+    from assets.models import LoanParty
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderLoanForm(request.POST)
+        if form.is_valid():
+            party = form.save(commit=False)
+            party.stakeholder = stakeholder
+            party.save()
+            return render(request, "stakeholders/partials/_sh_party_list.html",
+                          {"parties": LoanParty.objects.filter(stakeholder=stakeholder).select_related("loan"),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderLoanForm()
+    return render(request, "stakeholders/partials/_sh_party_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def loan_party_delete(request, pk):
+    from assets.models import LoanParty
+    party = get_object_or_404(LoanParty, pk=pk)
+    stakeholder = party.stakeholder
+    if request.method == "POST":
+        party.delete()
+    return render(request, "stakeholders/partials/_sh_party_list.html",
+                  {"parties": LoanParty.objects.filter(stakeholder=stakeholder).select_related("loan"),
+                   "stakeholder": stakeholder})

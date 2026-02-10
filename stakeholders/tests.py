@@ -6,6 +6,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from assets.models import (
+    Investment, InvestmentParticipant, Loan, LoanParty,
+    PropertyOwnership, RealEstate,
+)
 from .models import ContactLog, Relationship, Stakeholder
 
 
@@ -423,3 +427,75 @@ class StakeholderTabTests(TestCase):
         self.assertEqual(counts["lenders"], 1)
         self.assertEqual(counts["advisors"], 1)  # advisor only (professional is employee)
         self.assertEqual(counts["other"], 1)  # contact
+
+
+class StakeholderAssetInlineTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Asset Owner", entity_type="contact")
+        cls.prop = RealEstate.objects.create(name="123 Main St", address="123 Main St")
+        cls.inv = Investment.objects.create(name="Growth Fund")
+        cls.loan = Loan.objects.create(name="Home Loan")
+
+    def test_property_ownership_add_get(self):
+        resp = self.client.get(reverse("stakeholders:property_ownership_add", args=[self.stakeholder.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Property")
+
+    def test_property_ownership_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:property_ownership_add", args=[self.stakeholder.pk]),
+            {"property": self.prop.pk, "role": "Owner", "ownership_percentage": "50.00"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(PropertyOwnership.objects.filter(stakeholder=self.stakeholder, property=self.prop).exists())
+
+    def test_property_ownership_delete(self):
+        ownership = PropertyOwnership.objects.create(
+            stakeholder=self.stakeholder, property=self.prop, role="Owner", ownership_percentage=100,
+        )
+        resp = self.client.post(reverse("stakeholders:property_ownership_delete", args=[ownership.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(PropertyOwnership.objects.filter(pk=ownership.pk).exists())
+
+    def test_investment_participant_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:investment_participant_add", args=[self.stakeholder.pk]),
+            {"investment": self.inv.pk, "role": "Investor", "ownership_percentage": "25.00"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(InvestmentParticipant.objects.filter(stakeholder=self.stakeholder, investment=self.inv).exists())
+
+    def test_investment_participant_delete(self):
+        participant = InvestmentParticipant.objects.create(
+            stakeholder=self.stakeholder, investment=self.inv, role="Investor", ownership_percentage=25,
+        )
+        resp = self.client.post(reverse("stakeholders:investment_participant_delete", args=[participant.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(InvestmentParticipant.objects.filter(pk=participant.pk).exists())
+
+    def test_loan_party_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:loan_party_add", args=[self.stakeholder.pk]),
+            {"loan": self.loan.pk, "role": "Borrower", "ownership_percentage": "100.00"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(LoanParty.objects.filter(stakeholder=self.stakeholder, loan=self.loan).exists())
+
+    def test_loan_party_delete(self):
+        party = LoanParty.objects.create(
+            stakeholder=self.stakeholder, loan=self.loan, role="Borrower", ownership_percentage=100,
+        )
+        resp = self.client.post(reverse("stakeholders:loan_party_delete", args=[party.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LoanParty.objects.filter(pk=party.pk).exists())
+
+    def test_detail_shows_ownership_details(self):
+        PropertyOwnership.objects.create(
+            stakeholder=self.stakeholder, property=self.prop, role="Co-owner", ownership_percentage=50,
+        )
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.stakeholder.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "123 Main St")
+        self.assertContains(resp, "Co-owner")
+        self.assertContains(resp, "50")
