@@ -191,13 +191,22 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Description", "type": "text", "content": t.description})
     follow_ups = t.follow_ups.select_related("stakeholder").all()
     if follow_ups:
+        def _fu_notes(fu):
+            parts = []
+            if fu.notes_text:
+                text = (fu.notes_text[:60] + "...") if len(fu.notes_text) > 60 else fu.notes_text
+                parts.append(text)
+            if fu.response_notes:
+                resp = (fu.response_notes[:60] + "...") if len(fu.response_notes) > 60 else fu.response_notes
+                parts.append(f"Response: {resp}")
+            return " | ".join(parts) or "-"
         sections.append({"heading": "Follow-ups", "type": "table",
                          "headers": ["Date", "Stakeholder", "Method", "Reminder", "Response", "Notes"],
                          "rows": [[fu.outreach_date.strftime("%b %d, %Y"), fu.stakeholder.name,
                                    get_choice_label("contact_method", fu.method),
                                    f"{fu.follow_up_days} days" if fu.reminder_enabled else "Off",
                                    f"Yes ({fu.response_date.strftime('%b %d')})" if fu.response_received else "Pending",
-                                   (fu.notes_text[:60] + "...") if len(fu.notes_text) > 60 else fu.notes_text or "-"]
+                                   _fu_notes(fu)]
                                   for fu in follow_ups]})
     notes = t.notes.all()
     if notes:
@@ -259,17 +268,21 @@ def followup_edit(request, pk):
 
 def followup_respond(request, pk):
     fu = get_object_or_404(FollowUp, pk=pk)
+    task = fu.task
     if request.method == "POST":
         if fu.response_received:
+            # Undo — clear response but keep response_notes
             fu.response_received = False
             fu.response_date = None
         else:
             fu.response_received = True
             fu.response_date = timezone.now()
+            fu.response_notes = request.POST.get("response_notes", "")
         fu.save()
-    task = fu.task
-    return render(request, "tasks/partials/_followup_list.html",
-                  {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
+        return render(request, "tasks/partials/_followup_list.html",
+                      {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
+    # GET — return inline response form
+    return render(request, "tasks/partials/_followup_respond_form.html", {"fu": fu, "task": task})
 
 
 def followup_delete(request, pk):
