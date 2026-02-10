@@ -114,7 +114,7 @@ class NoteViewTests(TestCase):
 
     def test_list_htmx(self):
         resp = self.client.get(reverse("notes:list"), HTTP_HX_REQUEST="true")
-        self.assertTemplateUsed(resp, "notes/partials/_note_table_rows.html")
+        self.assertTemplateUsed(resp, "notes/partials/_note_cards.html")
 
     def test_create(self):
         resp = self.client.post(reverse("notes:create"), {
@@ -191,3 +191,44 @@ class NoteViewTests(TestCase):
         self.assertEqual(resp.status_code, 204)
         self.assertIn("HX-Trigger", resp)
         self.assertIn("HX-Redirect", resp)
+
+    def test_search_matches_content(self):
+        Note.objects.create(
+            title="Boring Title",
+            content="The quick brown fox jumps over the lazy dog",
+            date=timezone.now(),
+            note_type="general",
+        )
+        resp = self.client.get(reverse("notes:list"), {"q": "quick brown fox"})
+        self.assertContains(resp, "Boring Title")
+
+    def test_stakeholder_filter(self):
+        s = Stakeholder.objects.create(name="Filter Person", entity_type="individual")
+        note_with = Note.objects.create(
+            title="With Stakeholder", content="x", date=timezone.now()
+        )
+        note_with.participants.add(s)
+        Note.objects.create(
+            title="Without Stakeholder", content="y", date=timezone.now()
+        )
+        resp = self.client.get(reverse("notes:list"), {"stakeholder": str(s.pk)})
+        self.assertContains(resp, "With Stakeholder")
+        self.assertNotContains(resp, "Without Stakeholder")
+
+    def test_stakeholder_filter_related(self):
+        s = Stakeholder.objects.create(name="Related Person", entity_type="individual")
+        note_related = Note.objects.create(
+            title="Related Note", content="x", date=timezone.now()
+        )
+        note_related.related_stakeholders.add(s)
+        resp = self.client.get(reverse("notes:list"), {"stakeholder": str(s.pk)})
+        self.assertContains(resp, "Related Note")
+
+    def test_card_shows_participant_names(self):
+        s = Stakeholder.objects.create(name="Alice Wonderland", entity_type="individual")
+        note = Note.objects.create(
+            title="Participant Note", content="test", date=timezone.now()
+        )
+        note.participants.add(s)
+        resp = self.client.get(reverse("notes:list"))
+        self.assertContains(resp, "Alice Wonderland")
