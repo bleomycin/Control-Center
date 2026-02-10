@@ -14,8 +14,9 @@ TAB_DEFINITIONS = {
     "firms": {"label": "Firms & Teams"},
     "attorneys": {"label": "Attorneys", "types": ["attorney"]},
     "lenders": {"label": "Lenders", "types": ["lender"]},
+    "business_partners": {"label": "Business Partners", "types": ["business_partner"]},
     "advisors": {"label": "Advisors", "types": ["advisor", "professional"]},
-    "other": {"label": "Other", "types": ["business_partner", "contact", "other"]},
+    "other": {"label": "Other", "types": ["contact", "other"]},
 }
 
 
@@ -97,8 +98,9 @@ class StakeholderListView(ListView):
             "firms": Stakeholder.objects.filter(entity_type="firm").count(),
             "attorneys": all_qs.filter(entity_type__in=["attorney"]).count(),
             "lenders": all_qs.filter(entity_type__in=["lender"]).count(),
+            "business_partners": all_qs.filter(entity_type__in=["business_partner"]).count(),
             "advisors": all_qs.filter(entity_type__in=["advisor", "professional"]).count(),
-            "other": all_qs.filter(entity_type__in=["business_partner", "contact", "other"]).count(),
+            "other": all_qs.filter(entity_type__in=["contact", "other"]).count(),
         }
         ctx["tab_counts"] = tab_counts
 
