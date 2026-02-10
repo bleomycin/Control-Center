@@ -260,8 +260,12 @@ def followup_edit(request, pk):
 def followup_respond(request, pk):
     fu = get_object_or_404(FollowUp, pk=pk)
     if request.method == "POST":
-        fu.response_received = True
-        fu.response_date = timezone.now()
+        if fu.response_received:
+            fu.response_received = False
+            fu.response_date = None
+        else:
+            fu.response_received = True
+            fu.response_date = timezone.now()
         fu.save()
     task = fu.task
     return render(request, "tasks/partials/_followup_list.html",
