@@ -98,16 +98,29 @@
     {% endif %}
 </div>
 
-<!-- Attachments (HTMX inline add/delete) -->
+<!-- Attachments & Links -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mt-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Attachments</h2>
-        <button hx-get="{% url 'notes:attachment_add' note.pk %}" hx-target="#attachment-form-container" hx-swap="innerHTML"
-                class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Attachments & Links</h2>
+        <div class="flex items-center gap-3">
+            <button hx-get="{% url 'notes:link_add' note.pk %}" hx-target="#link-form-container" hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Link</button>
+            <button hx-get="{% url 'notes:attachment_add' note.pk %}" hx-target="#attachment-form-container" hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add File</button>
+        </div>
     </div>
+    <!-- Files -->
     <div id="attachment-form-container"></div>
     <div id="attachment-list">
         {% include "notes/partials/_attachment_list.html" %}
+    </div>
+    <!-- Links -->
+    <div class="px-4 py-2 border-t border-gray-700">
+        <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">Links</span>
+    </div>
+    <div id="link-form-container"></div>
+    <div id="link-list">
+        {% include "notes/partials/_link_list.html" %}
     </div>
 </div>
 {% endblock %}

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Note, Attachment
+from .models import Note, Attachment, Link
 
 
 class AttachmentInline(admin.TabularInline):
@@ -8,13 +8,19 @@ class AttachmentInline(admin.TabularInline):
     fields = ["file", "description"]
 
 
+class LinkInline(admin.TabularInline):
+    model = Link
+    extra = 0
+    fields = ["url", "description"]
+
+
 @admin.register(Note)
 class NoteAdmin(admin.ModelAdmin):
     list_display = ["title", "note_type", "date", "created_at"]
     list_filter = ["note_type"]
     search_fields = ["title", "content"]
     filter_horizontal = ["participants", "related_stakeholders", "related_legal_matters", "related_properties", "related_tasks"]
-    inlines = [AttachmentInline]
+    inlines = [AttachmentInline, LinkInline]
 
 
 @admin.register(Attachment)

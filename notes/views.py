@@ -8,8 +8,8 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
-from .forms import AttachmentForm, NoteForm, QuickNoteForm
-from .models import Attachment, Note
+from .forms import AttachmentForm, LinkForm, NoteForm, QuickNoteForm
+from .models import Attachment, Link, Note
 
 
 def export_csv(request):
@@ -34,7 +34,10 @@ class NoteListView(ListView):
         qs = super().get_queryset().prefetch_related(
             "participants", "related_stakeholders",
             "related_legal_matters", "related_properties", "related_tasks",
-        ).annotate(attachment_count=Count("attachments"))
+        ).annotate(
+            attachment_count=Count("attachments", distinct=True),
+            link_count=Count("links", distinct=True),
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
@@ -110,6 +113,8 @@ class NoteDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         ctx["attachment_list"] = self.object.attachments.all()
         ctx["attachment_form"] = AttachmentForm()
+        ctx["link_list"] = self.object.links.all()
+        ctx["link_form"] = LinkForm()
         return ctx
 
 
@@ -159,6 +164,11 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Attachments", "type": "table",
                          "headers": ["File", "Description", "Uploaded"],
                          "rows": [[a.file.name, a.description or "-", a.uploaded_at.strftime("%b %d, %Y")] for a in attachments]})
+    links = n.links.all()
+    if links:
+        sections.append({"heading": "Links", "type": "table",
+                         "headers": ["Description", "URL", "Added"],
+                         "rows": [[lk.description, lk.url, lk.created_at.strftime("%b %d, %Y")] for lk in links]})
     return render_pdf(request, f"note-{n.pk}", n.title,
                       f"{get_choice_label('note_type', n.note_type)} — {n.date.strftime('%b %d, %Y %I:%M %p')}", sections)
 
@@ -186,6 +196,31 @@ def attachment_delete(request, pk):
         att.delete()
     return render(request, "notes/partials/_attachment_list.html",
                   {"attachment_list": note.attachments.all(), "note": note})
+
+
+def link_add(request, pk):
+    note = get_object_or_404(Note, pk=pk)
+    if request.method == "POST":
+        form = LinkForm(request.POST)
+        if form.is_valid():
+            link = form.save(commit=False)
+            link.note = note
+            link.save()
+            return render(request, "notes/partials/_link_list.html",
+                          {"link_list": note.links.all(), "note": note})
+    else:
+        form = LinkForm()
+    return render(request, "notes/partials/_link_form.html",
+                  {"form": form, "note": note})
+
+
+def link_delete(request, pk):
+    link = get_object_or_404(Link, pk=pk)
+    note = link.note
+    if request.method == "POST":
+        link.delete()
+    return render(request, "notes/partials/_link_list.html",
+                  {"link_list": note.links.all(), "note": note})
 
 
 def quick_capture(request):
