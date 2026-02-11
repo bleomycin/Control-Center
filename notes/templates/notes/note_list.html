@@ -132,7 +132,8 @@
 <!-- Bulk Tag Panel -->
 {% if all_tags %}
 <div id="bulk-tag-panel" class="hidden bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 mb-3">
-    <form id="bulk-tag-form" hx-post="{% url 'notes:bulk_apply_tags' %}" hx-swap="none" class="flex flex-wrap items-center gap-2">
+    <form id="bulk-tag-form" hx-post="{% url 'notes:bulk_apply_tags' %}" hx-swap="none"
+          hx-on::after-request="closeBulkTagPanel()" class="flex flex-wrap items-center gap-2">
         {% csrf_token %}
         <input type="hidden" name="mode" id="bulk-tag-mode" value="add">
         <div class="flex items-center gap-1 mr-2">
@@ -163,7 +164,8 @@
 <!-- Bulk Folder Panel -->
 {% if folders %}
 <div id="bulk-folder-panel" class="hidden bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 mb-3">
-    <form id="bulk-folder-form" hx-post="{% url 'notes:bulk_move_folder' %}" hx-swap="none" class="flex flex-wrap items-center gap-2">
+    <form id="bulk-folder-form" hx-post="{% url 'notes:bulk_move_folder' %}" hx-swap="none"
+          hx-on::after-request="document.getElementById('bulk-folder-panel').classList.add('hidden')" class="flex flex-wrap items-center gap-2">
         {% csrf_token %}
         <span class="text-xs text-gray-400">Move to:</span>
         <select name="folder" class="rounded-md border-gray-600 bg-gray-700 text-gray-100 sm:text-sm px-2 py-1">
@@ -197,6 +199,26 @@ function switchFolder(folderId) {
     history.pushState({}, '', url);
     // Visual: reload page to update tab highlights
     setTimeout(function() { window.location.href = url; }, 100);
+}
+
+function closeBulkTagPanel() {
+    document.getElementById('bulk-tag-panel').classList.add('hidden');
+    // Reset all tag pill checkboxes and visuals
+    document.querySelectorAll('#bulk-tag-form input[name=tags]').forEach(function(cb) {
+        cb.checked = false;
+        var span = cb.nextElementSibling;
+        var bg = span.dataset.activeBg;
+        var text = span.dataset.activeText;
+        var border = span.dataset.activeBorder;
+        if (bg) span.classList.remove(...bg.split(' '));
+        if (text) span.classList.remove(...text.split(' '));
+        if (border) span.classList.remove(...border.split(' '));
+        span.classList.add('border-gray-600', 'text-gray-500');
+    });
+    // Remove injected hidden selected inputs
+    document.querySelectorAll('#bulk-tag-form input[name=selected]').forEach(function(h) { h.remove(); });
+    // Reset mode to add
+    setBulkTagMode('add');
 }
 
 function toggleTagPill(checkbox, bgClass, textClass, borderClass) {
