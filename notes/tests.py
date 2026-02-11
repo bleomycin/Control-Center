@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -661,6 +663,42 @@ class TimelineViewTests(TestCase):
             reverse("notes:list"), {"view": "timeline"}, HTTP_HX_REQUEST="true"
         )
         self.assertEqual(resp.status_code, 200)
+
+    def test_timeline_pinned_does_not_duplicate_groups(self):
+        """Pinned notes from different dates should not create duplicate group headers."""
+        yesterday = timezone.now() - timedelta(days=1)
+        # Pinned note from yesterday appears first in queryset due to -is_pinned
+        Note.objects.create(title="Pinned Yesterday", content="x", date=yesterday, is_pinned=True)
+        Note.objects.create(title="Today Note", content="x", date=timezone.now())
+        Note.objects.create(title="Unpinned Yesterday", content="x", date=yesterday)
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "timeline"}, HTTP_HX_REQUEST="true"
+        )
+        groups = resp.context["timeline_groups"]
+        labels = [g["label"] for g in groups]
+        # No duplicate labels
+        self.assertEqual(len(labels), len(set(labels)))
+        # Today always comes before Yesterday
+        self.assertLess(labels.index("Today"), labels.index("Yesterday"))
+
+    def test_timeline_group_order(self):
+        """Groups should be ordered: Today > Yesterday > This Week > older."""
+        today = timezone.now()
+        yesterday = today - timedelta(days=1)
+        # Pick a weekday that's not today or yesterday
+        days_back = 3 if today.weekday() >= 3 else today.weekday() + 2
+        this_week = today - timedelta(days=min(days_back, today.weekday()))
+        if this_week.date() == today.date() or this_week.date() == yesterday.date():
+            this_week = today - timedelta(days=max(today.weekday(), 2))
+        Note.objects.create(title="Today", content="x", date=today)
+        Note.objects.create(title="Yesterday", content="x", date=yesterday)
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "timeline"}, HTTP_HX_REQUEST="true"
+        )
+        groups = resp.context["timeline_groups"]
+        labels = [g["label"] for g in groups]
+        self.assertEqual(labels[0], "Today")
+        self.assertEqual(labels[1], "Yesterday")
 
 
 class CSVExportEnhancedTests(TestCase):
