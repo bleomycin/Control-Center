@@ -1,5 +1,5 @@
 from django.contrib import messages
-from django.db.models import Count, Q
+from django.db.models import Case, Count, Q, Value, When
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -108,7 +108,24 @@ class TaskListView(ListView):
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
             direction = "" if self.request.GET.get("dir") == "asc" else "-"
-            qs = qs.order_by(f"{direction}{sort}")
+            if sort == "priority":
+                qs = qs.annotate(_priority_order=Case(
+                    When(priority="critical", then=Value(0)),
+                    When(priority="high", then=Value(1)),
+                    When(priority="medium", then=Value(2)),
+                    When(priority="low", then=Value(3)),
+                    default=Value(4),
+                )).order_by(f"{direction}_priority_order")
+            elif sort == "status":
+                qs = qs.annotate(_status_order=Case(
+                    When(status="not_started", then=Value(0)),
+                    When(status="in_progress", then=Value(1)),
+                    When(status="waiting", then=Value(2)),
+                    When(status="complete", then=Value(3)),
+                    default=Value(4),
+                )).order_by(f"{direction}_status_order")
+            else:
+                qs = qs.order_by(f"{direction}{sort}")
         return qs
 
     def get_paginate_by(self, queryset):
