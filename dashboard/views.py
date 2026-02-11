@@ -423,7 +423,7 @@ def calendar_events(request):
             "title": f"Contact: {log.stakeholder.name}",
             "start": str(log.follow_up_date),
             "url": log.get_absolute_url(),
-            "color": "#3b82f6",
+            "color": "#06b6d4",
             "extendedProps": {"type": "contact"},
         })
 
