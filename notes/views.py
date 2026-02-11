@@ -1,5 +1,5 @@
+from collections import OrderedDict
 from datetime import timedelta
-from itertools import groupby
 
 from django.contrib import messages
 from django.db.models import Count, Q
@@ -143,11 +143,19 @@ class NoteListView(ListView):
                 else:
                     return d.strftime("%B %Y")
 
-            notes_list = list(ctx["notes"])
-            grouped = []
-            for key, group in groupby(notes_list, key=date_group_key):
-                grouped.append({"label": key, "notes": list(group)})
-            ctx["timeline_groups"] = grouped
+            # Use OrderedDict to merge notes into unique groups (handles
+            # pinned notes breaking consecutive-groupby ordering).
+            groups = OrderedDict()
+            # Seed fixed groups in display order so they always appear first
+            for label in ("Today", "Yesterday", "This Week", "This Month"):
+                groups[label] = []
+            for note in ctx["notes"]:
+                key = date_group_key(note)
+                groups.setdefault(key, []).append(note)
+            # Build final list, dropping empty fixed groups
+            ctx["timeline_groups"] = [
+                {"label": k, "notes": v} for k, v in groups.items() if v
+            ]
         return ctx
 
 
