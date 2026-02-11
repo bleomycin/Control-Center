@@ -48,7 +48,8 @@ def check_overdue_tasks():
         names = ", ".join(s.name for s in task.related_stakeholders.all())
         stakeholder = f" ({names})" if names else ""
         prefix = direction_prefix.get(task.direction, "")
-        lines.append(f"  - {prefix}{task.title}{stakeholder} — {days} day(s) overdue")
+        mtg = "[MEETING] " if task.is_meeting else ""
+        lines.append(f"  - {mtg}{prefix}{task.title}{stakeholder} — {days} day(s) overdue")
 
     body = f"You have {overdue.count()} overdue task(s):\n\n" + "\n".join(lines)
 
@@ -63,8 +64,9 @@ def check_overdue_tasks():
     from dashboard.models import Notification
     for task in overdue:
         prefix = direction_prefix.get(task.direction, "")
+        mtg = "[MEETING] " if task.is_meeting else ""
         Notification.objects.create(
-            message=f"Overdue: {prefix}{task.title} ({(today - task.due_date).days} days)",
+            message=f"Overdue: {mtg}{prefix}{task.title} ({(today - task.due_date).days} days)",
             level="warning",
             link=task.get_absolute_url(),
         )

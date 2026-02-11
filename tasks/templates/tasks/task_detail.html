@@ -21,7 +21,8 @@
             {% if task.direction == "outbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-cyan-900/50 text-cyan-300">&nearr; Outbound</span>
             {% elif task.direction == "inbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300">&swarr; Inbound</span>
             {% endif %}
-            <span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>
+            {% if task.is_meeting %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Meeting</span>
+            {% else %}<span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>{% endif %}
         </div>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
@@ -37,8 +38,8 @@
 
 <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
-        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Due Date</p>
-        <p class="text-sm text-gray-200">{{ task.due_date|date:"F j, Y"|default:"Not set" }}</p>
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.is_meeting %}Meeting Time{% else %}Due Date{% endif %}</p>
+        <p class="text-sm text-gray-200">{{ task.due_date|date:"F j, Y"|default:"Not set" }}{% if task.due_time %} <span class="text-blue-400">at {{ task.due_time|time:"g:i A" }}</span>{% endif %}</p>
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.direction == "outbound" %}Requested From{% elif task.direction == "inbound" %}Requested By{% else %}Stakeholders{% endif %}</p>
@@ -77,6 +78,25 @@
 </div>
 
 <!-- Related Notes -->
+{% if task.is_meeting %}
+<div class="bg-gray-800 rounded-lg border border-blue-900/50 mb-6">
+    <div class="px-4 py-3 border-b border-blue-900/50 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-blue-300 uppercase tracking-wide">Meeting Notes</h2>
+        <a href="{% url 'notes:create' %}?task={{ task.pk }}&title=Meeting%20Notes%3A%20{{ task.title|urlencode }}&note_type=meeting{% with s=task.related_stakeholders.first %}{% if s %}&stakeholder={{ s.pk }}{% endif %}{% endwith %}&date={{ task.due_date|date:'Y-m-d' }}"
+           class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Meeting Notes</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for note in notes %}
+        <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ note.title }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No meeting notes yet</p>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
@@ -93,4 +113,5 @@
         {% endfor %}
     </div>
 </div>
+{% endif %}
 {% endblock %}

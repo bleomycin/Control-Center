@@ -157,6 +157,7 @@ def export_csv(request):
         ("status", "Status"),
         ("priority", "Priority"),
         ("due_date", "Due Date"),
+        ("_due_time_str", "Time"),
         ("_stakeholder_names", "Stakeholders"),
         ("description", "Description"),
     ]
@@ -166,6 +167,7 @@ def export_csv(request):
         task._stakeholder_names = ", ".join(
             s.name for s in task.related_stakeholders.all()
         ) or ""
+        task._due_time_str = task.due_time.strftime("%-I:%M %p") if task.due_time else ""
         tasks_list.append(task)
     return do_export(tasks_list, fields, "tasks")
 
@@ -179,10 +181,13 @@ def export_pdf_detail(request, pk):
         stakeholder_label = "Requested From"
     elif t.direction == "inbound":
         stakeholder_label = "Requested By"
+    due_date_str = t.due_date.strftime("%b %d, %Y") if t.due_date else "None"
+    if t.due_time:
+        due_date_str += f" at {t.due_time.strftime('%-I:%M %p')}"
     sections = [
         {"heading": "Task Information", "type": "info", "rows": [
             ("Direction", direction_label),
-            ("Due Date", t.due_date.strftime("%b %d, %Y") if t.due_date else "None"),
+            ("Due Date", due_date_str),
             ("Type", t.get_task_type_display()),
             ("Created", t.created_at.strftime("%b %d, %Y %I:%M %p")),
         ]},
