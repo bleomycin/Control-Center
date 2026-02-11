@@ -388,6 +388,33 @@ def bulk_delete(request):
     return redirect("notes:list")
 
 
+def bulk_apply_tags(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        tag_pks = request.POST.getlist("tags")
+        if pks and tag_pks:
+            tags = Tag.objects.filter(pk__in=tag_pks)
+            for note in Note.objects.filter(pk__in=pks):
+                note.tags.add(*tags)
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = "noteListChanged"
+        return response
+    return HttpResponse(status=400)
+
+
+def bulk_move_folder(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        folder_id = request.POST.get("folder", "")
+        if pks:
+            folder_val = int(folder_id) if folder_id else None
+            Note.objects.filter(pk__in=pks).update(folder_id=folder_val)
+        response = HttpResponse(status=204)
+        response["HX-Trigger"] = "noteListChanged"
+        return response
+    return HttpResponse(status=400)
+
+
 def bulk_export_csv(request):
     from legacy.export import export_csv as do_export
     pks = request.GET.getlist("selected")

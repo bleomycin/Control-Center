@@ -20,6 +20,8 @@ urlpatterns = [
     path("quick-capture/", views.quick_capture, name="quick_capture"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
+    path("bulk/apply-tags/", views.bulk_apply_tags, name="bulk_apply_tags"),
+    path("bulk/move-folder/", views.bulk_move_folder, name="bulk_move_folder"),
     # Tag management
     path("tags/", views.tag_list, name="tag_list"),
     path("tags/add/", views.tag_add, name="tag_add"),
