@@ -134,19 +134,27 @@
 <div id="bulk-tag-panel" class="hidden bg-gray-800 border border-gray-600 rounded-lg px-4 py-3 mb-3">
     <form id="bulk-tag-form" hx-post="{% url 'notes:bulk_apply_tags' %}" hx-swap="none" class="flex flex-wrap items-center gap-2">
         {% csrf_token %}
-        <span class="text-xs text-gray-400">Add tags:</span>
+        <input type="hidden" name="mode" id="bulk-tag-mode" value="add">
+        <div class="flex items-center gap-1 mr-2">
+            <button type="button" id="tag-mode-add" onclick="setBulkTagMode('add')"
+                    class="px-2 py-0.5 text-xs rounded-l-md border border-gray-600 bg-blue-900/50 text-blue-300">Add</button>
+            <button type="button" id="tag-mode-remove" onclick="setBulkTagMode('remove')"
+                    class="px-2 py-0.5 text-xs rounded-r-md border border-gray-600 text-gray-400 hover:text-gray-200">Remove</button>
+        </div>
         {% for tag in all_tags %}
         {% tag_classes tag.color as tc %}
-        <label class="cursor-pointer">
-            <input type="checkbox" name="tags" value="{{ tag.pk }}" class="hidden peer">
-            <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
-                         peer-checked:{{ tc.bg }} peer-checked:{{ tc.text }} peer-checked:{{ tc.border }}
-                         border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500">
+        <label class="cursor-pointer" onclick="event.stopPropagation()">
+            <input type="checkbox" name="tags" value="{{ tag.pk }}" class="hidden"
+                   onchange="toggleTagPill(this, '{{ tc.bg }}', '{{ tc.text }}', '{{ tc.border }}')">
+            <span class="bulk-tag-pill inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                         border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500"
+                  data-active-bg="{{ tc.bg }}" data-active-text="{{ tc.text }}" data-active-border="{{ tc.border }}">
                 #{{ tag.name }}
             </span>
         </label>
         {% endfor %}
-        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; document.getElementById('bulk-tag-form').appendChild(h);})"
+        <button type="submit" id="bulk-tag-submit"
+                onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; document.getElementById('bulk-tag-form').appendChild(h);})"
                 class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors ml-2">Apply</button>
     </form>
 </div>
@@ -189,6 +197,35 @@ function switchFolder(folderId) {
     history.pushState({}, '', url);
     // Visual: reload page to update tab highlights
     setTimeout(function() { window.location.href = url; }, 100);
+}
+
+function toggleTagPill(checkbox, bgClass, textClass, borderClass) {
+    var span = checkbox.nextElementSibling;
+    if (checkbox.checked) {
+        span.classList.add(...bgClass.split(' '), ...textClass.split(' '), ...borderClass.split(' '));
+        span.classList.remove('border-gray-600', 'text-gray-500');
+    } else {
+        span.classList.remove(...bgClass.split(' '), ...textClass.split(' '), ...borderClass.split(' '));
+        span.classList.add('border-gray-600', 'text-gray-500');
+    }
+}
+
+function setBulkTagMode(mode) {
+    document.getElementById('bulk-tag-mode').value = mode;
+    var addBtn = document.getElementById('tag-mode-add');
+    var removeBtn = document.getElementById('tag-mode-remove');
+    var submitBtn = document.getElementById('bulk-tag-submit');
+    if (mode === 'remove') {
+        addBtn.className = 'px-2 py-0.5 text-xs rounded-l-md border border-gray-600 text-gray-400 hover:text-gray-200';
+        removeBtn.className = 'px-2 py-0.5 text-xs rounded-r-md border border-gray-600 bg-red-900/50 text-red-300';
+        submitBtn.textContent = 'Remove';
+        submitBtn.className = 'px-3 py-1 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-md transition-colors ml-2';
+    } else {
+        addBtn.className = 'px-2 py-0.5 text-xs rounded-l-md border border-gray-600 bg-blue-900/50 text-blue-300';
+        removeBtn.className = 'px-2 py-0.5 text-xs rounded-r-md border border-gray-600 text-gray-400 hover:text-gray-200';
+        submitBtn.textContent = 'Apply';
+        submitBtn.className = 'px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors ml-2';
+    }
 }
 
 function switchNoteView(mode) {

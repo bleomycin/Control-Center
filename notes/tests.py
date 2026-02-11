@@ -735,6 +735,30 @@ class BulkApplyTagsTests(TestCase):
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(self.note1.tags.count(), 0)
 
+    def test_bulk_remove_tags(self):
+        self.note1.tags.add(self.tag1, self.tag2)
+        self.note2.tags.add(self.tag1)
+        resp = self.client.post(reverse("notes:bulk_apply_tags"), {
+            "selected": [str(self.note1.pk), str(self.note2.pk)],
+            "tags": [str(self.tag1.pk)],
+            "mode": "remove",
+        })
+        self.assertEqual(resp.status_code, 204)
+        self.assertNotIn(self.tag1, self.note1.tags.all())
+        self.assertIn(self.tag2, self.note1.tags.all())
+        self.assertNotIn(self.tag1, self.note2.tags.all())
+
+    def test_bulk_remove_tags_preserves_unselected(self):
+        other = Tag.objects.create(name="Other", slug="other", color="cyan")
+        self.note1.tags.add(self.tag1, other)
+        self.client.post(reverse("notes:bulk_apply_tags"), {
+            "selected": [str(self.note1.pk)],
+            "tags": [str(self.tag1.pk)],
+            "mode": "remove",
+        })
+        self.assertNotIn(self.tag1, self.note1.tags.all())
+        self.assertIn(other, self.note1.tags.all())
+
 
 class BulkMoveFolderTests(TestCase):
     @classmethod
