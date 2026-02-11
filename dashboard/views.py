@@ -103,9 +103,15 @@ def dashboard(request):
     for task in Task.objects.filter(
         due_date__gte=today, due_date__lte=deadline_horizon,
     ).exclude(status="complete").prefetch_related("related_stakeholders"):
+        title = task.title
+        color = "yellow"
+        if task.is_meeting:
+            color = "blue"
+            if task.due_time:
+                title = f"{task.title} — {task.due_time.strftime('%-I:%M %p')}"
         upcoming_deadlines.append({
-            "date": task.due_date, "type": "task", "color": "yellow",
-            "title": task.title, "url": task.get_absolute_url(),
+            "date": task.due_date, "type": "task", "color": color,
+            "title": title, "url": task.get_absolute_url(),
         })
     for loan in Loan.objects.filter(
         status="active", next_payment_date__gte=today,
@@ -232,13 +238,16 @@ def get_activity_timeline(limit=50):
         })
 
     for task in Task.objects.order_by("-created_at")[:limit]:
+        summary = f"{task.get_status_display()} / {task.get_priority_display()}"
+        if task.is_meeting and task.due_time:
+            summary += f" — {task.due_time.strftime('%-I:%M %p')}"
         items.append({
             "date": task.created_at,
             "type": "task",
             "color": "yellow",
             "icon": "clipboard",
             "title": task.title,
-            "summary": f"{task.get_status_display()} / {task.get_priority_display()}",
+            "summary": summary,
             "url": task.get_absolute_url(),
         })
 
@@ -322,13 +331,17 @@ def calendar_events(request):
     direction_prefixes = {"outbound": "[OUT] ", "inbound": "[IN] "}
     for task in tasks.filter(due_date__isnull=False):
         prefix = direction_prefixes.get(task.direction, "")
-        events.append({
-            "title": f"{prefix}{task.title}",
-            "start": str(task.due_date),
+        mtg_prefix = "[MTG] " if task.is_meeting else ""
+        event = {
+            "title": f"{mtg_prefix}{prefix}{task.title}",
+            "start": task.scheduled_datetime_str,
             "url": task.get_absolute_url(),
             "color": priority_colors.get(task.priority, "#9ca3af"),
             "extendedProps": {"type": "task"},
-        })
+        }
+        if task.is_meeting and task.due_time:
+            event["allDay"] = False
+        events.append(event)
 
     # Loan payment events (red)
     loans = Loan.objects.filter(status="active", next_payment_date__isnull=False)
