@@ -1,5 +1,11 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Tasks - Control Center{% endblock %}
+{% block extra_head %}
+{% if current_view == "board" %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+{% endif %}
+{% endblock %}
 {% block content %}
 <div class="flex items-center justify-between mb-6">
     <div>
@@ -12,12 +18,13 @@
 </div>
 
 <form id="filter-form" onsubmit="return false;">
+    <input type="hidden" name="view" value="{{ current_view }}">
     <div class="flex flex-col gap-3 mb-4">
         <div class="flex flex-col sm:flex-row gap-3">
             <input type="text" name="q" value="{{ search_query }}" placeholder="Search tasks..."
-                   hx-get="{% url 'tasks:list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   hx-get="{% url 'tasks:list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                    class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
-            <select name="priority" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+            <select name="priority" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                     class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
                 <option value="">All Priorities</option>
                 {% for val, label in priority_choices %}<option value="{{ val }}" {% if selected_priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
@@ -29,7 +36,7 @@
                 {% for val, label in status_choices %}
                 <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
                     <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
-                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
                     {{ label }}
                 </label>
@@ -40,7 +47,7 @@
                 {% for val, label in direction_choices %}
                 <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
                     <input type="checkbox" name="direction" value="{{ val }}" {% if val in selected_directions %}checked{% endif %}
-                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
                     {{ label }}
                 </label>
@@ -51,7 +58,7 @@
                 {% for val, label in type_choices %}
                 <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
                     <input type="checkbox" name="task_type" value="{{ val }}" {% if val in selected_types %}checked{% endif %}
-                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
                     {{ label }}
                 </label>
@@ -60,19 +67,33 @@
             <div class="flex flex-wrap gap-2 items-center">
                 <span class="text-xs text-gray-400">Due:</span>
                 <input type="date" name="date_from" value="{{ date_from }}"
-                       hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                       hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                        class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
                 <span class="text-xs text-gray-500">to</span>
                 <input type="date" name="date_to" value="{{ date_to }}"
-                       hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                       hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                        class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
             </div>
         </div>
     </div>
 </form>
 
+<!-- View toggle -->
+<div class="flex items-center gap-2 mb-4">
+    <span class="text-xs text-gray-400">View:</span>
+    <button onclick="switchView('table')" id="view-btn-table"
+            class="px-3 py-1 text-xs font-medium rounded-md transition-colors {% if current_view == 'table' %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+        <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>Table
+    </button>
+    <button onclick="switchView('board')" id="view-btn-board"
+            class="px-3 py-1 text-xs font-medium rounded-md transition-colors {% if current_view == 'board' %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+        <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>Board
+    </button>
+</div>
+
 <div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>
 
+{% if current_view == "table" %}
 <div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
     <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
     <form method="post" action="{% url 'tasks:bulk_delete' %}" class="inline">
@@ -88,6 +109,12 @@
                 class="px-3 py-1 bg-green-900/50 hover:bg-green-900 text-green-300 text-xs font-medium rounded-md transition-colors">Mark Complete</button>
     </form>
 </div>
+{% endif %}
+
+<div id="task-content">
+{% if current_view == "board" %}
+{% include "tasks/partials/_kanban_board.html" %}
+{% else %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
     <div class="overflow-x-auto">
         <table class="w-full">
@@ -160,4 +187,82 @@
     </div>
 </div>
 {% include "partials/_pagination.html" %}
+{% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function switchView(mode) {
+    // Update hidden input
+    document.querySelector('input[name="view"]').value = mode;
+
+    // Update button styles
+    var tableBtn = document.getElementById('view-btn-table');
+    var boardBtn = document.getElementById('view-btn-board');
+    if (mode === 'board') {
+        boardBtn.className = boardBtn.className.replace('bg-gray-700 text-gray-300 hover:bg-gray-600', 'bg-blue-600 text-white');
+        tableBtn.className = tableBtn.className.replace('bg-blue-600 text-white', 'bg-gray-700 text-gray-300 hover:bg-gray-600');
+    } else {
+        tableBtn.className = tableBtn.className.replace('bg-gray-700 text-gray-300 hover:bg-gray-600', 'bg-blue-600 text-white');
+        boardBtn.className = boardBtn.className.replace('bg-blue-600 text-white', 'bg-gray-700 text-gray-300 hover:bg-gray-600');
+    }
+
+    // Load SortableJS dynamically if switching to board and not yet loaded
+    if (mode === 'board' && typeof Sortable === 'undefined') {
+        var script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js';
+        script.onload = function() {
+            // Load kanban.js after SortableJS
+            var kanbanScript = document.createElement('script');
+            kanbanScript.src = '{% static "js/kanban.js" %}';
+            document.head.appendChild(kanbanScript);
+        };
+        document.head.appendChild(script);
+    }
+
+    // Trigger HTMX request to reload content
+    var url = '{% url "tasks:list" %}';
+    htmx.ajax('GET', url, {
+        target: '#task-content',
+        swap: 'innerHTML',
+        values: getFilterValues(mode),
+    });
+
+    // Toggle bulk bar visibility
+    var bulkBar = document.getElementById('bulk-bar');
+    if (bulkBar) {
+        if (mode === 'board') {
+            bulkBar.classList.add('hidden');
+        }
+    }
+
+    // Update URL without reload
+    var params = new URLSearchParams(window.location.search);
+    params.set('view', mode);
+    history.replaceState(null, '', '?' + params.toString());
+}
+
+function getFilterValues(viewMode) {
+    var form = document.getElementById('filter-form');
+    var formData = new FormData(form);
+    var values = {};
+    for (var pair of formData.entries()) {
+        if (pair[0] === 'view') continue;
+        if (values[pair[0]]) {
+            if (!Array.isArray(values[pair[0]])) {
+                values[pair[0]] = [values[pair[0]]];
+            }
+            values[pair[0]].push(pair[1]);
+        } else {
+            values[pair[0]] = pair[1];
+        }
+    }
+    values['view'] = viewMode;
+    return values;
+}
+</script>
+{% if current_view == "board" %}
+<script src="{% static 'js/kanban.js' %}"></script>
+{% endif %}
 {% endblock %}
