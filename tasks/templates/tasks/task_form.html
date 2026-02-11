@@ -16,6 +16,20 @@
         {% csrf_token %}
         {% for field in form %}
         {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" and field.name != "due_time" %}
+        {% if field.name == "due_date" %}
+        <div class="flex gap-4">
+            <div class="flex-1">
+                <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="due-date-label">{{ field.label }}</label>
+                {{ field }}
+                {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+            </div>
+            <div id="due-time-wrapper" class="flex-1 hidden">
+                <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Time</label>
+                {{ form.due_time }}
+                {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+        {% else %}
         <div{% if field.name == "related_stakeholders" %} id="stakeholder-field-wrapper"{% endif %}>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1"{% if field.name == "related_stakeholders" %} id="stakeholder-label"{% endif %}>
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
@@ -24,12 +38,8 @@
             {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
         </div>
         {% endif %}
+        {% endif %}
         {% endfor %}
-        <div id="due-time-wrapper" class="hidden">
-            <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting Time</label>
-            {{ form.due_time }}
-            {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
-        </div>
 
         <!-- Task reminder toggle -->
         <div class="border-t border-gray-700 pt-4 mt-4">
@@ -87,11 +97,14 @@
             if (taskTypeSelect) {
                 function updateMeetingTimeVisibility() {
                     var wrapper = document.getElementById('due-time-wrapper');
+                    var dateLabel = document.getElementById('due-date-label');
                     if (taskTypeSelect.value === 'meeting') {
                         wrapper.classList.remove('hidden');
+                        if (dateLabel) dateLabel.textContent = 'Meeting date';
                     } else {
                         wrapper.classList.add('hidden');
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
+                        if (dateLabel) dateLabel.textContent = 'Due date';
                     }
                 }
                 taskTypeSelect.addEventListener('change', updateMeetingTimeVisibility);
