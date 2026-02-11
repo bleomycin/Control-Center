@@ -10,7 +10,7 @@ class FollowUpInline(admin.TabularInline):
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ["title", "direction", "status", "priority", "due_date", "task_type", "related_legal_matter"]
+    list_display = ["title", "direction", "status", "priority", "due_date", "due_time", "task_type", "related_legal_matter"]
     list_filter = ["status", "priority", "task_type", "direction"]
     search_fields = ["title", "description"]
     filter_horizontal = ["related_stakeholders"]

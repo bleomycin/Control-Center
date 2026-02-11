@@ -15,7 +15,7 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
-        {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" %}
+        {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" and field.name != "due_time" %}
         <div{% if field.name == "related_stakeholders" %} id="stakeholder-field-wrapper"{% endif %}>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1"{% if field.name == "related_stakeholders" %} id="stakeholder-label"{% endif %}>
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
@@ -25,6 +25,11 @@
         </div>
         {% endif %}
         {% endfor %}
+        <div id="due-time-wrapper" class="hidden">
+            <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting Time</label>
+            {{ form.due_time }}
+            {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
+        </div>
 
         <!-- Task reminder toggle -->
         <div class="border-t border-gray-700 pt-4 mt-4">
@@ -77,6 +82,21 @@
         {% endif %}
 
         <script>
+            // Meeting time toggle
+            var taskTypeSelect = document.getElementById('{{ form.task_type.id_for_label }}');
+            if (taskTypeSelect) {
+                function updateMeetingTimeVisibility() {
+                    var wrapper = document.getElementById('due-time-wrapper');
+                    if (taskTypeSelect.value === 'meeting') {
+                        wrapper.classList.remove('hidden');
+                    } else {
+                        wrapper.classList.add('hidden');
+                        document.getElementById('{{ form.due_time.id_for_label }}').value = '';
+                    }
+                }
+                taskTypeSelect.addEventListener('change', updateMeetingTimeVisibility);
+                updateMeetingTimeVisibility();
+            }
             document.getElementById('reminder-toggle').addEventListener('change', function() {
                 var field = document.getElementById('reminder-field');
                 field.classList.toggle('hidden', !this.checked);

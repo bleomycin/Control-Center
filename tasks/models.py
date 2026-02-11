@@ -21,6 +21,7 @@ class Task(models.Model):
     TASK_TYPE_CHOICES = [
         ("one_time", "One-Time"),
         ("reference", "Reference"),
+        ("meeting", "Meeting"),
     ]
     DIRECTION_CHOICES = [
         ("personal", "Personal"),
@@ -31,6 +32,7 @@ class Task(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     due_date = models.DateField(null=True, blank=True, db_index=True)
+    due_time = models.TimeField(null=True, blank=True)
     reminder_date = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_started", db_index=True)
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
@@ -50,6 +52,18 @@ class Task(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def is_meeting(self):
+        return self.task_type == "meeting"
+
+    @property
+    def scheduled_datetime_str(self):
+        if self.due_date and self.due_time:
+            return f"{self.due_date.isoformat()}T{self.due_time.strftime('%H:%M:%S')}"
+        elif self.due_date:
+            return self.due_date.isoformat()
+        return ""
 
     def __str__(self):
         return self.title

@@ -29,11 +29,12 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 
     class Meta:
         model = Task
-        fields = ["title", "direction", "description", "due_date", "reminder_date", "status",
+        fields = ["title", "direction", "description", "due_date", "due_time", "reminder_date", "status",
                   "priority", "task_type", "related_stakeholders",
                   "related_legal_matter", "related_property"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
+            "due_time": forms.TimeInput(attrs={"type": "time"}),
             "reminder_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "description": forms.Textarea(attrs={"rows": 3}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": "5"}),
@@ -43,6 +44,12 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["fu_method"].choices = get_choices("contact_method")
         self.fields["related_stakeholders"].choices = _grouped_stakeholder_choices()
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("due_time") and not cleaned.get("due_date"):
+            self.add_error("due_time", "A due date is required when setting a time.")
+        return cleaned
 
 
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):

@@ -8,11 +8,12 @@
         <a href="{{ item.url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-750 transition-colors">
             <div class="flex items-center gap-3">
                 <span class="text-xs px-2 py-0.5 rounded-full
-                    {% if item.color == 'yellow' %}bg-yellow-900/50 text-yellow-300
+                    {% if item.color == 'blue' %}bg-blue-900/50 text-blue-300
+                    {% elif item.color == 'yellow' %}bg-yellow-900/50 text-yellow-300
                     {% elif item.color == 'red' %}bg-red-900/50 text-red-300
                     {% elif item.color == 'purple' %}bg-purple-900/50 text-purple-300
                     {% else %}bg-gray-700 text-gray-300{% endif %}">
-                    {% if item.type == 'task' %}Task{% elif item.type == 'payment' %}Payment{% elif item.type == 'hearing' %}Hearing{% endif %}
+                    {% if item.color == 'blue' %}Meeting{% elif item.type == 'task' %}Task{% elif item.type == 'payment' %}Payment{% elif item.type == 'hearing' %}Hearing{% endif %}
                 </span>
                 <p class="text-sm text-gray-200">{{ item.title }}</p>
             </div>

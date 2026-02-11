@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import time, timedelta
 from unittest.mock import patch
 
 from django.core import mail
@@ -769,3 +769,99 @@ class FollowUpResponseNotesTests(TestCase):
         )
         resp = self.client.get(reverse("tasks:detail", args=[self.task.pk]))
         self.assertContains(resp, "Said they will send the docs Friday")
+
+
+class MeetingTaskTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Meeting Person")
+
+    def test_is_meeting_true(self):
+        t = Task.objects.create(title="Mtg", task_type="meeting")
+        self.assertTrue(t.is_meeting)
+
+    def test_is_meeting_false(self):
+        t = Task.objects.create(title="Normal")
+        self.assertFalse(t.is_meeting)
+
+    def test_scheduled_datetime_str_with_time(self):
+        t = Task.objects.create(
+            title="Timed Mtg",
+            task_type="meeting",
+            due_date=timezone.localdate(),
+            due_time=time(14, 0),
+        )
+        self.assertIn("T14:00:00", t.scheduled_datetime_str)
+
+    def test_scheduled_datetime_str_without_time(self):
+        t = Task.objects.create(
+            title="Date Only",
+            due_date=timezone.localdate(),
+        )
+        self.assertNotIn("T", t.scheduled_datetime_str)
+        self.assertEqual(t.scheduled_datetime_str, t.due_date.isoformat())
+
+    def test_scheduled_datetime_str_no_date(self):
+        t = Task.objects.create(title="No Date")
+        self.assertEqual(t.scheduled_datetime_str, "")
+
+    def test_create_meeting_via_form(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Board Meeting",
+            "direction": "personal",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "meeting",
+            "due_date": "2026-03-15",
+            "due_time": "14:00",
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.get(title="Board Meeting")
+        self.assertTrue(task.is_meeting)
+        self.assertEqual(task.due_time, time(14, 0))
+
+    def test_due_time_without_due_date_rejected(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Time No Date",
+            "direction": "personal",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "meeting",
+            "due_time": "14:00",
+        })
+        self.assertEqual(resp.status_code, 200)  # re-renders form with error
+        self.assertFalse(Task.objects.filter(title="Time No Date").exists())
+
+    def test_detail_shows_meeting_time(self):
+        t = Task.objects.create(
+            title="Detail Mtg",
+            task_type="meeting",
+            due_date=timezone.localdate(),
+            due_time=time(14, 30),
+        )
+        resp = self.client.get(reverse("tasks:detail", args=[t.pk]))
+        self.assertContains(resp, "Meeting Time")
+        self.assertContains(resp, "2:30 PM")
+        self.assertContains(resp, "Meeting Notes")
+
+    def test_detail_non_meeting_no_meeting_notes(self):
+        t = Task.objects.create(title="Normal Task")
+        resp = self.client.get(reverse("tasks:detail", args=[t.pk]))
+        self.assertNotContains(resp, "Meeting Notes")
+        self.assertContains(resp, "Notes")
+
+    def test_calendar_meeting_event(self):
+        t = Task.objects.create(
+            title="Cal Meeting",
+            task_type="meeting",
+            due_date=timezone.localdate(),
+            due_time=time(10, 0),
+        )
+        resp = self.client.get(reverse("dashboard:calendar_events"))
+        data = resp.json()
+        meeting_events = [e for e in data if "Cal Meeting" in e["title"]]
+        self.assertEqual(len(meeting_events), 1)
+        event = meeting_events[0]
+        self.assertIn("T10:00:00", event["start"])
+        self.assertFalse(event.get("allDay", True))
+        self.assertIn("[MTG]", event["title"])
