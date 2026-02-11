@@ -97,6 +97,13 @@ def dashboard(request):
 
     net_worth = total_assets - total_liabilities
 
+    # Upcoming meetings (next 14 days)
+    upcoming_meetings = Task.objects.filter(
+        task_type="meeting",
+        due_date__gte=today,
+        due_date__lte=today + timedelta(days=14),
+    ).exclude(status="complete").prefetch_related("related_stakeholders").order_by("due_date", "due_time")
+
     # Upcoming Deadlines (next 30 days, unified)
     deadline_horizon = today + timedelta(days=30)
     upcoming_deadlines = []
@@ -160,6 +167,8 @@ def dashboard(request):
         "investment_value": total_investments,
         "active_loan_count": active_loan_count,
         "loan_balance": total_liabilities,
+        "upcoming_meetings": upcoming_meetings,
+        "today": today,
         "upcoming_deadlines": upcoming_deadlines,
         "at_risk_properties": at_risk_properties,
         "at_risk_loans": at_risk_loans,
