@@ -113,14 +113,16 @@ class RelationshipModelTests(TestCase):
                 relationship_type="partner",
             )
 
-    def test_cascade_delete(self):
-        Relationship.objects.create(
+    def test_set_null_on_stakeholder_delete(self):
+        rel = Relationship.objects.create(
             from_stakeholder=self.s1,
             to_stakeholder=self.s2,
             relationship_type="partner",
         )
         self.s1.delete()
-        self.assertEqual(Relationship.objects.count(), 0)
+        rel.refresh_from_db()
+        self.assertIsNone(rel.from_stakeholder)
+        self.assertEqual(rel.to_stakeholder, self.s2)
 
 
 class ContactLogModelTests(TestCase):
@@ -153,15 +155,16 @@ class ContactLogModelTests(TestCase):
         logs = list(ContactLog.objects.all())
         self.assertEqual(logs[0].summary, "New")
 
-    def test_cascade_on_stakeholder_delete(self):
-        ContactLog.objects.create(
+    def test_set_null_on_stakeholder_delete(self):
+        log = ContactLog.objects.create(
             stakeholder=self.stakeholder,
             date=timezone.now(),
             method="call",
             summary="Test",
         )
         self.stakeholder.delete()
-        self.assertEqual(ContactLog.objects.count(), 0)
+        log.refresh_from_db()
+        self.assertIsNone(log.stakeholder)
 
 
 class StakeholderViewTests(TestCase):

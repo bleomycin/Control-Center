@@ -16,4 +16,4 @@ class DashboardConfig(AppConfig):
                 cursor.execute('PRAGMA cache_size=-20000;')
                 cursor.execute('PRAGMA foreign_keys=ON;')
 
-        connection_created.connect(set_sqlite_pragmas)
+        connection_created.connect(set_sqlite_pragmas, weak=False)
