@@ -72,7 +72,7 @@
 document.addEventListener("DOMContentLoaded", function() {
     var ta = document.getElementById("id_content");
     if (ta) {
-        new EasyMDE({
+        var easyMDE = new EasyMDE({
             element: ta,
             spellChecker: false,
             status: false,
@@ -86,6 +86,11 @@ document.addEventListener("DOMContentLoaded", function() {
                 "guide"
             ],
             minHeight: "200px",
+        });
+        // Sync content to hidden textarea on every change so browser
+        // validation sees the value (EasyMDE hides the original textarea)
+        easyMDE.codemirror.on("change", function() {
+            easyMDE.codemirror.save();
         });
     }
 });
