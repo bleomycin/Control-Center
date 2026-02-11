@@ -54,7 +54,7 @@ class StakeholderListView(ListView):
 
         # Type filter (only on "all" tab)
         if tab == "all":
-            entity_types = self.request.GET.getlist("type")
+            entity_types = [t for t in self.request.GET.getlist("type") if t]
             if entity_types:
                 qs = qs.filter(entity_type__in=entity_types)
 

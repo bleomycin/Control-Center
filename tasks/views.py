@@ -22,7 +22,7 @@ class TaskListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
-        statuses = self.request.GET.getlist("status")
+        statuses = [s for s in self.request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
         priority = self.request.GET.get("priority")
@@ -34,10 +34,10 @@ class TaskListView(ListView):
         date_to = self.request.GET.get("date_to")
         if date_to:
             qs = qs.filter(due_date__lte=date_to)
-        directions = self.request.GET.getlist("direction")
+        directions = [d for d in self.request.GET.getlist("direction") if d]
         if directions:
             qs = qs.filter(direction__in=directions)
-        task_types = self.request.GET.getlist("task_type")
+        task_types = [t for t in self.request.GET.getlist("task_type") if t]
         if task_types:
             qs = qs.filter(task_type__in=task_types)
         ALLOWED_SORTS = {"title", "status", "priority", "due_date", "direction", "created_at"}

@@ -41,7 +41,7 @@ class NoteListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(content__icontains=q))
-        note_types = self.request.GET.getlist("type")
+        note_types = [t for t in self.request.GET.getlist("type") if t]
         if note_types:
             qs = qs.filter(note_type__in=note_types)
         date_from = self.request.GET.get("date_from")

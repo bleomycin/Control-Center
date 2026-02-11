@@ -78,7 +78,7 @@ class CashFlowListView(ListView):
 
     def get_queryset(self):
         qs = super().get_queryset()
-        entry_types = self.request.GET.getlist("type")
+        entry_types = [t for t in self.request.GET.getlist("type") if t]
         if entry_types:
             qs = qs.filter(entry_type__in=entry_types)
         projected = self.request.GET.get("projected")

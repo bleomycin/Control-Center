@@ -141,7 +141,7 @@ class RealEstateListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
-        statuses = self.request.GET.getlist("status")
+        statuses = [s for s in self.request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
         date_from = self.request.GET.get("date_from")
@@ -338,7 +338,7 @@ class LoanListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
-        statuses = self.request.GET.getlist("status")
+        statuses = [s for s in self.request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
         date_from = self.request.GET.get("date_from")
