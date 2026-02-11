@@ -29,8 +29,8 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 
     class Meta:
         model = Task
-        fields = ["title", "direction", "description", "due_date", "due_time", "reminder_date", "status",
-                  "priority", "task_type", "related_stakeholders",
+        fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "reminder_date", "status",
+                  "priority", "related_stakeholders",
                   "related_legal_matter", "related_property"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
