@@ -1,0 +1,106 @@
+{% load choice_labels tag_colors %}
+<div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-3">
+        <input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+        <span class="text-xs text-gray-400">Select all</span>
+    </div>
+    <div class="flex items-center gap-2 text-xs text-gray-400">
+        <span>Sort:</span>
+        <a href="#" hx-get="{% url 'notes:list' %}?sort=date&dir={% if current_sort == 'date' and current_dir != 'asc' %}asc{% else %}desc{% endif %}&view=list"
+           hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-0.5 {% if current_sort == 'date' %}text-blue-400{% endif %}">
+            Date
+            {% if current_sort == "date" %}{% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>{% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}{% endif %}
+        </a>
+        <span class="text-gray-600">|</span>
+        <a href="#" hx-get="{% url 'notes:list' %}?sort=title&dir={% if current_sort == 'title' and current_dir != 'asc' %}asc{% else %}desc{% endif %}&view=list"
+           hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-0.5 {% if current_sort == 'title' %}text-blue-400{% endif %}">
+            Title
+            {% if current_sort == "title" %}{% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>{% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}{% endif %}
+        </a>
+        <span class="text-gray-600">|</span>
+        <a href="#" hx-get="{% url 'notes:list' %}?sort=note_type&dir={% if current_sort == 'note_type' and current_dir != 'asc' %}asc{% else %}desc{% endif %}&view=list"
+           hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-0.5 {% if current_sort == 'note_type' %}text-blue-400{% endif %}">
+            Type
+            {% if current_sort == "note_type" %}{% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>{% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}{% endif %}
+        </a>
+    </div>
+</div>
+
+<div class="overflow-x-auto">
+    <table class="w-full text-sm text-left">
+        <thead class="text-xs text-gray-400 border-b border-gray-700">
+            <tr>
+                <th class="px-2 py-2 w-8"></th>
+                <th class="px-2 py-2 w-6"></th>
+                <th class="px-2 py-2">Title</th>
+                <th class="px-2 py-2 w-24">Type</th>
+                <th class="px-2 py-2 w-28 hidden lg:table-cell">Folder</th>
+                <th class="px-2 py-2 w-28">Date</th>
+                <th class="px-2 py-2 hidden xl:table-cell">Tags</th>
+                <th class="px-2 py-2 w-32 hidden md:table-cell">Stakeholder</th>
+                <th class="px-2 py-2 w-8 text-center">
+                    <svg class="w-3.5 h-3.5 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                </th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-700/50">
+            {% for note in notes %}
+            <tr class="hover:bg-gray-800/50 {% if note.is_pinned %}bg-yellow-900/5{% endif %}">
+                <td class="px-2 py-2">
+                    <input type="checkbox" name="selected" value="{{ note.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+                </td>
+                <td class="px-2 py-2">
+                    {% if note.is_pinned %}
+                    <svg class="w-3.5 h-3.5 text-yellow-400" fill="currentColor" viewBox="0 0 24 24"><path d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/></svg>
+                    {% endif %}
+                </td>
+                <td class="px-2 py-2">
+                    <a href="{{ note.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ note.title }}</a>
+                </td>
+                <td class="px-2 py-2">
+                    {% with note.note_type as nt %}
+                    <span class="text-xs px-1.5 py-0.5 rounded-full
+                        {% if nt == 'call' %}bg-green-900/50 text-green-300
+                        {% elif nt == 'email' %}bg-blue-900/50 text-blue-300
+                        {% elif nt == 'meeting' %}bg-purple-900/50 text-purple-300
+                        {% elif nt == 'research' %}bg-cyan-900/50 text-cyan-300
+                        {% elif nt == 'legal_update' %}bg-amber-900/50 text-amber-300
+                        {% else %}bg-gray-700 text-gray-300{% endif %}">{{ nt|choice_label:"note_type" }}</span>
+                    {% endwith %}
+                </td>
+                <td class="px-2 py-2 hidden lg:table-cell">
+                    {% if note.folder %}
+                    {% folder_classes note.folder.color as fc %}
+                    <span class="text-xs px-1.5 py-0.5 rounded {{ fc.bg }} {{ fc.text }}">{{ note.folder.name }}</span>
+                    {% endif %}
+                </td>
+                <td class="px-2 py-2 text-xs text-gray-400">{{ note.date|date:"M j, Y" }}</td>
+                <td class="px-2 py-2 hidden xl:table-cell">
+                    {% for tag in note.tags.all %}
+                    {% tag_classes tag.color as tc %}
+                    <span class="inline-flex text-xs px-1.5 py-0.5 rounded-full {{ tc.bg }} {{ tc.text }} mr-0.5">#{{ tag.name }}</span>
+                    {% endfor %}
+                </td>
+                <td class="px-2 py-2 hidden md:table-cell text-xs text-gray-400">
+                    {% with p=note.participants.all|first %}{% if p %}{{ p.name }}{% endif %}{% endwith %}
+                </td>
+                <td class="px-2 py-2 text-center text-xs text-gray-500">
+                    {% with total=note.attachment_count|add:note.link_count %}{% if total %}{{ total }}{% endif %}{% endwith %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="9" class="px-4 py-12 text-center">
+                    <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    <p class="text-sm text-gray-500 mb-3">No notes found</p>
+                    <a href="{% url 'notes:create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Note</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% include "partials/_pagination.html" %}

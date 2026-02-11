@@ -1,3 +1,6 @@
+from datetime import timedelta
+from itertools import groupby
+
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.http import HttpResponse
@@ -8,20 +11,29 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
-from .forms import AttachmentForm, LinkForm, NoteForm, QuickNoteForm
-from .models import Attachment, Link, Note
+from .forms import AttachmentForm, FolderForm, LinkForm, NoteForm, QuickNoteForm, TagForm
+from .models import Attachment, Folder, Link, Note, Tag
 
 
 def export_csv(request):
     from legacy.export import export_csv as do_export
-    qs = Note.objects.all()
+    qs = Note.objects.select_related("folder").prefetch_related("tags").all()
+    for n in qs:
+        n._tag_names = ", ".join(t.name for t in n.tags.all())
+        n._folder_name = n.folder.name if n.folder else ""
     fields = [
         ("title", "Title"),
         ("note_type", "Type"),
         ("date", "Date"),
+        ("is_pinned", "Pinned"),
+        ("_folder_name", "Folder"),
+        ("_tag_names", "Tags"),
         ("content", "Content"),
     ]
     return do_export(qs, fields, "notes")
+
+
+ALLOWED_SORTS = {"title", "note_type", "date"}
 
 
 class NoteListView(ListView):
@@ -31,9 +43,10 @@ class NoteListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related(
+        qs = super().get_queryset().select_related("folder").prefetch_related(
             "participants", "related_stakeholders",
             "related_legal_matters", "related_properties", "related_tasks",
+            "tags",
         ).annotate(
             attachment_count=Count("attachments", distinct=True),
             link_count=Count("links", distinct=True),
@@ -55,17 +68,42 @@ class NoteListView(ListView):
             qs = qs.filter(
                 Q(participants__pk=stakeholder) | Q(related_stakeholders__pk=stakeholder)
             ).distinct()
-        ALLOWED_SORTS = {"title", "note_type", "date"}
+        # Tag filter
+        tags = [t for t in self.request.GET.getlist("tag") if t]
+        if tags:
+            qs = qs.filter(tags__slug__in=tags).distinct()
+        # Folder filter
+        folder_tab = self.request.GET.get("folder", "")
+        if folder_tab == "unfiled":
+            qs = qs.filter(folder__isnull=True)
+        elif folder_tab and folder_tab not in ("all", ""):
+            try:
+                qs = qs.filter(folder__pk=int(folder_tab))
+            except (ValueError, TypeError):
+                pass
+        # Sorting — always pin first
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
             direction = "" if self.request.GET.get("dir") == "asc" else "-"
-            qs = qs.order_by(f"{direction}{sort}")
+            qs = qs.order_by("-is_pinned", f"{direction}{sort}")
+        else:
+            qs = qs.order_by("-is_pinned", "-date")
         return qs
 
     def get_template_names(self):
+        view_mode = self.request.GET.get("view", "cards")
         if self.request.headers.get("HX-Request"):
+            if view_mode == "list":
+                return ["notes/partials/_note_table_view.html"]
+            if view_mode == "timeline":
+                return ["notes/partials/_note_timeline_view.html"]
             return ["notes/partials/_note_list_content.html"]
         return [self.template_name]
+
+    def get_paginate_by(self, queryset):
+        if self.request.GET.get("view") == "timeline":
+            return 50
+        return self.paginate_by
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -79,6 +117,37 @@ class NoteListView(ListView):
         ctx["current_dir"] = self.request.GET.get("dir", "")
         ctx["stakeholders"] = Stakeholder.objects.all().order_by("name")
         ctx["selected_stakeholder"] = self.request.GET.get("stakeholder", "")
+        ctx["all_tags"] = Tag.objects.all()
+        ctx["selected_tags"] = self.request.GET.getlist("tag")
+        ctx["folders"] = Folder.objects.annotate(note_count=Count("notes")).all()
+        ctx["current_folder"] = self.request.GET.get("folder", "")
+        ctx["unfiled_count"] = Note.objects.filter(folder__isnull=True).count()
+        ctx["current_view"] = self.request.GET.get("view", "cards")
+        # Timeline grouping
+        if ctx["current_view"] == "timeline":
+            today = timezone.localdate()
+            yesterday = today - timedelta(days=1)
+            week_start = today - timedelta(days=today.weekday())
+            month_start = today.replace(day=1)
+
+            def date_group_key(note):
+                d = note.date.date() if hasattr(note.date, 'date') else note.date
+                if d == today:
+                    return "Today"
+                elif d == yesterday:
+                    return "Yesterday"
+                elif d >= week_start:
+                    return "This Week"
+                elif d >= month_start:
+                    return "This Month"
+                else:
+                    return d.strftime("%B %Y")
+
+            notes_list = list(ctx["notes"])
+            grouped = []
+            for key, group in groupby(notes_list, key=date_group_key):
+                grouped.append({"label": key, "notes": list(group)})
+            ctx["timeline_groups"] = grouped
         return ctx
 
 
@@ -165,7 +234,18 @@ def _strip_markdown(text):
 def export_pdf_detail(request, pk):
     from legacy.pdf_export import render_pdf
     n = get_object_or_404(Note, pk=pk)
+    info_rows = [
+        ("Type", get_choice_label("note_type", n.note_type)),
+        ("Date", n.date.strftime("%b %d, %Y %I:%M %p")),
+        ("Pinned", "Yes" if n.is_pinned else "No"),
+    ]
+    if n.folder:
+        info_rows.append(("Folder", n.folder.name))
+    tag_names = ", ".join(t.name for t in n.tags.all())
+    if tag_names:
+        info_rows.append(("Tags", tag_names))
     sections = [
+        {"heading": "Details", "type": "info", "rows": info_rows},
         {"heading": "Content", "type": "text", "content": _strip_markdown(n.content)},
     ]
     participants = n.participants.all()
@@ -195,6 +275,22 @@ def export_pdf_detail(request, pk):
                          "rows": [[lk.description, lk.url, lk.created_at.strftime("%b %d, %Y")] for lk in links]})
     return render_pdf(request, f"note-{n.pk}", n.title,
                       f"{get_choice_label('note_type', n.note_type)} — {n.date.strftime('%b %d, %Y %I:%M %p')}", sections)
+
+
+def toggle_pin(request, pk):
+    note = get_object_or_404(Note, pk=pk)
+    if request.method == "POST":
+        note.is_pinned = not note.is_pinned
+        note.save(update_fields=["is_pinned"])
+    # Re-query with annotations for card rendering
+    note = Note.objects.select_related("folder").prefetch_related(
+        "participants", "related_stakeholders",
+        "related_legal_matters", "related_properties", "related_tasks", "tags",
+    ).annotate(
+        attachment_count=Count("attachments", distinct=True),
+        link_count=Count("links", distinct=True),
+    ).get(pk=pk)
+    return render(request, "notes/partials/_note_card.html", {"note": note})
 
 
 def attachment_add(request, pk):
@@ -298,10 +394,107 @@ def bulk_export_csv(request):
     from legacy.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = Note.objects.filter(pk__in=pks) if pks else Note.objects.none()
+    qs = qs.select_related("folder").prefetch_related("tags")
+    for n in qs:
+        n._tag_names = ", ".join(t.name for t in n.tags.all())
+        n._folder_name = n.folder.name if n.folder else ""
     fields = [
         ("title", "Title"),
         ("note_type", "Type"),
         ("date", "Date"),
+        ("is_pinned", "Pinned"),
+        ("_folder_name", "Folder"),
+        ("_tag_names", "Tags"),
         ("content", "Content"),
     ]
     return do_export(qs, fields, "notes_selected")
+
+
+# --- Tag CRUD ---
+
+def tag_list(request):
+    tags = Tag.objects.annotate(note_count=Count("notes")).all()
+    return render(request, "notes/tag_settings.html", {"tags": tags})
+
+
+def tag_add(request):
+    if request.method == "POST":
+        form = TagForm(request.POST)
+        if form.is_valid():
+            form.save()
+            tags = Tag.objects.annotate(note_count=Count("notes")).all()
+            return render(request, "notes/partials/_tag_list.html", {"tags": tags})
+    else:
+        form = TagForm()
+    return render(request, "notes/partials/_tag_form.html", {"form": form})
+
+
+def tag_edit(request, pk):
+    tag = get_object_or_404(Tag, pk=pk)
+    if request.method == "POST":
+        form = TagForm(request.POST, instance=tag)
+        if form.is_valid():
+            form.save()
+            tags = Tag.objects.annotate(note_count=Count("notes")).all()
+            return render(request, "notes/partials/_tag_list.html", {"tags": tags})
+    else:
+        form = TagForm(instance=tag)
+    from django.urls import reverse
+    return render(request, "notes/partials/_tag_form.html", {
+        "form": form,
+        "form_url": reverse("notes:tag_edit", args=[pk]),
+        "edit_mode": True,
+    })
+
+
+def tag_delete(request, pk):
+    tag = get_object_or_404(Tag, pk=pk)
+    if request.method == "POST":
+        tag.delete()
+    tags = Tag.objects.annotate(note_count=Count("notes")).all()
+    return render(request, "notes/partials/_tag_list.html", {"tags": tags})
+
+
+# --- Folder CRUD ---
+
+def folder_list(request):
+    folders = Folder.objects.annotate(note_count=Count("notes")).all()
+    return render(request, "notes/folder_settings.html", {"folders": folders})
+
+
+def folder_add(request):
+    if request.method == "POST":
+        form = FolderForm(request.POST)
+        if form.is_valid():
+            form.save()
+            folders = Folder.objects.annotate(note_count=Count("notes")).all()
+            return render(request, "notes/partials/_folder_list.html", {"folders": folders})
+    else:
+        form = FolderForm()
+    return render(request, "notes/partials/_folder_form.html", {"form": form})
+
+
+def folder_edit(request, pk):
+    folder = get_object_or_404(Folder, pk=pk)
+    if request.method == "POST":
+        form = FolderForm(request.POST, instance=folder)
+        if form.is_valid():
+            form.save()
+            folders = Folder.objects.annotate(note_count=Count("notes")).all()
+            return render(request, "notes/partials/_folder_list.html", {"folders": folders})
+    else:
+        form = FolderForm(instance=folder)
+    from django.urls import reverse
+    return render(request, "notes/partials/_folder_form.html", {
+        "form": form,
+        "form_url": reverse("notes:folder_edit", args=[pk]),
+        "edit_mode": True,
+    })
+
+
+def folder_delete(request, pk):
+    folder = get_object_or_404(Folder, pk=pk)
+    if request.method == "POST":
+        folder.delete()
+    folders = Folder.objects.annotate(note_count=Count("notes")).all()
+    return render(request, "notes/partials/_folder_list.html", {"folders": folders})

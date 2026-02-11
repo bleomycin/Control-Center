@@ -3,12 +3,33 @@
     <form hx-post="{% url 'notes:quick_capture' %}" hx-swap="none" class="space-y-4">
         {% csrf_token %}
         {% for field in form %}
+        {% if field.name == 'stakeholder' or field.name == 'task' or field.name == 'folder' or field.name == 'tags' %}
+        {% elif field.name == 'title' or field.name == 'content' or field.name == 'date' or field.name == 'note_type' %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.label }}</label>
             {{ field }}
             {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
         </div>
+        {% endif %}
         {% endfor %}
+        <details class="border border-gray-700 rounded-md">
+            <summary class="px-3 py-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300">More options</summary>
+            <div class="px-3 py-3 space-y-3 border-t border-gray-700">
+                {% for field in form %}
+                {% if field.name == 'stakeholder' or field.name == 'task' or field.name == 'folder' %}
+                <div>
+                    <label for="{{ field.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ field.label }}</label>
+                    {{ field }}
+                </div>
+                {% elif field.name == 'tags' %}
+                <div>
+                    <label class="block text-xs font-medium text-gray-400 mb-1">Tags</label>
+                    <div class="flex flex-wrap gap-2">{{ field }}</div>
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </details>
         <div class="flex gap-3 pt-2">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Note</button>
             <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>

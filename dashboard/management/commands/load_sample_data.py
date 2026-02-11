@@ -13,7 +13,7 @@ from assets.models import RealEstate, Investment, Loan
 from legal.models import LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
-from notes.models import Note
+from notes.models import Folder, Note, Tag
 
 
 class Command(BaseCommand):
@@ -532,6 +532,29 @@ class Command(BaseCommand):
             )
             cashflow_pks.append(cf.pk)
 
+        self.stdout.write("Creating tags and folders...")
+        tag_data = [
+            ("legal", "Legal", "red"),
+            ("finance", "Finance", "green"),
+            ("property", "Property", "blue"),
+            ("meeting-notes", "Meeting Notes", "purple"),
+            ("action-item", "Action Item", "orange"),
+            ("research", "Research", "cyan"),
+        ]
+        tags = {}
+        for slug, name, color in tag_data:
+            tags[slug] = Tag.objects.create(name=name, slug=slug, color=color)
+
+        folder_data = [
+            ("Legal", "red", 1),
+            ("Properties", "blue", 2),
+            ("Investments", "green", 3),
+            ("Meetings", "purple", 4),
+        ]
+        folders = {}
+        for name, color, order in folder_data:
+            folders[name] = Folder.objects.create(name=name, color=color, sort_order=order)
+
         self.stdout.write("Creating notes...")
         note_data = [
             ("Holston eviction strategy call with Marcus", "call", now - timedelta(days=2),
@@ -668,10 +691,33 @@ class Command(BaseCommand):
              "Will reassess remaining position after.",
              [], [], [], [], ["Research Bitcoin exit strategy"]),
         ]
+        # Map note titles to folders, tags, pin status
+        note_folders = {
+            "Holston eviction strategy call with Marcus": "Legal",
+            "Magnolia Blvd walkthrough notes": "Properties",
+            "Quarterly portfolio review with Derek": "Investments",
+            "Cedar Lane mediation prep": "Legal",
+            "Estate planning meeting notes": "Meetings",
+        }
+        note_tags = {
+            "Holston eviction strategy call with Marcus": ["legal", "action-item"],
+            "Magnolia Blvd walkthrough notes": ["property", "meeting-notes"],
+            "Quarterly portfolio review with Derek": ["finance", "meeting-notes"],
+            "Cedar Lane mediation prep": ["legal", "research", "property"],
+            "Elm St roof concerns": ["property", "action-item"],
+            "Estate planning meeting notes": ["legal", "meeting-notes"],
+        }
+        pinned_notes = {
+            "Holston eviction strategy call with Marcus",
+            "Quarterly portfolio review with Derek",
+        }
+
         note_pks = []
         for title, ntype, dt, content, participants, rel_sh, rel_lm, rel_props, rel_tasks in note_data:
             note = Note.objects.create(
                 title=title, note_type=ntype, date=dt, content=content,
+                is_pinned=title in pinned_notes,
+                folder=folders.get(note_folders.get(title)),
             )
             note_pks.append(note.pk)
             for name in participants:
@@ -684,6 +730,8 @@ class Command(BaseCommand):
                 note.related_properties.add(properties[p])
             for t in rel_tasks:
                 note.related_tasks.add(tasks[t])
+            for tag_slug in note_tags.get(title, []):
+                note.tags.add(tags[tag_slug])
 
         # Build manifest of created PKs
         manifest = {
@@ -729,6 +777,8 @@ class Command(BaseCommand):
                 ).values_list("pk", flat=True)
             ),
             "cashflow.cashflowentry": cashflow_pks,
+            "notes.tag": [t.pk for t in tags.values()],
+            "notes.folder": [f.pk for f in folders.values()],
             "notes.note": note_pks,
         }
 
@@ -752,5 +802,7 @@ class Command(BaseCommand):
             f"  Tasks:          {len(manifest['tasks.task'])}\n"
             f"  Follow-ups:     {len(manifest['tasks.followup'])}\n"
             f"  Cash Flow:      {len(manifest['cashflow.cashflowentry'])}\n"
+            f"  Tags:           {len(manifest['notes.tag'])}\n"
+            f"  Folders:        {len(manifest['notes.folder'])}\n"
             f"  Notes:          {len(manifest['notes.note'])}"
         ))

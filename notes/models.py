@@ -2,6 +2,45 @@ from django.db import models
 from django.urls import reverse
 
 
+COLOR_CHOICES = [
+    ("red", "Red"), ("orange", "Orange"), ("yellow", "Yellow"),
+    ("green", "Green"), ("blue", "Blue"), ("indigo", "Indigo"),
+    ("purple", "Purple"), ("pink", "Pink"), ("cyan", "Cyan"), ("gray", "Gray"),
+]
+
+
+class Tag(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+    slug = models.SlugField(max_length=50, unique=True)
+    color = models.CharField(max_length=10, choices=COLOR_CHOICES, default="blue")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            from django.utils.text import slugify
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+
+
+class Folder(models.Model):
+    name = models.CharField(max_length=100)
+    color = models.CharField(max_length=10, choices=COLOR_CHOICES, default="blue")
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
 class Note(models.Model):
     NOTE_TYPE_CHOICES = [
         ("call", "Call"),
@@ -16,6 +55,9 @@ class Note(models.Model):
     content = models.TextField()
     date = models.DateTimeField(db_index=True)
     note_type = models.CharField(max_length=30, default="general")
+    is_pinned = models.BooleanField(default=False)
+    tags = models.ManyToManyField("Tag", blank=True, related_name="notes")
+    folder = models.ForeignKey("Folder", on_delete=models.SET_NULL, null=True, blank=True, related_name="notes")
     participants = models.ManyToManyField(
         "stakeholders.Stakeholder", blank=True, related_name="notes_as_participant",
     )

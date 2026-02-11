@@ -9,6 +9,7 @@ module.exports = {
     './assets/templates/**/*.html',
     './cashflow/templates/**/*.html',
     './notes/templates/**/*.html',
+    './notes/templatetags/**/*.py',
     './legacy/forms.py',
   ],
   theme: {
