@@ -82,9 +82,8 @@ function initKanban() {
 function updateColumnCounts() {
     document.querySelectorAll('.kanban-column').forEach(function (col) {
         var count = col.querySelectorAll('.kanban-card').length;
-        // The count badge is the sibling span in the header above
-        var wrapper = col.closest('div').parentElement;
-        var badge = wrapper ? wrapper.querySelector('.rounded-full') : null;
+        var status = col.dataset.status;
+        var badge = document.querySelector('[data-kanban-count="' + status + '"]');
         if (badge) badge.textContent = count;
     });
 }
