@@ -208,25 +208,29 @@ function switchView(mode) {
         boardBtn.className = boardBtn.className.replace('bg-blue-600 text-white', 'bg-gray-700 text-gray-300 hover:bg-gray-600');
     }
 
-    // Load SortableJS dynamically if switching to board and not yet loaded
-    if (mode === 'board' && typeof Sortable === 'undefined') {
-        var script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js';
-        script.onload = function() {
-            // Load kanban.js after SortableJS
-            var kanbanScript = document.createElement('script');
-            kanbanScript.src = '{% static "js/kanban.js" %}';
-            document.head.appendChild(kanbanScript);
-        };
-        document.head.appendChild(script);
-    }
-
     // Trigger HTMX request to reload content
     var url = '{% url "tasks:list" %}';
     htmx.ajax('GET', url, {
         target: '#task-content',
         swap: 'innerHTML',
         values: getFilterValues(mode),
+    }).then(function () {
+        // After HTMX swap completes, ensure Sortable + kanban are loaded and initialized
+        if (mode === 'board') {
+            if (typeof Sortable === 'undefined') {
+                var script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js';
+                script.onload = function() {
+                    var kanbanScript = document.createElement('script');
+                    kanbanScript.src = '{% static "js/kanban.js" %}';
+                    document.head.appendChild(kanbanScript);
+                    // kanban.js calls initKanban() at the bottom on load
+                };
+                document.head.appendChild(script);
+            } else if (typeof initKanban === 'function') {
+                initKanban();
+            }
+        }
     });
 
     // Toggle bulk bar visibility
