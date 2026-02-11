@@ -47,10 +47,12 @@ class Stakeholder(models.Model):
 
 class Relationship(models.Model):
     from_stakeholder = models.ForeignKey(
-        Stakeholder, on_delete=models.CASCADE, related_name="relationships_from"
+        Stakeholder, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="relationships_from",
     )
     to_stakeholder = models.ForeignKey(
-        Stakeholder, on_delete=models.CASCADE, related_name="relationships_to"
+        Stakeholder, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="relationships_to",
     )
     relationship_type = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -59,7 +61,9 @@ class Relationship(models.Model):
         return f"{self.from_stakeholder} → {self.to_stakeholder} ({self.relationship_type})"
 
     def get_absolute_url(self):
-        return reverse("stakeholders:detail", kwargs={"pk": self.from_stakeholder.pk})
+        if self.from_stakeholder:
+            return reverse("stakeholders:detail", kwargs={"pk": self.from_stakeholder.pk})
+        return reverse("stakeholders:list")
 
     class Meta:
         unique_together = ["from_stakeholder", "to_stakeholder", "relationship_type"]
@@ -74,7 +78,7 @@ class ContactLog(models.Model):
         ("other", "Other"),
     ]
 
-    stakeholder = models.ForeignKey(Stakeholder, on_delete=models.CASCADE, related_name="contact_logs")
+    stakeholder = models.ForeignKey(Stakeholder, on_delete=models.SET_NULL, null=True, blank=True, related_name="contact_logs")
     date = models.DateTimeField()
     method = models.CharField(max_length=30)
     summary = models.TextField()
@@ -85,7 +89,9 @@ class ContactLog(models.Model):
         return f"{self.stakeholder} - {self.method} on {self.date:%Y-%m-%d}"
 
     def get_absolute_url(self):
-        return reverse("stakeholders:detail", kwargs={"pk": self.stakeholder.pk})
+        if self.stakeholder:
+            return reverse("stakeholders:detail", kwargs={"pk": self.stakeholder.pk})
+        return reverse("stakeholders:list")
 
     class Meta:
         ordering = ["-date"]

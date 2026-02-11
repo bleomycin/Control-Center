@@ -97,16 +97,17 @@ class FollowUpModelTests(TestCase):
         self.task.delete()
         self.assertEqual(FollowUp.objects.count(), 0)
 
-    def test_cascade_on_stakeholder_delete(self):
+    def test_set_null_on_stakeholder_delete(self):
         fu_task = Task.objects.create(title="Cascade Test")
-        FollowUp.objects.create(
+        fu = FollowUp.objects.create(
             task=fu_task,
             stakeholder=self.stakeholder,
             outreach_date=timezone.now(),
             method="email",
         )
         self.stakeholder.delete()
-        self.assertEqual(FollowUp.objects.filter(task=fu_task).count(), 0)
+        fu.refresh_from_db()
+        self.assertIsNone(fu.stakeholder)
 
 
 class TaskViewTests(TestCase):
