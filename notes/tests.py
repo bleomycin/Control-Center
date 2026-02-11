@@ -8,7 +8,7 @@ from legal.models import LegalMatter
 from stakeholders.models import Stakeholder
 from tasks.models import Task
 
-from .models import Attachment, Link, Note
+from .models import Attachment, Folder, Link, Note, Tag
 
 
 class NoteModelTests(TestCase):
@@ -361,3 +361,349 @@ class MarkdownRenderTests(TestCase):
     def test_form_includes_easymde(self):
         resp = self.client.get(reverse("notes:create"))
         self.assertContains(resp, "easymde")
+
+
+# ===== New tests for 7 features =====
+
+class TagModelTests(TestCase):
+    def test_create_tag(self):
+        tag = Tag.objects.create(name="Legal", slug="legal", color="red")
+        self.assertEqual(str(tag), "Legal")
+        self.assertEqual(tag.slug, "legal")
+
+    def test_auto_slug(self):
+        tag = Tag.objects.create(name="Action Item")
+        self.assertEqual(tag.slug, "action-item")
+
+    def test_tag_ordering(self):
+        Tag.objects.create(name="Zulu", slug="zulu")
+        Tag.objects.create(name="Alpha", slug="alpha")
+        self.assertEqual(Tag.objects.first().name, "Alpha")
+
+
+class FolderModelTests(TestCase):
+    def test_create_folder(self):
+        f = Folder.objects.create(name="Legal", color="red")
+        self.assertEqual(str(f), "Legal")
+
+    def test_folder_ordering(self):
+        Folder.objects.create(name="B Folder", sort_order=2)
+        Folder.objects.create(name="A Folder", sort_order=1)
+        self.assertEqual(Folder.objects.first().name, "A Folder")
+
+
+class PinTests(TestCase):
+    def test_toggle_pin(self):
+        note = Note.objects.create(
+            title="Pin Me", content="x", date=timezone.now(), is_pinned=False
+        )
+        resp = self.client.post(reverse("notes:toggle_pin", args=[note.pk]))
+        self.assertEqual(resp.status_code, 200)
+        note.refresh_from_db()
+        self.assertTrue(note.is_pinned)
+
+    def test_toggle_unpin(self):
+        note = Note.objects.create(
+            title="Unpin Me", content="x", date=timezone.now(), is_pinned=True
+        )
+        self.client.post(reverse("notes:toggle_pin", args=[note.pk]))
+        note.refresh_from_db()
+        self.assertFalse(note.is_pinned)
+
+    def test_pinned_notes_sort_first(self):
+        Note.objects.create(title="Unpinned", content="x", date=timezone.now(), is_pinned=False)
+        Note.objects.create(title="Pinned", content="x", date=timezone.now() - timezone.timedelta(days=5), is_pinned=True)
+        resp = self.client.get(reverse("notes:list"))
+        notes = list(resp.context["notes"])
+        self.assertEqual(notes[0].title, "Pinned")
+
+    def test_detail_shows_pin_button(self):
+        note = Note.objects.create(title="Pin Detail", content="x", date=timezone.now())
+        resp = self.client.get(reverse("notes:detail", args=[note.pk]))
+        self.assertContains(resp, "Pin")
+
+    def test_pin_on_detail_page(self):
+        note = Note.objects.create(title="Detail Pin", content="x", date=timezone.now(), is_pinned=False)
+        resp = self.client.post(reverse("notes:toggle_pin", args=[note.pk]))
+        self.assertEqual(resp.status_code, 200)
+        note.refresh_from_db()
+        self.assertTrue(note.is_pinned)
+
+
+class MultiSelectTypeFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        Note.objects.create(title="Call Note", content="x", date=timezone.now(), note_type="call")
+        Note.objects.create(title="Email Note", content="x", date=timezone.now(), note_type="email")
+        Note.objects.create(title="Meeting Note", content="x", date=timezone.now(), note_type="meeting")
+
+    def test_single_type(self):
+        resp = self.client.get(reverse("notes:list"), {"type": "call"})
+        self.assertContains(resp, "Call Note")
+        self.assertNotContains(resp, "Email Note")
+
+    def test_multi_type(self):
+        resp = self.client.get(reverse("notes:list"), {"type": ["call", "email"]})
+        self.assertContains(resp, "Call Note")
+        self.assertContains(resp, "Email Note")
+        self.assertNotContains(resp, "Meeting Note")
+
+
+class TagViewTests(TestCase):
+    def test_tag_list(self):
+        resp = self.client.get(reverse("notes:tag_list"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_tag_add_get(self):
+        resp = self.client.get(reverse("notes:tag_add"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_tag_add_post(self):
+        resp = self.client.post(reverse("notes:tag_add"), {"name": "NewTag", "color": "blue"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(Tag.objects.filter(name="NewTag").exists())
+
+    def test_tag_edit(self):
+        tag = Tag.objects.create(name="OldTag", slug="oldtag")
+        resp = self.client.post(
+            reverse("notes:tag_edit", args=[tag.pk]),
+            {"name": "EditedTag", "color": "green"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        tag.refresh_from_db()
+        self.assertEqual(tag.name, "EditedTag")
+
+    def test_tag_delete(self):
+        tag = Tag.objects.create(name="DelTag", slug="deltag")
+        resp = self.client.post(reverse("notes:tag_delete", args=[tag.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Tag.objects.filter(pk=tag.pk).exists())
+
+    def test_tag_filter_on_list(self):
+        tag = Tag.objects.create(name="Legal", slug="legal", color="red")
+        note = Note.objects.create(title="Tagged Note", content="x", date=timezone.now())
+        note.tags.add(tag)
+        Note.objects.create(title="Untagged Note", content="x", date=timezone.now())
+        resp = self.client.get(reverse("notes:list"), {"tag": "legal"})
+        self.assertContains(resp, "Tagged Note")
+        self.assertNotContains(resp, "Untagged Note")
+
+    def test_tag_on_card(self):
+        tag = Tag.objects.create(name="Finance", slug="finance", color="green")
+        note = Note.objects.create(title="Card Tag Note", content="x", date=timezone.now())
+        note.tags.add(tag)
+        resp = self.client.get(reverse("notes:list"))
+        self.assertContains(resp, "#Finance")
+
+    def test_tag_on_detail(self):
+        tag = Tag.objects.create(name="Project", slug="project", color="blue")
+        note = Note.objects.create(title="Detail Tag Note", content="x", date=timezone.now())
+        note.tags.add(tag)
+        resp = self.client.get(reverse("notes:detail", args=[note.pk]))
+        self.assertContains(resp, "#Project")
+
+
+class FolderViewTests(TestCase):
+    def test_folder_list(self):
+        resp = self.client.get(reverse("notes:folder_list"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_folder_add_post(self):
+        resp = self.client.post(reverse("notes:folder_add"), {"name": "Legal", "color": "red"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(Folder.objects.filter(name="Legal").exists())
+
+    def test_folder_edit(self):
+        f = Folder.objects.create(name="OldFolder")
+        resp = self.client.post(
+            reverse("notes:folder_edit", args=[f.pk]),
+            {"name": "NewFolder", "color": "green"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        f.refresh_from_db()
+        self.assertEqual(f.name, "NewFolder")
+
+    def test_folder_delete(self):
+        f = Folder.objects.create(name="DelFolder")
+        resp = self.client.post(reverse("notes:folder_delete", args=[f.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Folder.objects.filter(pk=f.pk).exists())
+
+    def test_folder_tab_filter(self):
+        f = Folder.objects.create(name="Legal", color="red")
+        Note.objects.create(title="In Folder", content="x", date=timezone.now(), folder=f)
+        Note.objects.create(title="No Folder", content="x", date=timezone.now())
+        resp = self.client.get(reverse("notes:list"), {"folder": str(f.pk)})
+        self.assertContains(resp, "In Folder")
+        self.assertNotContains(resp, "No Folder")
+
+    def test_unfiled_filter(self):
+        f = Folder.objects.create(name="Legal", color="red")
+        Note.objects.create(title="In Folder", content="x", date=timezone.now(), folder=f)
+        Note.objects.create(title="Unfiled Note", content="x", date=timezone.now())
+        resp = self.client.get(reverse("notes:list"), {"folder": "unfiled"})
+        self.assertContains(resp, "Unfiled Note")
+        self.assertNotContains(resp, "In Folder")
+
+    def test_folder_on_card(self):
+        f = Folder.objects.create(name="Properties", color="blue")
+        Note.objects.create(title="Folder Card", content="x", date=timezone.now(), folder=f)
+        resp = self.client.get(reverse("notes:list"))
+        self.assertContains(resp, "Properties")
+
+    def test_folder_on_detail(self):
+        f = Folder.objects.create(name="Meetings", color="purple")
+        note = Note.objects.create(title="Folder Detail", content="x", date=timezone.now(), folder=f)
+        resp = self.client.get(reverse("notes:detail", args=[note.pk]))
+        self.assertContains(resp, "Meetings")
+
+
+class CompactListViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.note = Note.objects.create(
+            title="Table Note", content="x", date=timezone.now()
+        )
+
+    def test_list_view_htmx(self):
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "list"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertTemplateUsed(resp, "notes/partials/_note_table_view.html")
+
+    def test_cards_view_htmx(self):
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "cards"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertTemplateUsed(resp, "notes/partials/_note_list_content.html")
+
+    def test_timeline_view_htmx(self):
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "timeline"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertTemplateUsed(resp, "notes/partials/_note_timeline_view.html")
+
+    def test_list_view_shows_title(self):
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "list"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertContains(resp, "Table Note")
+
+
+class QuickCaptureEnhancedTests(TestCase):
+    def test_quick_capture_with_stakeholder(self):
+        s = Stakeholder.objects.create(name="Quick Person")
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "Quick With Stakeholder",
+            "content": "x",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+            "stakeholder": str(s.pk),
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.get(title="Quick With Stakeholder")
+        self.assertIn(s, note.participants.all())
+
+    def test_quick_capture_with_task(self):
+        t = Task.objects.create(title="Quick Task")
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "Quick With Task",
+            "content": "x",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+            "task": str(t.pk),
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.get(title="Quick With Task")
+        self.assertIn(t, note.related_tasks.all())
+
+    def test_quick_capture_with_folder(self):
+        f = Folder.objects.create(name="QC Folder")
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "Quick With Folder",
+            "content": "x",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+            "folder": str(f.pk),
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.get(title="Quick With Folder")
+        self.assertEqual(note.folder, f)
+
+    def test_quick_capture_with_tags(self):
+        tag = Tag.objects.create(name="QC Tag", slug="qc-tag")
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "Quick With Tags",
+            "content": "x",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+            "tags": [str(tag.pk)],
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.get(title="Quick With Tags")
+        self.assertIn(tag, note.tags.all())
+
+
+class TimelineViewTests(TestCase):
+    def test_timeline_groups_context(self):
+        Note.objects.create(title="Today Note", content="x", date=timezone.now())
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "timeline"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertIn("timeline_groups", resp.context)
+        groups = resp.context["timeline_groups"]
+        self.assertTrue(len(groups) > 0)
+        self.assertEqual(groups[0]["label"], "Today")
+
+    def test_timeline_pagination_50(self):
+        resp = self.client.get(
+            reverse("notes:list"), {"view": "timeline"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertEqual(resp.status_code, 200)
+
+
+class CSVExportEnhancedTests(TestCase):
+    def test_csv_includes_pinned_and_tags(self):
+        tag = Tag.objects.create(name="Export Tag", slug="export-tag")
+        f = Folder.objects.create(name="Export Folder")
+        note = Note.objects.create(
+            title="Export Note", content="x", date=timezone.now(),
+            is_pinned=True, folder=f,
+        )
+        note.tags.add(tag)
+        resp = self.client.get(reverse("notes:export_csv"))
+        content = resp.content.decode()
+        self.assertIn("Pinned", content)
+        self.assertIn("Folder", content)
+        self.assertIn("Tags", content)
+
+    def test_bulk_csv_includes_new_fields(self):
+        note = Note.objects.create(
+            title="Bulk Note", content="x", date=timezone.now(), is_pinned=True,
+        )
+        resp = self.client.get(reverse("notes:bulk_export_csv"), {"selected": [str(note.pk)]})
+        content = resp.content.decode()
+        self.assertIn("Pinned", content)
+
+
+class PDFExportEnhancedTests(TestCase):
+    def test_pdf_with_tags_and_folder(self):
+        tag = Tag.objects.create(name="PDF Tag", slug="pdf-tag")
+        f = Folder.objects.create(name="PDF Folder")
+        note = Note.objects.create(
+            title="PDF Note", content="x", date=timezone.now(),
+            is_pinned=True, folder=f,
+        )
+        note.tags.add(tag)
+        resp = self.client.get(reverse("notes:export_pdf", args=[note.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class SettingsHubTests(TestCase):
+    def test_settings_hub_has_tag_link(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertContains(resp, "Manage Tags")
+
+    def test_settings_hub_has_folder_link(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertContains(resp, "Manage Folders")

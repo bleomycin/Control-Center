@@ -633,6 +633,8 @@ def sample_data_remove(request):
     # Delete in reverse-dependency order (children before parents)
     deletion_order = [
         "notes.note",
+        "notes.tag",
+        "notes.folder",
         "cashflow.cashflowentry",
         "tasks.followup",
         "tasks.task",

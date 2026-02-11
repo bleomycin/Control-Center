@@ -1,0 +1,24 @@
+{% load tag_colors %}
+<div class="divide-y divide-gray-700">
+    {% for folder in folders %}
+    <div class="px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            {% folder_classes folder.color as fc %}
+            <span class="inline-flex items-center gap-1 text-sm {{ fc.text }}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                {{ folder.name }}
+            </span>
+            <span class="text-xs text-gray-500">{{ folder.note_count }} note{{ folder.note_count|pluralize }}</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button hx-get="{% url 'notes:folder_edit' folder.pk %}" hx-target="#folder-form-container" hx-swap="innerHTML"
+                    class="text-xs text-gray-400 hover:text-blue-400">Edit</button>
+            <button hx-post="{% url 'notes:folder_delete' folder.pk %}" hx-target="#folder-list" hx-swap="innerHTML"
+                    hx-confirm="Delete folder &quot;{{ folder.name }}&quot;? Notes in this folder will become unfiled."
+                    class="text-xs text-gray-400 hover:text-red-400">Delete</button>
+        </div>
+    </div>
+    {% empty %}
+    <div class="px-4 py-8 text-center text-sm text-gray-500">No folders yet. Click "+ Add Folder" to create one.</div>
+    {% endfor %}
+</div>
