@@ -4,9 +4,6 @@
  * Initializes Sortable on each .kanban-column, enabling cross-column drag.
  * On drop, POSTs the new status to the kanban-update endpoint.
  */
-document.addEventListener('DOMContentLoaded', function () {
-    initKanban();
-});
 
 // Re-init after HTMX swaps (e.g. filter changes)
 document.body.addEventListener('htmx:afterSwap', function (e) {
@@ -88,3 +85,6 @@ function updateColumnCounts() {
         if (badge) badge.textContent = count;
     });
 }
+
+// Initialize immediately — this script loads after the DOM is ready
+initKanban();
