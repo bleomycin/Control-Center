@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // After HTMX swaps table rows, reset select-all and bar
     document.body.addEventListener('htmx:afterSwap', function (e) {
-        if (e.detail.target.tagName === 'TBODY' || e.detail.target.id === 'note-card-list') {
+        if (e.detail.target.tagName === 'TBODY' || e.detail.target.id === 'note-card-list' || e.detail.target.id === 'task-content') {
             selectAll.checked = false;
             selectAll.indeterminate = false;
             bar.classList.add('hidden');

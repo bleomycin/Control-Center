@@ -3,6 +3,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
+from django.views.decorators.http import require_POST
 
 from django.http import HttpResponse
 
@@ -47,8 +48,16 @@ class TaskListView(ListView):
             qs = qs.order_by(f"{direction}{sort}")
         return qs
 
+    def get_paginate_by(self, queryset):
+        if self.request.GET.get("view") == "board":
+            return None  # No pagination for board view
+        return self.paginate_by
+
     def get_template_names(self):
+        view_mode = self.request.GET.get("view", "table")
         if self.request.headers.get("HX-Request"):
+            if view_mode == "board":
+                return ["tasks/partials/_kanban_board.html"]
             return ["tasks/partials/_task_table_rows.html"]
         return [self.template_name]
 
@@ -68,6 +77,28 @@ class TaskListView(ListView):
         ctx["selected_directions"] = self.request.GET.getlist("direction")
         ctx["type_choices"] = Task.TASK_TYPE_CHOICES
         ctx["selected_types"] = self.request.GET.getlist("task_type")
+        ctx["current_view"] = self.request.GET.get("view", "table")
+
+        # Build kanban columns for board view
+        if ctx["current_view"] == "board":
+            tasks = ctx["tasks"] if "tasks" in ctx else self.get_queryset()
+            column_config = [
+                ("not_started", "Not Started", "border-gray-500"),
+                ("in_progress", "In Progress", "border-blue-500"),
+                ("waiting", "Waiting", "border-yellow-500"),
+                ("complete", "Complete", "border-green-500"),
+            ]
+            kanban_columns = []
+            for status, label, border_color in column_config:
+                col_tasks = [t for t in tasks if t.status == status]
+                kanban_columns.append({
+                    "status": status,
+                    "label": label,
+                    "border_color": border_color,
+                    "tasks": col_tasks,
+                })
+            ctx["kanban_columns"] = kanban_columns
+
         return ctx
 
 
@@ -237,7 +268,7 @@ def export_pdf_detail(request, pk):
 
 
 def toggle_complete(request, pk):
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
     if task.status == "complete":
         task.status = "not_started"
         task.completed_at = None
@@ -245,7 +276,55 @@ def toggle_complete(request, pk):
         task.status = "complete"
         task.completed_at = timezone.now()
     task.save()
-    return render(request, "tasks/partials/_task_status_badge.html", {"task": task})
+    # Return full row for table context, badge for detail context
+    context = request.POST.get("context", "")
+    if context == "detail":
+        return render(request, "tasks/partials/_task_status_badge.html", {"task": task})
+    return render(request, "tasks/partials/_task_row.html", {"task": task})
+
+
+@require_POST
+def kanban_update(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    status = request.POST.get("status", "")
+    valid_statuses = [c[0] for c in Task.STATUS_CHOICES]
+    if status not in valid_statuses:
+        return HttpResponse(status=400)
+    task.status = status
+    if status == "complete":
+        task.completed_at = timezone.now()
+    else:
+        task.completed_at = None
+    task.save()
+    return HttpResponse(status=204)
+
+
+@require_POST
+def inline_update(request, pk):
+    task = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
+    field = request.POST.get("field")
+    value = request.POST.get("value", "")
+    allowed_fields = {
+        "status": [c[0] for c in Task.STATUS_CHOICES],
+        "priority": [c[0] for c in Task.PRIORITY_CHOICES],
+        "due_date": None,
+    }
+    if field not in allowed_fields:
+        return HttpResponse(status=400)
+    if field == "due_date":
+        from datetime import date as d
+        try:
+            task.due_date = d.fromisoformat(value) if value else None
+        except ValueError:
+            return HttpResponse(status=400)
+    elif value in allowed_fields[field]:
+        setattr(task, field, value)
+        if field == "status":
+            task.completed_at = timezone.now() if value == "complete" else None
+    else:
+        return HttpResponse(status=400)
+    task.save()
+    return render(request, "tasks/partials/_task_row.html", {"task": task})
 
 
 def followup_add(request, pk):
