@@ -3,7 +3,7 @@
     <div>
         <div class="flex items-center justify-between mb-2 px-1">
             <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">{{ col.label }}</h3>
-            <span class="text-xs px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400">{{ col.tasks|length }}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400" data-kanban-count="{{ col.status }}">{{ col.tasks|length }}</span>
         </div>
         <div class="border-t-2 {{ col.border_color }} rounded-lg bg-gray-800/50 p-2 min-h-[200px]">
             <div id="kanban-{{ col.status }}" class="kanban-column space-y-2 min-h-[180px]" data-status="{{ col.status }}">
