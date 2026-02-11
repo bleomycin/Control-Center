@@ -337,10 +337,9 @@ def calendar_events(request):
                 "start": task.scheduled_datetime_str,
                 "url": task.get_absolute_url(),
                 "color": "#3b82f6",
+                "display": "block",
                 "extendedProps": {"type": "meeting"},
             }
-            if task.due_time:
-                event["allDay"] = False
         else:
             event = {
                 "title": f"{prefix}{task.title}",
