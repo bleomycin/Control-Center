@@ -700,6 +700,78 @@ class PDFExportEnhancedTests(TestCase):
         self.assertEqual(resp["Content-Type"], "application/pdf")
 
 
+class BulkApplyTagsTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.note1 = Note.objects.create(title="N1", content="c", date=timezone.now())
+        cls.note2 = Note.objects.create(title="N2", content="c", date=timezone.now())
+        cls.tag1 = Tag.objects.create(name="Urgent", slug="urgent", color="red")
+        cls.tag2 = Tag.objects.create(name="Review", slug="review", color="blue")
+
+    def test_bulk_apply_tags(self):
+        resp = self.client.post(reverse("notes:bulk_apply_tags"), {
+            "selected": [str(self.note1.pk), str(self.note2.pk)],
+            "tags": [str(self.tag1.pk), str(self.tag2.pk)],
+        })
+        self.assertEqual(resp.status_code, 204)
+        self.assertIn(self.tag1, self.note1.tags.all())
+        self.assertIn(self.tag2, self.note1.tags.all())
+        self.assertIn(self.tag1, self.note2.tags.all())
+
+    def test_bulk_apply_tags_additive(self):
+        existing = Tag.objects.create(name="Existing", slug="existing", color="green")
+        self.note1.tags.add(existing)
+        self.client.post(reverse("notes:bulk_apply_tags"), {
+            "selected": [str(self.note1.pk)],
+            "tags": [str(self.tag1.pk)],
+        })
+        self.assertIn(existing, self.note1.tags.all())
+        self.assertIn(self.tag1, self.note1.tags.all())
+
+    def test_bulk_apply_tags_empty_tags(self):
+        resp = self.client.post(reverse("notes:bulk_apply_tags"), {
+            "selected": [str(self.note1.pk)],
+        })
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(self.note1.tags.count(), 0)
+
+
+class BulkMoveFolderTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.note1 = Note.objects.create(title="N1", content="c", date=timezone.now())
+        cls.note2 = Note.objects.create(title="N2", content="c", date=timezone.now())
+        cls.folder = Folder.objects.create(name="Archive", color="blue")
+
+    def test_bulk_move_folder(self):
+        resp = self.client.post(reverse("notes:bulk_move_folder"), {
+            "selected": [str(self.note1.pk), str(self.note2.pk)],
+            "folder": str(self.folder.pk),
+        })
+        self.assertEqual(resp.status_code, 204)
+        self.note1.refresh_from_db()
+        self.note2.refresh_from_db()
+        self.assertEqual(self.note1.folder, self.folder)
+        self.assertEqual(self.note2.folder, self.folder)
+
+    def test_bulk_move_folder_unfiled(self):
+        self.note1.folder = self.folder
+        self.note1.save()
+        resp = self.client.post(reverse("notes:bulk_move_folder"), {
+            "selected": [str(self.note1.pk)],
+            "folder": "",
+        })
+        self.assertEqual(resp.status_code, 204)
+        self.note1.refresh_from_db()
+        self.assertIsNone(self.note1.folder)
+
+    def test_bulk_move_folder_empty_selection(self):
+        resp = self.client.post(reverse("notes:bulk_move_folder"), {
+            "folder": str(self.folder.pk),
+        })
+        self.assertEqual(resp.status_code, 204)
+
+
 class SettingsHubTests(TestCase):
     def test_settings_hub_has_tag_link(self):
         resp = self.client.get(reverse("dashboard:settings_hub"))
