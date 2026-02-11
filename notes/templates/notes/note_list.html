@@ -121,7 +121,8 @@
             class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
 </div>
 
-<div id="note-content">
+<div id="note-content"
+     hx-get="{% url 'notes:list' %}" hx-trigger="noteListChanged from:body" hx-include="#filter-form" hx-indicator="#loading-spinner">
     {% include "notes/partials/_note_list_content.html" %}
 </div>
 

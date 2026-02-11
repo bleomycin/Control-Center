@@ -398,7 +398,8 @@ class PinTests(TestCase):
             title="Pin Me", content="x", date=timezone.now(), is_pinned=False
         )
         resp = self.client.post(reverse("notes:toggle_pin", args=[note.pk]))
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(resp["HX-Trigger"], "noteListChanged")
         note.refresh_from_db()
         self.assertTrue(note.is_pinned)
 
@@ -424,8 +425,8 @@ class PinTests(TestCase):
 
     def test_pin_on_detail_page(self):
         note = Note.objects.create(title="Detail Pin", content="x", date=timezone.now(), is_pinned=False)
-        resp = self.client.post(reverse("notes:toggle_pin", args=[note.pk]))
-        self.assertEqual(resp.status_code, 200)
+        resp = self.client.post(reverse("notes:toggle_pin", args=[note.pk]), {"context": "detail"})
+        self.assertEqual(resp.status_code, 302)
         note.refresh_from_db()
         self.assertTrue(note.is_pinned)
 
