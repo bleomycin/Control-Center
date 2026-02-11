@@ -863,7 +863,7 @@ class MeetingTaskTests(TestCase):
         self.assertEqual(len(meeting_events), 1)
         event = meeting_events[0]
         self.assertIn("T10:00:00", event["start"])
-        self.assertFalse(event.get("allDay", True))
+        self.assertEqual(event["display"], "block")
         self.assertEqual(event["color"], "#3b82f6")
         self.assertEqual(event["extendedProps"]["type"], "meeting")
 
