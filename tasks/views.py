@@ -37,7 +37,10 @@ class TaskListView(ListView):
         directions = self.request.GET.getlist("direction")
         if directions:
             qs = qs.filter(direction__in=directions)
-        ALLOWED_SORTS = {"title", "status", "priority", "due_date", "direction"}
+        task_types = self.request.GET.getlist("task_type")
+        if task_types:
+            qs = qs.filter(task_type__in=task_types)
+        ALLOWED_SORTS = {"title", "status", "priority", "due_date", "direction", "created_at"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
             direction = "" if self.request.GET.get("dir") == "asc" else "-"
@@ -63,6 +66,8 @@ class TaskListView(ListView):
         ctx["current_dir"] = self.request.GET.get("dir", "")
         ctx["direction_choices"] = Task.DIRECTION_CHOICES
         ctx["selected_directions"] = self.request.GET.getlist("direction")
+        ctx["type_choices"] = Task.TASK_TYPE_CHOICES
+        ctx["selected_types"] = self.request.GET.getlist("task_type")
         return ctx
 
 

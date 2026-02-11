@@ -864,4 +864,18 @@ class MeetingTaskTests(TestCase):
         event = meeting_events[0]
         self.assertIn("T10:00:00", event["start"])
         self.assertFalse(event.get("allDay", True))
-        self.assertIn("[MTG]", event["title"])
+        self.assertEqual(event["color"], "#3b82f6")
+        self.assertEqual(event["extendedProps"]["type"], "meeting")
+
+    def test_task_type_filter(self):
+        Task.objects.create(title="Meeting A", task_type="meeting")
+        Task.objects.create(title="Normal B", task_type="one_time")
+        resp = self.client.get(reverse("tasks:list"), {"task_type": "meeting"})
+        self.assertContains(resp, "Meeting A")
+        self.assertNotContains(resp, "Normal B")
+
+    def test_sort_by_created_at(self):
+        Task.objects.create(title="First Task")
+        Task.objects.create(title="Second Task")
+        resp = self.client.get(reverse("tasks:list"), {"sort": "created_at", "dir": "desc"})
+        self.assertEqual(resp.status_code, 200)

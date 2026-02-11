@@ -331,16 +331,24 @@ def calendar_events(request):
     direction_prefixes = {"outbound": "[OUT] ", "inbound": "[IN] "}
     for task in tasks.filter(due_date__isnull=False):
         prefix = direction_prefixes.get(task.direction, "")
-        mtg_prefix = "[MTG] " if task.is_meeting else ""
-        event = {
-            "title": f"{mtg_prefix}{prefix}{task.title}",
-            "start": task.scheduled_datetime_str,
-            "url": task.get_absolute_url(),
-            "color": priority_colors.get(task.priority, "#9ca3af"),
-            "extendedProps": {"type": "task"},
-        }
-        if task.is_meeting and task.due_time:
-            event["allDay"] = False
+        if task.is_meeting:
+            event = {
+                "title": f"{prefix}{task.title}",
+                "start": task.scheduled_datetime_str,
+                "url": task.get_absolute_url(),
+                "color": "#3b82f6",
+                "extendedProps": {"type": "meeting"},
+            }
+            if task.due_time:
+                event["allDay"] = False
+        else:
+            event = {
+                "title": f"{prefix}{task.title}",
+                "start": task.scheduled_datetime_str,
+                "url": task.get_absolute_url(),
+                "color": priority_colors.get(task.priority, "#9ca3af"),
+                "extendedProps": {"type": "task"},
+            }
         events.append(event)
 
     # Loan payment events (red)

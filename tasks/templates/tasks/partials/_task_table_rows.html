@@ -11,7 +11,7 @@
         </button>
     </td>
     <td class="px-4 py-3">
-        {% if task.is_meeting %}<span class="text-blue-400 text-xs font-semibold mr-1" title="Meeting">[MTG]</span>{% endif %}{% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs mr-1" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs mr-1" title="Inbound">&swarr;</span>{% endif %}<a href="{{ task.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300 {% if task.status == 'complete' %}line-through{% endif %}">{{ task.title }}</a>
+        {% if task.is_meeting %}<span class="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300 font-medium mr-1.5">MTG</span>{% endif %}{% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs mr-1" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs mr-1" title="Inbound">&swarr;</span>{% endif %}<a href="{{ task.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300 {% if task.status == 'complete' %}line-through{% endif %}">{{ task.title }}</a>
     </td>
     <td class="px-4 py-3 hidden sm:table-cell">
         {% include "tasks/partials/_task_status_badge.html" %}
@@ -27,9 +27,10 @@
     <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">
         {% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<a href="{{ stakeholders.0.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholders.0 }}</a>{% if stakeholders.count > 1 %} <span class="text-xs text-gray-500">+{{ stakeholders.count|add:"-1" }}</span>{% endif %}{% else %}-{% endif %}{% endwith %}
     </td>
+    <td class="px-4 py-3 text-xs text-gray-500 hidden xl:table-cell">{{ task.created_at|date:"M j" }}</td>
 </tr>
 {% empty %}
-<tr><td colspan="7" class="px-4 py-12 text-center">
+<tr><td colspan="8" class="px-4 py-12 text-center">
     <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
     <p class="text-sm text-gray-500 mb-3">No tasks found</p>
     <a href="{% url 'tasks:create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Task</a>
