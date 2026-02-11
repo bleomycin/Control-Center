@@ -138,7 +138,7 @@ class TaskViewTests(TestCase):
 
     def test_list_htmx(self):
         resp = self.client.get(reverse("tasks:list"), HTTP_HX_REQUEST="true")
-        self.assertTemplateUsed(resp, "tasks/partials/_task_table_rows.html")
+        self.assertTemplateUsed(resp, "tasks/partials/_table_view.html")
 
     def test_create_initial_stakeholder(self):
         resp = self.client.get(
