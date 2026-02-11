@@ -67,6 +67,16 @@
         background-color: #111827;
         color: #9ca3af;
     }
+    /* Calendar filter toggles */
+    .cal-toggle:not(.active) {
+        background-color: transparent;
+        border-color: #374151;
+        color: #6b7280;
+        opacity: 0.5;
+    }
+    .cal-toggle:not(.active) span {
+        opacity: 0.4;
+    }
     /* Mobile toolbar */
     @media (max-width: 640px) {
         .fc .fc-toolbar {
@@ -90,14 +100,29 @@
     <p class="text-sm text-gray-400 mt-1">Tasks, payments, follow-ups, legal filings, and contact dates</p>
 </div>
 
-<!-- Legend -->
-<div class="flex flex-wrap gap-x-4 gap-y-1 mb-4 text-xs text-gray-300">
-    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> Critical/Payment</span>
-    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-orange-500 inline-block"></span> High</span>
-    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-yellow-500 inline-block"></span> Medium</span>
-    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Follow-up</span>
-    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span> Legal</span>
-    <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> Contact</span>
+<!-- Toggle filters -->
+<div class="flex flex-wrap gap-2 mb-4" id="calendar-filters">
+    <button type="button" data-type="task" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-yellow-900/30 border-yellow-700 text-yellow-300">
+        <span class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> Tasks
+    </button>
+    <button type="button" data-type="meeting" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-blue-900/30 border-blue-700 text-blue-300">
+        <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> Meetings
+    </button>
+    <button type="button" data-type="payment" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-red-900/30 border-red-700 text-red-300">
+        <span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Payments
+    </button>
+    <button type="button" data-type="followup" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-amber-900/30 border-amber-700 text-amber-300">
+        <span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Follow-ups
+    </button>
+    <button type="button" data-type="legal" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-purple-900/30 border-purple-700 text-purple-300">
+        <span class="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> Legal
+    </button>
+    <button type="button" data-type="hearing" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-violet-900/30 border-violet-700 text-violet-300">
+        <span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span> Hearings
+    </button>
+    <button type="button" data-type="contact" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-sky-900/30 border-sky-700 text-sky-300">
+        <span class="w-2 h-2 rounded-full bg-sky-500 inline-block"></span> Contacts
+    </button>
 </div>
 
 <div id="calendar" class="bg-gray-800 rounded-lg border border-gray-700 p-4"></div>
@@ -109,6 +134,8 @@
     document.addEventListener('DOMContentLoaded', function() {
         var calendarEl = document.getElementById('calendar');
         var isMobile = window.innerWidth < 640;
+        var hiddenTypes = {};
+
         var calendar = new FullCalendar.Calendar(calendarEl, {
             initialView: isMobile ? 'listWeek' : 'dayGridMonth',
             headerToolbar: isMobile
@@ -121,10 +148,31 @@
                     window.location.href = info.event.url;
                 }
             },
+            eventDidMount: function(info) {
+                var eventType = info.event.extendedProps.type;
+                if (hiddenTypes[eventType]) {
+                    info.el.style.display = 'none';
+                }
+            },
             height: 'auto',
             firstDay: 0,
         });
         calendar.render();
+
+        // Toggle filter buttons
+        document.querySelectorAll('.cal-toggle').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var type = this.dataset.type;
+                this.classList.toggle('active');
+                hiddenTypes[type] = !this.classList.contains('active');
+                // Re-render events to apply filter
+                calendar.getEvents().forEach(function(event) {
+                    if (event.extendedProps.type === type) {
+                        event.setProp('display', hiddenTypes[type] ? 'none' : 'auto');
+                    }
+                });
+            });
+        });
     });
 </script>
 {% endblock %}
