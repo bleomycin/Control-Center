@@ -1,44 +1,65 @@
-{% load choice_labels %}<div class="divide-y divide-gray-700">
+{% load choice_labels %}{% if follow_ups %}
+<div class="relative pl-8 py-2">
+    <!-- Timeline vertical line -->
+    <div class="absolute left-[15px] top-0 bottom-0 w-px bg-gray-700"></div>
+
     {% for fu in follow_ups %}
-    <div class="px-4 py-3 flex items-start justify-between group">
-        <div>
-            <div class="flex items-center gap-2">
-                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ fu.method|choice_label:"contact_method" }}</span>
-                <a href="{{ fu.stakeholder.get_absolute_url }}" class="text-xs text-blue-400 hover:text-blue-300">{{ fu.stakeholder }}</a>
-                <span class="text-xs text-gray-400">{{ fu.outreach_date|date:"M j, Y g:i A" }}</span>
-            </div>
-            {% if fu.notes_text %}<p class="text-sm text-gray-300 mt-1">{{ fu.notes_text }}</p>{% endif %}
+    <div class="relative mb-4 last:mb-0 group">
+        <!-- Status dot on timeline -->
+        <div class="absolute -left-8 top-1 w-5 h-5 rounded-full border-2 border-gray-800 flex items-center justify-center
+            {% if fu.response_received %}bg-green-500
+            {% elif fu.is_stale %}bg-red-500
+            {% elif fu.reminder_enabled %}bg-yellow-500
+            {% else %}bg-gray-600{% endif %}">
             {% if fu.response_received %}
-            <p class="text-xs text-green-400 mt-1">Response received {{ fu.response_date|date:"M j"|default:"" }}</p>
-            {% if fu.response_notes %}<p class="text-sm text-gray-400 mt-1 italic">{{ fu.response_notes }}</p>{% endif %}
-            {% elif fu.is_stale %}
-            <p class="text-xs text-red-400 mt-1">Overdue — no response in {{ fu.follow_up_days }}+ days</p>
-            {% elif fu.reminder_enabled %}
-            <p class="text-xs text-yellow-400 mt-1">Awaiting response (remind after {{ fu.follow_up_days }} days)</p>
-            {% else %}
-            <p class="text-xs text-gray-500 mt-1">Awaiting response (no reminder)</p>
+            <svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>
             {% endif %}
         </div>
-        <div class="flex items-center gap-2">
-            {% if fu.response_received %}
-            {% if fu.response_notes %}
-            <a href="{% url 'notes:create' %}?title=Response from {{ fu.stakeholder|urlencode }}&content={{ fu.response_notes|urlencode }}&task={{ task.pk }}&stakeholder={{ fu.stakeholder.pk }}&date={{ fu.response_date|date:'Y-m-d\TH:i' }}"
-               class="text-xs px-2 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Create Note</a>
-            {% endif %}
-            <button hx-post="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
-                    class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Undo</button>
-            {% else %}
-            <button hx-get="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-form-container" hx-swap="innerHTML"
-                    class="text-xs px-2 py-1 bg-green-700 hover:bg-green-600 text-green-100 rounded-md transition-colors opacity-0 group-hover:opacity-100">Mark Responded</button>
-            {% endif %}
-            <button hx-get="{% url 'tasks:followup_edit' fu.pk %}" hx-target="#followup-form-container" hx-swap="innerHTML"
-                    class="text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">Edit</button>
-            <button hx-post="{% url 'tasks:followup_delete' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
-                    hx-confirm="Delete this follow-up?"
-                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+
+        <!-- Content card -->
+        <div class="bg-gray-800/50 rounded-lg border border-gray-700/50 px-4 py-3">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ fu.method|choice_label:"contact_method" }}</span>
+                        <a href="{{ fu.stakeholder.get_absolute_url }}" class="text-xs text-blue-400 hover:text-blue-300">{{ fu.stakeholder }}</a>
+                        <span class="text-xs text-gray-400">{{ fu.outreach_date|date:"M j, Y g:i A" }}</span>
+                    </div>
+                    {% if fu.notes_text %}<p class="text-sm text-gray-300 mt-1">{{ fu.notes_text }}</p>{% endif %}
+                    {% if fu.response_received %}
+                    <p class="text-xs text-green-400 mt-1">Response received {{ fu.response_date|date:"M j"|default:"" }}</p>
+                    {% if fu.response_notes %}<p class="text-sm text-gray-400 mt-1 italic">{{ fu.response_notes }}</p>{% endif %}
+                    {% elif fu.is_stale %}
+                    <p class="text-xs text-red-400 mt-1">Overdue — no response in {{ fu.follow_up_days }}+ days</p>
+                    {% elif fu.reminder_enabled %}
+                    <p class="text-xs text-yellow-400 mt-1">Awaiting response (remind after {{ fu.follow_up_days }} days)</p>
+                    {% else %}
+                    <p class="text-xs text-gray-500 mt-1">Awaiting response (no reminder)</p>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-2 ml-2 flex-shrink-0">
+                    {% if fu.response_received %}
+                    {% if fu.response_notes %}
+                    <a href="{% url 'notes:create' %}?title=Response from {{ fu.stakeholder|urlencode }}&content={{ fu.response_notes|urlencode }}&task={{ task.pk }}&stakeholder={{ fu.stakeholder.pk }}&date={{ fu.response_date|date:'Y-m-d\TH:i' }}"
+                       class="text-xs px-2 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Create Note</a>
+                    {% endif %}
+                    <button hx-post="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
+                            class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Undo</button>
+                    {% else %}
+                    <button hx-get="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-form-container" hx-swap="innerHTML"
+                            class="text-xs px-2 py-1 bg-green-700 hover:bg-green-600 text-green-100 rounded-md transition-colors opacity-0 group-hover:opacity-100">Mark Responded</button>
+                    {% endif %}
+                    <button hx-get="{% url 'tasks:followup_edit' fu.pk %}" hx-target="#followup-form-container" hx-swap="innerHTML"
+                            class="text-gray-500 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity text-xs">Edit</button>
+                    <button hx-post="{% url 'tasks:followup_delete' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
+                            hx-confirm="Delete this follow-up?"
+                            class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+                </div>
+            </div>
         </div>
     </div>
-    {% empty %}
-    <p class="px-4 py-4 text-sm text-gray-500 text-center">No follow-ups</p>
     {% endfor %}
 </div>
+{% else %}
+<p class="px-4 py-4 text-sm text-gray-500 text-center">No follow-ups</p>
+{% endif %}

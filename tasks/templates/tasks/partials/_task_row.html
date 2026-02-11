@@ -1,0 +1,49 @@
+{% load tz %}<tr id="task-row-{{ task.pk }}" class="hover:bg-gray-700/50 transition-colors {% if task.status == 'complete' %}opacity-50{% endif %}">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ task.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    <td class="px-4 py-3">
+        <button hx-post="{% url 'tasks:toggle_complete' task.pk %}" hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML"
+                class="w-5 h-5 rounded border {% if task.status == 'complete' %}bg-blue-600 border-blue-600{% else %}border-gray-500 hover:border-blue-400{% endif %} flex items-center justify-center">
+            {% if task.status == "complete" %}<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>{% endif %}
+        </button>
+    </td>
+    <td class="px-4 py-3">
+        {% if task.is_meeting %}<span class="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-300 font-medium mr-1.5">MTG</span>{% endif %}{% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs mr-1" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs mr-1" title="Inbound">&swarr;</span>{% endif %}<a href="{{ task.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300 {% if task.status == 'complete' %}line-through{% endif %}">{{ task.title }}</a>
+    </td>
+    <td class="px-4 py-3 hidden sm:table-cell">
+        {% if task.status == "not_started" %}{% with next_status="in_progress" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"status","value":"{{ next_status }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-500 bg-gray-700 text-gray-300" title="Click to change status">{{ task.get_status_display }}</button>
+        {% endwith %}{% elif task.status == "in_progress" %}{% with next_status="waiting" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"status","value":"{{ next_status }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-blue-500 bg-blue-900/50 text-blue-300" title="Click to change status">{{ task.get_status_display }}</button>
+        {% endwith %}{% elif task.status == "waiting" %}{% with next_status="complete" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"status","value":"{{ next_status }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-yellow-500 bg-yellow-900/50 text-yellow-300" title="Click to change status">{{ task.get_status_display }}</button>
+        {% endwith %}{% else %}{% with next_status="not_started" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"status","value":"{{ next_status }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-green-500 bg-green-900/50 text-green-300" title="Click to change status">{{ task.get_status_display }}</button>
+        {% endwith %}{% endif %}
+    </td>
+    <td class="px-4 py-3 hidden sm:table-cell">
+        {% if task.priority == "low" %}{% with next_priority="medium" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"priority","value":"{{ next_priority }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-gray-500 bg-gray-700 text-gray-300" title="Click to change priority">{{ task.get_priority_display }}</button>
+        {% endwith %}{% elif task.priority == "medium" %}{% with next_priority="high" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"priority","value":"{{ next_priority }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-yellow-500 bg-yellow-900/50 text-yellow-300" title="Click to change priority">{{ task.get_priority_display }}</button>
+        {% endwith %}{% elif task.priority == "high" %}{% with next_priority="critical" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"priority","value":"{{ next_priority }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-orange-500 bg-orange-900/50 text-orange-300" title="Click to change priority">{{ task.get_priority_display }}</button>
+        {% endwith %}{% else %}{% with next_priority="low" %}
+        <button hx-post="{% url 'tasks:inline_update' task.pk %}" hx-vals='{"field":"priority","value":"{{ next_priority }}"}' hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML" class="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-2 hover:ring-red-500 bg-red-900/50 text-red-300" title="Click to change priority">{{ task.get_priority_display }}</button>
+        {% endwith %}{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">
+        <span class="inline-date-trigger cursor-pointer hover:text-blue-400" onclick="this.nextElementSibling.showPicker()">{{ task.due_date|date:"M j, Y"|default:"Set date" }}{% if task.due_time %} <span class="text-blue-400 text-xs">{{ task.due_time|time:"g:i A" }}</span>{% endif %}</span>
+        <input type="date" class="sr-only" name="value"
+               value="{{ task.due_date|date:'Y-m-d' }}"
+               hx-post="{% url 'tasks:inline_update' task.pk %}"
+               hx-vals='{"field":"due_date"}'
+               hx-trigger="change"
+               hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML">
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">
+        {% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<a href="{{ stakeholders.0.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholders.0 }}</a>{% if stakeholders.count > 1 %} <span class="text-xs text-gray-500">+{{ stakeholders.count|add:"-1" }}</span>{% endif %}{% else %}-{% endif %}{% endwith %}
+    </td>
+    <td class="px-4 py-3 text-xs text-gray-500 hidden xl:table-cell">{{ task.created_at|date:"M j" }}</td>
+</tr>

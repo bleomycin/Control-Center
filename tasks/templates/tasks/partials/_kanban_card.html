@@ -1,0 +1,18 @@
+<div class="kanban-card bg-gray-800 rounded-lg border border-gray-700 p-3 cursor-grab active:cursor-grabbing" data-task-id="{{ task.pk }}">
+    <div class="flex items-start justify-between gap-2">
+        <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 mb-1">
+                {% if task.is_meeting %}<span class="inline-flex items-center text-xs px-1 py-0.5 rounded bg-blue-900/50 text-blue-300 font-medium">MTG</span>{% endif %}
+                {% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs" title="Inbound">&swarr;</span>{% endif %}
+            </div>
+            <a href="{{ task.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300 block truncate">{{ task.title }}</a>
+        </div>
+        <span class="flex-shrink-0 w-1.5 h-8 rounded-full {% if task.priority == 'critical' %}bg-red-500{% elif task.priority == 'high' %}bg-orange-500{% elif task.priority == 'medium' %}bg-yellow-500{% else %}bg-gray-600{% endif %}"></span>
+    </div>
+    <div class="flex items-center justify-between mt-2 text-xs text-gray-400">
+        <span>{% if task.due_date %}{{ task.due_date|date:"M j" }}{% if task.due_time %} {{ task.due_time|time:"g:i A" }}{% endif %}{% else %}No date{% endif %}</span>
+        {% with stakeholders=task.related_stakeholders.all %}
+        {% if stakeholders %}<span class="truncate ml-2">{{ stakeholders.0 }}</span>{% endif %}
+        {% endwith %}
+    </div>
+</div>
