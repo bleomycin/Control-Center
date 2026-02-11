@@ -419,7 +419,10 @@ def bulk_move_folder(request):
         pks = request.POST.getlist("selected")
         folder_id = request.POST.get("folder", "")
         if pks:
-            folder_val = int(folder_id) if folder_id else None
+            try:
+                folder_val = int(folder_id) if folder_id else None
+            except (ValueError, TypeError):
+                return HttpResponse(status=400)
             Note.objects.filter(pk__in=pks).update(folder_id=folder_val)
         response = HttpResponse(status=204)
         response["HX-Trigger"] = "noteListChanged"

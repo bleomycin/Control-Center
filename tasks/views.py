@@ -366,7 +366,7 @@ def export_pdf_detail(request, pk):
             return " | ".join(parts) or "-"
         sections.append({"heading": "Follow-ups", "type": "table",
                          "headers": ["Date", "Stakeholder", "Method", "Reminder", "Response", "Notes"],
-                         "rows": [[fu.outreach_date.strftime("%b %d, %Y"), fu.stakeholder.name,
+                         "rows": [[fu.outreach_date.strftime("%b %d, %Y"), fu.stakeholder.name if fu.stakeholder else "—",
                                    get_choice_label("contact_method", fu.method),
                                    f"{fu.follow_up_days} days" if fu.reminder_enabled else "Off",
                                    f"Yes ({fu.response_date.strftime('%b %d')})" if fu.response_received else "Pending",
@@ -388,6 +388,7 @@ def _handle_recurring_completion(task):
     return None
 
 
+@require_POST
 def toggle_complete(request, pk):
     task = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
     if task.status == "complete":

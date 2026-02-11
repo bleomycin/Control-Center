@@ -8,7 +8,7 @@
         <a href="{{ fu.task.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
             <div>
                 <p class="text-sm text-gray-200">{{ fu.task.title }}</p>
-                <p class="text-xs text-gray-400">{{ fu.stakeholder }} &middot; {{ fu.method|choice_label:"contact_method" }}</p>
+                <p class="text-xs text-gray-400">{{ fu.stakeholder.name|default:"Unknown" }} &middot; {{ fu.method|choice_label:"contact_method" }}</p>
             </div>
             <p class="text-xs text-yellow-400">{{ fu.outreach_date|date:"M j" }}</p>
         </a>

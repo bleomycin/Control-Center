@@ -13,19 +13,19 @@
 </div>
 
 <!-- Folder Tabs -->
-<div class="flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2">
-    <button onclick="switchFolder('')" class="px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == '' or current_folder == 'all' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
+<div id="folder-tabs" class="flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2">
+    <button onclick="switchFolder('')" data-folder="" class="folder-tab px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == '' or current_folder == 'all' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
         All Notes
     </button>
     {% for folder in folders %}
     {% folder_classes folder.color as fc %}
-    <button onclick="switchFolder('{{ folder.pk }}')" class="px-3 py-1.5 text-sm rounded-md transition-colors inline-flex items-center gap-1 {% if current_folder == folder.pk|stringformat:'d' %}{{ fc.bg }} {{ fc.text }}{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
+    <button onclick="switchFolder('{{ folder.pk }}')" data-folder="{{ folder.pk }}" data-active-classes="{{ fc.bg }} {{ fc.text }}" class="folder-tab px-3 py-1.5 text-sm rounded-md transition-colors inline-flex items-center gap-1 {% if current_folder == folder.pk|stringformat:'d' %}{{ fc.bg }} {{ fc.text }}{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
         {{ folder.name }}
         <span class="text-xs opacity-75">({{ folder.note_count }})</span>
     </button>
     {% endfor %}
-    <button onclick="switchFolder('unfiled')" class="px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == 'unfiled' %}bg-gray-700 text-gray-200{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
+    <button onclick="switchFolder('unfiled')" data-folder="unfiled" class="folder-tab px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == 'unfiled' %}bg-gray-700 text-gray-200{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
         Unfiled
         <span class="text-xs opacity-75">({{ unfiled_count }})</span>
     </button>
@@ -120,11 +120,11 @@
     <button onclick="const pks = Array.from(document.querySelectorAll('input[name=selected]:checked')).map(cb => cb.value); window.location.href='{% url 'notes:bulk_export_csv' %}?' + pks.map(pk => 'selected=' + pk).join('&');"
             class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
     {% if all_tags %}
-    <button onclick="document.getElementById('bulk-tag-panel').classList.toggle('hidden'); document.getElementById('bulk-folder-panel').classList.add('hidden');"
+    <button onclick="document.getElementById('bulk-tag-panel').classList.toggle('hidden'); var fp=document.getElementById('bulk-folder-panel'); if(fp) fp.classList.add('hidden');"
             class="px-3 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-xs font-medium rounded-md transition-colors">Tag</button>
     {% endif %}
     {% if folders %}
-    <button onclick="document.getElementById('bulk-folder-panel').classList.toggle('hidden'); document.getElementById('bulk-tag-panel').classList.add('hidden');"
+    <button onclick="document.getElementById('bulk-folder-panel').classList.toggle('hidden'); var tp=document.getElementById('bulk-tag-panel'); if(tp) tp.classList.add('hidden');"
             class="px-3 py-1 bg-green-900/50 hover:bg-green-900 text-green-300 text-xs font-medium rounded-md transition-colors">Move to Folder</button>
     {% endif %}
 </div>
@@ -182,23 +182,43 @@
 
 <div id="note-content"
      hx-get="{% url 'notes:list' %}" hx-trigger="noteListChanged from:body" hx-include="#filter-form" hx-indicator="#loading-spinner">
-    {% include "notes/partials/_note_list_content.html" %}
+    {% if current_view == "list" %}{% include "notes/partials/_note_table_view.html" %}{% elif current_view == "timeline" %}{% include "notes/partials/_note_timeline_view.html" %}{% else %}{% include "notes/partials/_note_list_content.html" %}{% endif %}
 </div>
 
 <script>
 function switchFolder(folderId) {
     document.getElementById('current-folder').value = folderId;
+    // Update tab highlights via JS (no full page reload)
+    var inactiveClasses = 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50';
+    document.querySelectorAll('.folder-tab').forEach(function(btn) {
+        var tabId = btn.dataset.folder;
+        // Strip all possible active classes
+        btn.className = btn.className
+            .replace(/bg-blue-900\/50|text-blue-300|bg-gray-700(?!\/)|text-gray-200(?!\s*hover)/g, '')
+            .replace(/bg-\w+-900\/\d+|text-\w+-\d+/g, '');
+        if (tabId === folderId || (tabId === '' && folderId === '')) {
+            // Apply active style
+            if (tabId === '' || tabId === 'unfiled') {
+                btn.className = btn.className.replace(inactiveClasses, '') + (tabId === '' ? ' bg-blue-900/50 text-blue-300' : ' bg-gray-700 text-gray-200');
+            } else {
+                var activeClasses = btn.dataset.activeClasses || 'bg-blue-900/50 text-blue-300';
+                btn.className = btn.className.replace(inactiveClasses, '') + ' ' + activeClasses;
+            }
+        } else {
+            btn.className = btn.className + ' ' + inactiveClasses;
+        }
+        // Clean up extra whitespace
+        btn.className = btn.className.replace(/\s+/g, ' ').trim();
+    });
     htmx.ajax('GET', '{% url "notes:list" %}', {
         target: '#note-content',
         source: document.getElementById('filter-form'),
         indicator: '#loading-spinner'
     });
-    // Update URL
     var url = new URL(window.location);
     if (folderId) { url.searchParams.set('folder', folderId); } else { url.searchParams.delete('folder'); }
+    url.searchParams.delete('page');
     history.pushState({}, '', url);
-    // Visual: reload page to update tab highlights
-    setTimeout(function() { window.location.href = url; }, 100);
 }
 
 function closeBulkTagPanel() {
@@ -268,6 +288,7 @@ function switchNoteView(mode) {
     });
     var url = new URL(window.location);
     if (mode !== 'cards') { url.searchParams.set('view', mode); } else { url.searchParams.delete('view'); }
+    url.searchParams.delete('page');
     history.pushState({}, '', url);
 }
 </script>

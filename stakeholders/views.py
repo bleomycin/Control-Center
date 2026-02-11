@@ -250,8 +250,8 @@ def export_pdf_detail(request, pk):
     rels_from = s.relationships_from.select_related("to_stakeholder").all()
     rels_to = s.relationships_to.select_related("from_stakeholder").all()
     if rels_from or rels_to:
-        rows = [[r.to_stakeholder.name, r.relationship_type, "Outgoing"] for r in rels_from]
-        rows += [[r.from_stakeholder.name, r.relationship_type, "Incoming"] for r in rels_to]
+        rows = [[r.to_stakeholder.name, r.relationship_type, "Outgoing"] for r in rels_from if r.to_stakeholder]
+        rows += [[r.from_stakeholder.name, r.relationship_type, "Incoming"] for r in rels_to if r.from_stakeholder]
         sections.append({"heading": "Relationships", "type": "table",
                          "headers": ["Name", "Relationship", "Direction"], "rows": rows})
     tasks = s.tasks.exclude(status="complete")
@@ -294,8 +294,10 @@ def contact_log_delete(request, pk):
     stakeholder = log.stakeholder
     if request.method == "POST":
         log.delete()
-    return render(request, "stakeholders/partials/_contact_log_list.html",
-                  {"contact_logs": stakeholder.contact_logs.all()[:10], "stakeholder": stakeholder})
+    if stakeholder:
+        return render(request, "stakeholders/partials/_contact_log_list.html",
+                      {"contact_logs": stakeholder.contact_logs.all()[:10], "stakeholder": stakeholder})
+    return HttpResponse(status=204)
 
 
 def relationship_graph_data(request, pk):
@@ -346,6 +348,8 @@ def relationship_graph_data(request, pk):
     connected_stakeholder_ids = set()
     for rel in Relationship.objects.filter(from_stakeholder=center).select_related("to_stakeholder"):
         s = rel.to_stakeholder
+        if not s:
+            continue
         add_node(f"s-{s.pk}", s.name, get_choice_label("entity_type", s.entity_type),
                  "ellipse", s.get_absolute_url())
         connected_stakeholder_ids.add(s.pk)
@@ -353,6 +357,8 @@ def relationship_graph_data(request, pk):
 
     for rel in Relationship.objects.filter(to_stakeholder=center).select_related("from_stakeholder"):
         s = rel.from_stakeholder
+        if not s:
+            continue
         add_node(f"s-{s.pk}", s.name, get_choice_label("entity_type", s.entity_type),
                  "ellipse", s.get_absolute_url())
         connected_stakeholder_ids.add(s.pk)

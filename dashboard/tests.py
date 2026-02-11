@@ -58,6 +58,7 @@ class DashboardViewTests(TestCase):
             task=t, stakeholder=s,
             outreach_date=timezone.now() - timedelta(days=5),
             method="email", response_received=False,
+            reminder_enabled=True,
         )
         resp = self.client.get(reverse("dashboard:index"))
         self.assertTrue(resp.context["stale_followups"].exists())

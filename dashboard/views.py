@@ -49,10 +49,13 @@ def dashboard(request):
     # Recent notes: last 10 ordered by -date
     recent_notes = Note.objects.order_by("-date")[:10]
 
-    # Stale follow-ups: no response received and outreach_date > 3 days ago
+    # Stale follow-ups: no response, reminder enabled, outreach > 3 days ago
     stale_followups = FollowUp.objects.filter(
         response_received=False,
+        reminder_enabled=True,
         outreach_date__lt=now - timedelta(days=3),
+    ).exclude(
+        task__status="complete",
     ).select_related("task", "stakeholder")
 
     # Cash flow summary for current month
@@ -230,7 +233,7 @@ def get_activity_timeline(limit=50):
             "type": "contact",
             "color": "blue",
             "icon": "phone",
-            "title": f"{get_choice_label('contact_method', log.method)} with {log.stakeholder.name}",
+            "title": f"{get_choice_label('contact_method', log.method)} with {log.stakeholder.name if log.stakeholder else 'Unknown'}",
             "summary": log.summary[:120],
             "url": log.get_absolute_url(),
         })
@@ -266,7 +269,7 @@ def get_activity_timeline(limit=50):
             "type": "followup",
             "color": "amber",
             "icon": "arrow-path",
-            "title": f"Follow-up: {fu.stakeholder.name}",
+            "title": f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}",
             "summary": fu.notes_text[:120] if fu.notes_text else f"Re: {fu.task.title}",
             "url": fu.get_absolute_url(),
         })
@@ -382,7 +385,7 @@ def calendar_events(request):
         followups = followups.filter(outreach_date__date__lte=end)
     for fu in followups:
         events.append({
-            "title": f"Follow-up: {fu.stakeholder.name}",
+            "title": f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}",
             "start": str(fu.outreach_date.date()),
             "url": fu.get_absolute_url(),
             "color": "#f59e0b",
@@ -429,7 +432,7 @@ def calendar_events(request):
         contacts = contacts.filter(follow_up_date__lte=end)
     for log in contacts:
         events.append({
-            "title": f"Contact: {log.stakeholder.name}",
+            "title": f"Contact: {log.stakeholder.name if log.stakeholder else 'Unknown'}",
             "start": str(log.follow_up_date),
             "url": log.get_absolute_url(),
             "color": "#06b6d4",
