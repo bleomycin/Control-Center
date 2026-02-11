@@ -282,15 +282,13 @@ def toggle_pin(request, pk):
     if request.method == "POST":
         note.is_pinned = not note.is_pinned
         note.save(update_fields=["is_pinned"])
-    # Re-query with annotations for card rendering
-    note = Note.objects.select_related("folder").prefetch_related(
-        "participants", "related_stakeholders",
-        "related_legal_matters", "related_properties", "related_tasks", "tags",
-    ).annotate(
-        attachment_count=Count("attachments", distinct=True),
-        link_count=Count("links", distinct=True),
-    ).get(pk=pk)
-    return render(request, "notes/partials/_note_card.html", {"note": note})
+    context = request.POST.get("context", "list")
+    if context == "detail":
+        return redirect(note.get_absolute_url())
+    # Return 204 + HX-Trigger to refresh the full note list
+    response = HttpResponse(status=204)
+    response["HX-Trigger"] = "noteListChanged"
+    return response
 
 
 def attachment_add(request, pk):

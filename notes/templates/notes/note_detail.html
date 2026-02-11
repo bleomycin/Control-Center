@@ -40,6 +40,7 @@
         <a href="{% url 'notes:export_pdf' note.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
         <form method="post" action="{% url 'notes:toggle_pin' note.pk %}" class="inline">
             {% csrf_token %}
+            <input type="hidden" name="context" value="detail">
             <button type="submit" class="px-3 py-1.5 bg-yellow-900/50 hover:bg-yellow-900 text-yellow-300 text-sm rounded-md transition-colors whitespace-nowrap">
                 {% if note.is_pinned %}Unpin{% else %}Pin{% endif %}
             </button>
