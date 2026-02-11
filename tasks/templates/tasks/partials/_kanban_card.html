@@ -4,6 +4,8 @@
             <div class="flex items-center gap-1.5 mb-1">
                 {% if task.is_meeting %}<span class="inline-flex items-center text-xs px-1 py-0.5 rounded bg-blue-900/50 text-blue-300 font-medium">MTG</span>{% endif %}
                 {% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs" title="Inbound">&swarr;</span>{% endif %}
+                {% if task.has_stale_followups %}<span class="inline-block w-2 h-2 rounded-full bg-red-500" title="Stale follow-up"></span>{% endif %}
+                {% if task.is_recurring %}<span class="text-indigo-400 text-xs" title="Recurring: {{ task.get_recurrence_rule_display }}">&#x21bb;</span>{% endif %}
             </div>
             <a href="{{ task.get_absolute_url }}" draggable="false" class="text-sm font-medium text-blue-400 hover:text-blue-300 block truncate">{{ task.title }}</a>
         </div>
@@ -15,4 +17,12 @@
         {% if stakeholders %}<span class="truncate ml-2">{{ stakeholders.0 }}</span>{% endif %}
         {% endwith %}
     </div>
+    {% if task.subtask_count %}
+    <div class="mt-2 flex items-center gap-2">
+        <div class="flex-1 h-1 bg-gray-700 rounded-full overflow-hidden">
+            <div class="h-full bg-green-500 rounded-full" style="width: {% widthratio task.subtask_done task.subtask_count 100 %}%"></div>
+        </div>
+        <span class="text-xs text-gray-500">{{ task.subtask_done }}/{{ task.subtask_count }}</span>
+    </div>
+    {% endif %}
 </div>

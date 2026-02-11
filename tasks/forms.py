@@ -2,7 +2,7 @@ from django import forms
 from legacy.forms import TailwindFormMixin
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
-from .models import Task, FollowUp
+from .models import Task, FollowUp, SubTask
 
 
 def _grouped_stakeholder_choices():
@@ -31,7 +31,8 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
         model = Task
         fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "reminder_date", "status",
                   "priority", "related_stakeholders",
-                  "related_legal_matter", "related_property"]
+                  "related_legal_matter", "related_property",
+                  "is_recurring", "recurrence_rule"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
@@ -49,6 +50,10 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
         cleaned = super().clean()
         if cleaned.get("due_time") and not cleaned.get("due_date"):
             self.add_error("due_time", "A due date is required when setting a time.")
+        if cleaned.get("is_recurring") and not cleaned.get("recurrence_rule"):
+            self.add_error("recurrence_rule", "Select a recurrence schedule.")
+        if cleaned.get("is_recurring") and not cleaned.get("due_date"):
+            self.add_error("due_date", "A due date is required for recurring tasks.")
         return cleaned
 
 
@@ -77,3 +82,10 @@ class FollowUpForm(TailwindFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["method"].widget = forms.Select(choices=get_choices("contact_method"))
+
+
+class SubTaskForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = SubTask
+        fields = ["title"]
+        widgets = {"title": forms.TextInput(attrs={"placeholder": "Add a checklist item..."})}

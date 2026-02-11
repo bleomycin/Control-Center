@@ -29,6 +29,15 @@
                 <option value="">All Priorities</option>
                 {% for val, label in priority_choices %}<option value="{{ val }}" {% if selected_priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
             </select>
+            <select name="stakeholder" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                    class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
+                <option value="">All People</option>
+                {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_stakeholder == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+            </select>
+            <select name="group" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                    class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
+                {% for val, label in group_choices %}<option value="{{ val }}" {% if current_group == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
         </div>
         <div class="flex flex-col sm:flex-row gap-4">
             <div class="flex flex-wrap gap-2 items-center">
@@ -114,6 +123,8 @@
 <div id="task-content">
 {% if current_view == "board" %}
 {% include "tasks/partials/_kanban_board.html" %}
+{% elif current_group %}
+{% include "tasks/partials/_grouped_table_view.html" %}
 {% else %}
 {% include "tasks/partials/_table_view.html" %}
 {% endif %}

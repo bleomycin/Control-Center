@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from stakeholders.models import Stakeholder
 
-from .models import FollowUp, Task
+from .models import FollowUp, SubTask, Task
 from .notifications import check_overdue_tasks, check_stale_followups, check_upcoming_reminders
 
 
@@ -1073,3 +1073,321 @@ class InlineUpdateTests(TestCase):
         content = resp.content.decode()
         self.assertNotIn(f"task-row-{self.task.pk}", content)
         self.assertIn("rounded-full", content)
+
+
+class StakeholderFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.s1 = Stakeholder.objects.create(name="Alice")
+        cls.s2 = Stakeholder.objects.create(name="Bob")
+        cls.t1 = Task.objects.create(title="Alice Task")
+        cls.t1.related_stakeholders.add(cls.s1)
+        cls.t2 = Task.objects.create(title="Bob Task")
+        cls.t2.related_stakeholders.add(cls.s2)
+        cls.t3 = Task.objects.create(title="No Person Task")
+
+    def test_filter_by_stakeholder(self):
+        resp = self.client.get(reverse("tasks:list"), {"stakeholder": self.s1.pk})
+        self.assertContains(resp, "Alice Task")
+        self.assertNotContains(resp, "Bob Task")
+        self.assertNotContains(resp, "No Person Task")
+
+    def test_no_filter_shows_all(self):
+        resp = self.client.get(reverse("tasks:list"))
+        self.assertContains(resp, "Alice Task")
+        self.assertContains(resp, "Bob Task")
+        self.assertContains(resp, "No Person Task")
+
+    def test_stakeholder_dropdown_in_context(self):
+        resp = self.client.get(reverse("tasks:list"))
+        self.assertIn("stakeholders", resp.context)
+        self.assertIn("selected_stakeholder", resp.context)
+
+
+class StaleFollowupIndicatorTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Stale FU Person")
+
+    def test_has_stale_followups_true(self):
+        task = Task.objects.create(title="Stale Task")
+        FollowUp.objects.create(
+            task=task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=10),
+            method="email",
+            reminder_enabled=True,
+            follow_up_days=3,
+            response_received=False,
+        )
+        self.assertTrue(task.has_stale_followups)
+
+    def test_has_stale_followups_false_no_followups(self):
+        task = Task.objects.create(title="Clean Task")
+        self.assertFalse(task.has_stale_followups)
+
+    def test_has_stale_followups_false_all_responded(self):
+        task = Task.objects.create(title="Responded Task")
+        FollowUp.objects.create(
+            task=task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=10),
+            method="email",
+            reminder_enabled=True,
+            follow_up_days=3,
+            response_received=True,
+            response_date=timezone.now(),
+        )
+        self.assertFalse(task.has_stale_followups)
+
+    def test_stale_dot_in_row(self):
+        task = Task.objects.create(title="Stale Dot Task")
+        FollowUp.objects.create(
+            task=task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=10),
+            method="email",
+            reminder_enabled=True,
+            follow_up_days=3,
+            response_received=False,
+        )
+        resp = self.client.get(reverse("tasks:list"))
+        self.assertContains(resp, "Stale follow-up")
+
+
+class GroupedViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.t1 = Task.objects.create(title="GV Task 1", status="not_started", priority="high")
+        cls.t2 = Task.objects.create(title="GV Task 2", status="in_progress", priority="low")
+        cls.t3 = Task.objects.create(title="GV Task 3", status="complete", priority="high",
+                                      due_date=timezone.localdate() - timedelta(days=5))
+
+    def test_group_by_status(self):
+        resp = self.client.get(reverse("tasks:list"), {"group": "status"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("grouped_tasks", resp.context)
+        groups = resp.context["grouped_tasks"]
+        self.assertEqual(len(groups), 4)  # all 4 status groups always present
+
+    def test_group_by_priority(self):
+        resp = self.client.get(reverse("tasks:list"), {"group": "priority"})
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.context["grouped_tasks"]
+        self.assertEqual(len(groups), 4)
+
+    def test_group_by_due_date(self):
+        resp = self.client.get(reverse("tasks:list"), {"group": "due_date"})
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.context["grouped_tasks"]
+        # Should have at least Overdue and No Date buckets
+        labels = [g["label"] for g in groups]
+        self.assertIn("Overdue", labels)
+        self.assertIn("No Date", labels)
+
+    def test_group_by_stakeholder(self):
+        s = Stakeholder.objects.create(name="Grouped Person")
+        self.t1.related_stakeholders.add(s)
+        resp = self.client.get(reverse("tasks:list"), {"group": "stakeholder"})
+        self.assertEqual(resp.status_code, 200)
+        groups = resp.context["grouped_tasks"]
+        labels = [g["label"] for g in groups]
+        self.assertIn("Grouped Person", labels)
+        self.assertIn("No Stakeholder", labels)
+
+    def test_grouped_htmx_returns_partial(self):
+        resp = self.client.get(
+            reverse("tasks:list"), {"group": "status"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertTemplateUsed(resp, "tasks/partials/_grouped_table_view.html")
+
+    def test_no_pagination_in_grouped_view(self):
+        for i in range(30):
+            Task.objects.create(title=f"GP Task {i}")
+        resp = self.client.get(reverse("tasks:list"), {"group": "status"})
+        self.assertContains(resp, "GP Task 29")
+
+
+class SubTaskTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.task = Task.objects.create(title="Subtask Parent")
+
+    def test_subtask_add(self):
+        resp = self.client.post(
+            reverse("tasks:subtask_add", args=[self.task.pk]),
+            {"title": "Buy supplies"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(SubTask.objects.filter(task=self.task).count(), 1)
+
+    def test_subtask_toggle(self):
+        st = SubTask.objects.create(task=self.task, title="Toggleable")
+        self.assertFalse(st.is_completed)
+        resp = self.client.post(reverse("tasks:subtask_toggle", args=[st.pk]))
+        self.assertEqual(resp.status_code, 200)
+        st.refresh_from_db()
+        self.assertTrue(st.is_completed)
+        # Toggle back
+        self.client.post(reverse("tasks:subtask_toggle", args=[st.pk]))
+        st.refresh_from_db()
+        self.assertFalse(st.is_completed)
+
+    def test_subtask_delete(self):
+        st = SubTask.objects.create(task=self.task, title="To Delete")
+        resp = self.client.post(reverse("tasks:subtask_delete", args=[st.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(SubTask.objects.filter(pk=st.pk).exists())
+
+    def test_subtask_cascade_on_task_delete(self):
+        t = Task.objects.create(title="Parent to Delete")
+        st = SubTask.objects.create(task=t, title="Child")
+        st_pk = st.pk
+        t.delete()
+        self.assertFalse(SubTask.objects.filter(pk=st_pk).exists())
+
+    def test_subtask_in_detail_context(self):
+        SubTask.objects.create(task=self.task, title="Detail Sub")
+        resp = self.client.get(reverse("tasks:detail", args=[self.task.pk]))
+        self.assertIn("subtasks", resp.context)
+        self.assertIn("subtask_form", resp.context)
+        self.assertEqual(resp.context["subtask_count"], 1)
+
+    def test_subtask_progress_in_list(self):
+        st1 = SubTask.objects.create(task=self.task, title="Done", is_completed=True)
+        st2 = SubTask.objects.create(task=self.task, title="Not Done")
+        resp = self.client.get(reverse("tasks:list"))
+        self.assertContains(resp, "1/2")
+
+
+class RecurringTaskTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Recurring Person")
+
+    def test_compute_next_due_date_weekly(self):
+        from datetime import date
+        t = Task(due_date=date(2026, 3, 1), recurrence_rule="weekly")
+        self.assertEqual(t.compute_next_due_date(), date(2026, 3, 8))
+
+    def test_compute_next_due_date_monthly(self):
+        from datetime import date
+        t = Task(due_date=date(2026, 1, 31), recurrence_rule="monthly")
+        # Jan 31 → Feb 28 (end-of-month clamping)
+        self.assertEqual(t.compute_next_due_date(), date(2026, 2, 28))
+
+    def test_compute_next_due_date_yearly_leap(self):
+        from datetime import date
+        t = Task(due_date=date(2024, 2, 29), recurrence_rule="yearly")
+        self.assertEqual(t.compute_next_due_date(), date(2025, 2, 28))
+
+    def test_compute_next_due_date_quarterly(self):
+        from datetime import date
+        t = Task(due_date=date(2026, 11, 15), recurrence_rule="quarterly")
+        self.assertEqual(t.compute_next_due_date(), date(2027, 2, 15))
+
+    def test_create_next_recurrence(self):
+        from datetime import date
+        t = Task.objects.create(
+            title="Weekly Report",
+            due_date=date(2026, 3, 1),
+            priority="high",
+            direction="outbound",
+            is_recurring=True,
+            recurrence_rule="weekly",
+        )
+        t.related_stakeholders.add(self.stakeholder)
+        new_task = t.create_next_recurrence()
+        self.assertIsNotNone(new_task)
+        self.assertEqual(new_task.title, "Weekly Report")
+        self.assertEqual(new_task.due_date, date(2026, 3, 8))
+        self.assertEqual(new_task.status, "not_started")
+        self.assertTrue(new_task.is_recurring)
+        self.assertEqual(new_task.related_stakeholders.count(), 1)
+
+    def test_toggle_complete_creates_recurrence(self):
+        from datetime import date
+        t = Task.objects.create(
+            title="Recurring Toggle",
+            due_date=date(2026, 3, 1),
+            is_recurring=True,
+            recurrence_rule="daily",
+        )
+        initial_count = Task.objects.count()
+        self.client.post(reverse("tasks:toggle_complete", args=[t.pk]))
+        self.assertEqual(Task.objects.count(), initial_count + 1)
+        new_task = Task.objects.filter(title="Recurring Toggle", status="not_started").last()
+        self.assertEqual(new_task.due_date, date(2026, 3, 2))
+
+    def test_kanban_update_creates_recurrence(self):
+        from datetime import date
+        t = Task.objects.create(
+            title="Kanban Recur",
+            due_date=date(2026, 3, 1),
+            is_recurring=True,
+            recurrence_rule="weekly",
+        )
+        initial_count = Task.objects.count()
+        self.client.post(
+            reverse("tasks:kanban_update", args=[t.pk]),
+            {"status": "complete"},
+        )
+        self.assertEqual(Task.objects.count(), initial_count + 1)
+
+    def test_inline_update_creates_recurrence(self):
+        from datetime import date
+        t = Task.objects.create(
+            title="Inline Recur",
+            due_date=date(2026, 3, 1),
+            is_recurring=True,
+            recurrence_rule="monthly",
+        )
+        initial_count = Task.objects.count()
+        self.client.post(
+            reverse("tasks:inline_update", args=[t.pk]),
+            {"field": "status", "value": "complete"},
+        )
+        self.assertEqual(Task.objects.count(), initial_count + 1)
+
+    def test_bulk_complete_creates_recurrence(self):
+        from datetime import date
+        t = Task.objects.create(
+            title="Bulk Recur",
+            due_date=date(2026, 3, 1),
+            is_recurring=True,
+            recurrence_rule="biweekly",
+        )
+        initial_count = Task.objects.count()
+        self.client.post(reverse("tasks:bulk_complete"), {"selected": [t.pk]})
+        self.assertEqual(Task.objects.count(), initial_count + 1)
+
+    def test_non_recurring_no_recurrence_on_complete(self):
+        t = Task.objects.create(title="One Time Task")
+        initial_count = Task.objects.count()
+        self.client.post(reverse("tasks:toggle_complete", args=[t.pk]))
+        self.assertEqual(Task.objects.count(), initial_count)
+
+    def test_form_validation_recurring_without_rule(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Bad Recurring",
+            "direction": "personal",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "one_time",
+            "is_recurring": "on",
+        })
+        self.assertEqual(resp.status_code, 200)  # re-renders form
+        self.assertFalse(Task.objects.filter(title="Bad Recurring").exists())
+
+    def test_form_validation_recurring_without_date(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "No Date Recurring",
+            "direction": "personal",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "one_time",
+            "is_recurring": "on",
+            "recurrence_rule": "weekly",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Task.objects.filter(title="No Date Recurring").exists())
