@@ -23,6 +23,7 @@
             {% endif %}
             {% if task.is_meeting %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Meeting</span>
             {% else %}<span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>{% endif %}
+            {% if task.is_recurring %}<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300">&#x21bb; {{ task.get_recurrence_rule_display }}</span>{% endif %}
         </div>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
@@ -63,6 +64,20 @@
     <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.description }}</p>
 </div>
 {% endif %}
+
+<!-- Checklist -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Checklist</h2>
+        {% if subtask_count > 0 %}
+        <span class="text-xs text-gray-400">{{ subtask_done }}/{{ subtask_count }}</span>
+        <div class="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+            <div class="h-full bg-green-500 rounded-full" style="width: {% widthratio subtask_done subtask_count 100 %}%"></div>
+        </div>
+        {% endif %}
+    </div>
+    <div id="subtask-list">{% include "tasks/partials/_subtask_list.html" %}</div>
+</div>
 
 <!-- Follow-ups -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">

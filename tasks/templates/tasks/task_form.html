@@ -15,7 +15,7 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
-        {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" and field.name != "due_time" %}
+        {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" and field.name != "due_time" and field.name != "is_recurring" and field.name != "recurrence_rule" %}
         {% if field.name == "due_date" %}
         <div class="flex gap-4">
             <div class="flex-1">
@@ -52,6 +52,20 @@
                 <label for="{{ form.reminder_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Reminder date &amp; time</label>
                 {{ form.reminder_date }}
                 {% if form.reminder_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reminder_date.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+
+        <!-- Recurring task toggle -->
+        <div class="border-t border-gray-700 pt-4 mt-4">
+            <div class="flex items-center gap-2 mb-3">
+                {{ form.is_recurring }}
+                <label for="{{ form.is_recurring.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">Recurring task</label>
+            </div>
+            <div id="recurrence-field" class="{% if not form.is_recurring.value %}hidden{% endif %}">
+                <label for="{{ form.recurrence_rule.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Repeat every</label>
+                {{ form.recurrence_rule }}
+                {% if form.recurrence_rule.errors %}<p class="mt-1 text-sm text-red-400">{{ form.recurrence_rule.errors.0 }}</p>{% endif %}
+                <p class="mt-1 text-xs text-gray-500">When completed, a new task will be created with the next due date.</p>
             </div>
         </div>
 
@@ -115,6 +129,12 @@
                 field.classList.toggle('hidden', !this.checked);
                 if (!this.checked) {
                     document.getElementById('{{ form.reminder_date.id_for_label }}').value = '';
+                }
+            });
+            document.getElementById('{{ form.is_recurring.id_for_label }}').addEventListener('change', function() {
+                document.getElementById('recurrence-field').classList.toggle('hidden', !this.checked);
+                if (!this.checked) {
+                    document.getElementById('{{ form.recurrence_rule.id_for_label }}').value = '';
                 }
             });
             // Direction-dependent UI

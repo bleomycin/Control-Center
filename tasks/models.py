@@ -1,3 +1,4 @@
+import calendar
 from datetime import timedelta
 
 from django.db import models
@@ -28,6 +29,14 @@ class Task(models.Model):
         ("outbound", "Outbound Request"),
         ("inbound", "Inbound Request"),
     ]
+    RECURRENCE_CHOICES = [
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("biweekly", "Every 2 Weeks"),
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("yearly", "Yearly"),
+    ]
 
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -49,13 +58,66 @@ class Task(models.Model):
         "assets.RealEstate", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="tasks",
     )
+    is_recurring = models.BooleanField(default=False)
+    recurrence_rule = models.CharField(max_length=15, choices=RECURRENCE_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    def compute_next_due_date(self):
+        if not self.due_date:
+            return None
+        d = self.due_date
+        rule = self.recurrence_rule
+        if rule == "daily":
+            return d + timedelta(days=1)
+        if rule == "weekly":
+            return d + timedelta(weeks=1)
+        if rule == "biweekly":
+            return d + timedelta(weeks=2)
+        if rule in ("monthly", "quarterly"):
+            months = 1 if rule == "monthly" else 3
+            month = d.month - 1 + months
+            year = d.year + month // 12
+            month = month % 12 + 1
+            day = min(d.day, calendar.monthrange(year, month)[1])
+            return d.replace(year=year, month=month, day=day)
+        if rule == "yearly":
+            try:
+                return d.replace(year=d.year + 1)
+            except ValueError:
+                return d.replace(year=d.year + 1, month=2, day=28)
+        return None
+
+    def create_next_recurrence(self):
+        if not self.is_recurring or not self.recurrence_rule:
+            return None
+        next_date = self.compute_next_due_date()
+        new_task = Task.objects.create(
+            title=self.title,
+            description=self.description,
+            due_date=next_date,
+            due_time=self.due_time,
+            priority=self.priority,
+            task_type=self.task_type,
+            direction=self.direction,
+            related_legal_matter=self.related_legal_matter,
+            related_property=self.related_property,
+            is_recurring=True,
+            recurrence_rule=self.recurrence_rule,
+        )
+        new_task.related_stakeholders.set(self.related_stakeholders.all())
+        return new_task
+
     @property
     def is_meeting(self):
         return self.task_type == "meeting"
+
+    @property
+    def has_stale_followups(self):
+        if hasattr(self, '_prefetched_objects_cache') and 'follow_ups' in self._prefetched_objects_cache:
+            return any(fu.is_stale for fu in self.follow_ups.all())
+        return any(fu.is_stale for fu in self.follow_ups.filter(response_received=False, reminder_enabled=True))
 
     @property
     def scheduled_datetime_str(self):
@@ -73,6 +135,20 @@ class Task(models.Model):
 
     class Meta:
         ordering = ["due_date", "-priority"]
+
+
+class SubTask(models.Model):
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="subtasks")
+    title = models.CharField(max_length=255)
+    is_completed = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "created_at"]
+
+    def __str__(self):
+        return self.title
 
 
 class FollowUp(models.Model):
