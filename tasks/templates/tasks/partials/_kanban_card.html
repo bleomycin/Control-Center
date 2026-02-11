@@ -5,7 +5,7 @@
                 {% if task.is_meeting %}<span class="inline-flex items-center text-xs px-1 py-0.5 rounded bg-blue-900/50 text-blue-300 font-medium">MTG</span>{% endif %}
                 {% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs" title="Inbound">&swarr;</span>{% endif %}
             </div>
-            <a href="{{ task.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300 block truncate">{{ task.title }}</a>
+            <a href="{{ task.get_absolute_url }}" draggable="false" class="text-sm font-medium text-blue-400 hover:text-blue-300 block truncate">{{ task.title }}</a>
         </div>
         <span class="flex-shrink-0 w-1.5 h-8 rounded-full {% if task.priority == 'critical' %}bg-red-500{% elif task.priority == 'high' %}bg-orange-500{% elif task.priority == 'medium' %}bg-yellow-500{% else %}bg-gray-600{% endif %}"></span>
     </div>

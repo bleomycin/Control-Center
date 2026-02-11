@@ -23,7 +23,10 @@ function initKanban() {
         }
         col.sortableInstance = Sortable.create(col, {
             group: 'kanban',
+            draggable: '.kanban-card',
             animation: 150,
+            forceFallback: true,
+            fallbackClass: 'opacity-70',
             ghostClass: 'opacity-30',
             dragClass: 'ring-2 ring-blue-500 rounded-lg',
             filter: '.kanban-empty',
