@@ -52,24 +52,23 @@
 </div>
 {% endif %}
 
-{% if employees %}
+{% if stakeholder.entity_type == "firm" %}
 <!-- Team Members (Firm) -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Team Members <span class="text-xs text-gray-400 font-normal">({{ employees.count }})</span></h2>
-        <a href="{% url 'stakeholders:create' %}?parent_organization={{ stakeholder.pk }}"
-           class="text-xs text-blue-400 hover:text-blue-300">+ Add Employee</a>
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Team Members <span class="text-xs text-gray-400 font-normal">({{ counts.employees }})</span></h2>
+        <div class="flex gap-3">
+            <button hx-get="{% url 'stakeholders:employee_add' stakeholder.pk %}"
+                    hx-target="#employee-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Existing</button>
+            <a href="{% url 'stakeholders:create' %}?parent_organization={{ stakeholder.pk }}"
+               class="text-xs text-blue-400 hover:text-blue-300">+ Add Employee</a>
+        </div>
     </div>
-    <div class="divide-y divide-gray-700">
-        {% for emp in employees %}
-        <a href="{{ emp.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-            <div>
-                <span class="text-sm text-gray-200">{{ emp.name }}</span>
-                <span class="text-xs text-gray-400 ml-2">{{ emp.entity_type|choice_label:"entity_type" }}</span>
-            </div>
-            <span class="text-xs text-gray-400">{{ emp.email|default:"" }}</span>
-        </a>
-        {% endfor %}
+    <div id="employee-form-container"></div>
+    <div id="employee-list">
+        {% include "stakeholders/partials/_employee_list.html" %}
     </div>
 </div>
 {% endif %}

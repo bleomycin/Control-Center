@@ -674,3 +674,50 @@ class DynamicTabIntegrationTests(TestCase):
         resp = self.client.post(reverse("stakeholders:tab_add"), {"label": "No Types"})
         self.assertEqual(resp.status_code, 200)  # re-renders form with errors
         self.assertFalse(StakeholderTab.objects.filter(label="No Types").exists())
+
+
+class EmployeeInlineTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.firm = Stakeholder.objects.create(name="Acme Corp", entity_type="firm")
+        cls.person = Stakeholder.objects.create(name="Jane Doe", entity_type="contact")
+        cls.other_firm = Stakeholder.objects.create(name="Other Firm", entity_type="firm")
+
+    def test_employee_add_get_loads_form(self):
+        resp = self.client.get(reverse("stakeholders:employee_add", args=[self.firm.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Assign")
+
+    def test_employee_add_post_assigns(self):
+        resp = self.client.post(
+            reverse("stakeholders:employee_add", args=[self.firm.pk]),
+            {"stakeholder": self.person.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.parent_organization, self.firm)
+
+    def test_employee_remove_unlinks(self):
+        self.person.parent_organization = self.firm
+        self.person.save()
+        resp = self.client.post(reverse("stakeholders:employee_remove", args=[self.person.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.person.refresh_from_db()
+        self.assertIsNone(self.person.parent_organization)
+        # Stakeholder still exists
+        self.assertTrue(Stakeholder.objects.filter(pk=self.person.pk).exists())
+
+    def test_form_excludes_firms_and_current_employees(self):
+        self.person.parent_organization = self.firm
+        self.person.save()
+        from stakeholders.forms import EmployeeAssignForm
+        form = EmployeeAssignForm(firm=self.firm)
+        qs = form.fields["stakeholder"].queryset
+        self.assertNotIn(self.other_firm, qs)
+        self.assertNotIn(self.person, qs)
+
+    def test_detail_shows_team_members_section_for_firm(self):
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.firm.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Team Members")
+        self.assertContains(resp, "Add Existing")
