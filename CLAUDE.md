@@ -100,7 +100,7 @@ Seven Django apps, all relationally linked:
 |-----|--------|---------|
 | **dashboard** | ChoiceOption, EmailSettings, Notification, SampleDataStatus | Homepage, global search, timeline, calendar, email/SMTP, notifications, choice management, settings hub, sample data toggle |
 | **stakeholders** | Stakeholder, StakeholderTab, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationships, contact logs; firm/employee hierarchy via `parent_organization` self-FK; dynamic DB-backed list tabs |
-| **assets** | RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty | Unified `/assets/` page with HTMX tab switching (Properties/Investments/Loans); M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing on properties and loans |
+| **assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty | Unified `/assets/` page with dynamic DB-backed tabs; M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing |
 | **legal** | LegalMatter, Evidence | Case status, attorneys (M2M), evidence, related stakeholders/properties |
 | **tasks** | Task, FollowUp, SubTask | Deadlines, priorities, follow-ups, subtask checklists; bidirectional direction; multi-stakeholder M2M; meetings with time; kanban board; recurring tasks; grouped views |
 | **cashflow** | CashFlowEntry | Actual + projected inflows/outflows with category filtering and charts |
@@ -124,49 +124,34 @@ Seven Django apps, all relationally linked:
 - `ChoiceOption` model in `dashboard/models.py` — 4 categories: `entity_type`, `contact_method`, `matter_type`, `note_type`
 - `dashboard/choices.py`: `get_choices(category)` (cached), `get_choice_label(category, value)`, `invalidate_choice_cache()`
 - Template: `{% load choice_labels %}` then `{{ value|choice_label:"category" }}`
-- Status/workflow fields (task status, priority, etc.) are NOT DB-backed — their values are in business logic
+- Status/workflow fields (task status, priority, direction) are NOT DB-backed — their values are in business logic
 
-### Unified Assets Page
-- `asset_list` function view at `/assets/` — 3 HTMX tabs (Properties/Investments/Loans) with tab counts
-- `switchAssetTab()` JS updates active styling; hidden `#current-tab` input preserves tab in filter form
-- Tab content partial `_asset_tab_content.html` dispatches by `current_tab`; each tab has its own table headers, bulk bar, and sort controls
-- Inline status editing: `_realestate_row.html` and `_loan_row.html` with `<select>` → `htmx.ajax()` POST to `inline_update_*_status` views
-- Old CBV list views (`/assets/real-estate/`, etc.) remain for backwards compatibility
+### DB-Backed Tabs (shared pattern: stakeholders + assets)
+- Model: `StakeholderTab` / `AssetTab` — `key` (slug, unique), `label`, `entity_types`/`asset_types` (JSONField), `sort_order`, `is_builtin`
+- `_get_tab_config()` / `_get_asset_tab_config()` builds tab list with counts + dynamic "Other" tab for unclaimed types
+- Tab CRUD at `/stakeholders/tabs/` and `/assets/tabs/` — HTMX settings pages with add/edit/delete; gear icon in tab bar
+- `AssetTabForm` / `StakeholderTabForm`: plain `forms.Form` (not ModelForm) with TailwindFormMixin — label + type checkboxes
+- Built-in tabs are non-editable/deletable (403 on attempt)
+- Multi-type asset tabs render stacked sections with `<h3>` headers; single-type tabs get sort controls and bulk actions
 
 ### Multi-Stakeholder Ownership
-- Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty` in `assets/models.py` — each stores percentage and role
+- Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty` — each stores percentage and role
 - HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern)
 - Create forms include optional "Initial Owner/Participant" fields, hidden on edit via `get_form()` field deletion
 
-### Firm/Employee Hierarchy
-- `Stakeholder.parent_organization` self-FK (SET_NULL); firms have `entity_type="firm"`
-- HTMX inline add/remove employees on firm detail page and Firms & Teams cards; per-firm target IDs (`#employee-list-{{ firm.pk }}`)
-- Entity type and firm assignment are orthogonal — employees appear in their entity-type tabs
-
 ### Task System
 - `Task.direction`: `personal`/`outbound`/`inbound` — NOT a DB-backed ChoiceOption
-- `Task.related_stakeholders` M2M (plain, no through model); `_grouped_stakeholder_choices()` in `tasks/forms.py` builds `<optgroup>` widget
-- `FollowUp`: `reminder_enabled` (default=False) opt-in + `follow_up_days` (default=3); `response_notes` TextField; "Create Note" link pre-fills via query params
+- `Task.related_stakeholders` M2M (plain, no through model); `_grouped_stakeholder_choices()` builds `<optgroup>` widget
 - `SubTask`: HTMX add/toggle/delete; progress bar on detail, `N/M` annotations on list/kanban
 - Recurring: `is_recurring` + `recurrence_rule`; `create_next_recurrence()` called in all 4 completion paths
-- Meeting: `task_type="meeting"` + optional `due_time` TimeField; blue styling; "+ Add Meeting Notes" pre-fills note creation
-- Kanban: SortableJS drag-and-drop, `kanban_update` endpoint, no pagination on board view
+- Meeting: `task_type="meeting"` + optional `due_time` TimeField
+- Kanban: SortableJS drag-and-drop, `kanban_update` endpoint
 - Inline edit: clickable status/priority badges cycle values; `_task_row.html` partial for single-row re-render
-- Grouped view: `_build_grouped_tasks()` with 4 modes (status/priority/due_date/stakeholder)
-
-### Stakeholder Tabs
-- `StakeholderTab` model — `key`, `label`, `entity_types` (JSONField), `sort_order`, `is_builtin`
-- Built-in: "All" and "Firms & Teams" (non-editable). Dynamic "Other" tab for unclaimed entity types.
-- `switchStakeholderTab()` JS updates active styling (tab bar is outside HTMX swap target)
-- Inline entity type editing: `<select>` in row → `inline_update_type` POST → re-renders `_stakeholder_row.html`
 
 ### Notes System
-- 3 view modes: cards (`_note_cards.html`), list (`_note_table_view.html`), timeline (`_note_timeline_view.html`) — `get_template_names()` routes by `view` param
+- 3 view modes: cards, list, timeline — `get_template_names()` routes by `view` param
 - `Tag` (name, slug, color) + `Folder` (name, color, sort_order); `notes/templatetags/tag_colors.py` maps color names → CSS class string literals (for Tailwind scanning)
-- Pinned-first sorting via `-is_pinned` prepended to `order_by`; timeline uses `OrderedDict` with pre-seeded group order
 - Folder tab bar with inline "Manage Folders" panel; `HX-Trigger: foldersChanged` auto-refreshes tabs
-- Bulk tag: Add/Remove mode toggle with `toggleTagPill()` JS; bulk folder: select dropdown with Unfiled option
-- External links: `Link` model with HTMX inline add/edit/delete mirroring attachment pattern
 - Markdown: `render_markdown` template filter with `nl2br` + blank-line preprocessor; `prose-markdown` CSS in `input.css`
 
 ### Notifications & Email
@@ -186,7 +171,7 @@ Seven Django apps, all relationally linked:
 - Dashboard views use lazy imports inside functions
 - Forms use `__init__` override for dynamic widget/choices setup
 - `Relationship`/`ContactLog`/`FollowUp` FKs use SET_NULL (not CASCADE) to prevent data loss on stakeholder deletion
-- Tag slug collision: uniqueness loop generates `base-slug-1`, `-2`, etc.
+- Tag/AssetTab slug collision: uniqueness loop generates `base-slug-1`, `-2`, etc.
 - `bulk-actions.js` looks up `#select-all` dynamically and uses fully delegated change events (works after HTMX swaps)
 - `switchView()` uses `source: form` (not `values: getFilterValues()`) for proper multi-select serialization
 - Django test runner uses in-memory SQLite — WAL mode returns 'memory', not 'wal'

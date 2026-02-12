@@ -2,6 +2,39 @@ from django.db import models
 from django.urls import reverse
 
 
+class AssetTab(models.Model):
+    ASSET_TYPE_CHOICES = [
+        ("properties", "Properties"),
+        ("investments", "Investments"),
+        ("loans", "Loans"),
+    ]
+
+    key = models.SlugField(max_length=50, unique=True)
+    label = models.CharField(max_length=100)
+    asset_types = models.JSONField(default=list, blank=True,
+                                   help_text="List of asset type values for this tab")
+    sort_order = models.PositiveIntegerField(default=0)
+    is_builtin = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["sort_order", "pk"]
+
+    def __str__(self):
+        return self.label
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            from django.utils.text import slugify
+            base_key = slugify(self.label)
+            key = base_key
+            n = 1
+            while AssetTab.objects.filter(key=key).exclude(pk=self.pk).exists():
+                key = f"{base_key}-{n}"
+                n += 1
+            self.key = key
+        super().save(*args, **kwargs)
+
+
 class RealEstate(models.Model):
     STATUS_CHOICES = [
         ("owned", "Owned"),
