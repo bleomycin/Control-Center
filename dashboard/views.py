@@ -643,6 +643,8 @@ def sample_data_remove(request):
         "tasks.task",
         "legal.evidence",
         "legal.legalmatter",
+        "assets.policyholder",
+        "assets.insurancepolicy",
         "assets.loanparty",
         "assets.investmentparticipant",
         "assets.propertyownership",

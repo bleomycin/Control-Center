@@ -7,6 +7,7 @@ class AssetTab(models.Model):
         ("properties", "Properties"),
         ("investments", "Investments"),
         ("loans", "Loans"),
+        ("policies", "Policies"),
     ]
 
     key = models.SlugField(max_length=50, unique=True)
@@ -203,3 +204,83 @@ class LoanParty(models.Model):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{percentage}{role}"
+
+
+class InsurancePolicy(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("expired", "Expired"),
+        ("cancelled", "Cancelled"),
+        ("pending", "Pending"),
+    ]
+
+    PREMIUM_FREQUENCY_CHOICES = [
+        ("monthly", "Monthly"),
+        ("quarterly", "Quarterly"),
+        ("semi_annual", "Semi-Annual"),
+        ("annual", "Annual"),
+    ]
+
+    name = models.CharField(max_length=255)
+    policy_number = models.CharField(max_length=100, blank=True)
+    policy_type = models.CharField(max_length=30, default="general")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    carrier = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="policies_as_carrier",
+        verbose_name="Carrier",
+    )
+    agent = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="policies_as_agent",
+        verbose_name="Agent",
+    )
+    premium_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    premium_frequency = models.CharField(
+        max_length=20, choices=PREMIUM_FREQUENCY_CHOICES, default="annual", blank=True,
+    )
+    deductible = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    coverage_limit = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    effective_date = models.DateField(null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True)
+    auto_renew = models.BooleanField(default=False)
+    covered_properties = models.ManyToManyField(
+        RealEstate, blank=True, related_name="insurance_policies",
+    )
+    stakeholders = models.ManyToManyField(
+        "stakeholders.Stakeholder",
+        through="PolicyHolder",
+        related_name="insurance_policies",
+        blank=True,
+    )
+    notes_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("assets:policy_detail", kwargs={"pk": self.pk})
+
+    class Meta:
+        verbose_name_plural = "Insurance policies"
+        ordering = ["name"]
+
+
+class PolicyHolder(models.Model):
+    """Through model for InsurancePolicy-Stakeholder M2M with role details."""
+    policy = models.ForeignKey(InsurancePolicy, on_delete=models.CASCADE, related_name="policyholders")
+    stakeholder = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.CASCADE, related_name="policyholder_roles",
+    )
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Named Insured, Beneficiary, Additional Insured")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name_plural = "Policy holders"
+        ordering = ["role", "stakeholder__name"]
+
+    def __str__(self):
+        role = f" - {self.role}" if self.role else ""
+        return f"{self.stakeholder.name}{role}"

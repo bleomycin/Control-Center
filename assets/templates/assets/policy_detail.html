@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ policy.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'assets:asset_list' %}?tab=insurance" class="hover:text-gray-300">Insurance</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ policy.name }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ policy.name }}</h1>
+        {% if policy.policy_number %}<p class="text-sm text-gray-400 mt-1">#{{ policy.policy_number }}</p>{% endif %}
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'assets:policy_export_pdf' policy.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'assets:policy_edit' policy.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'assets:policy_delete' policy.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Premium</p>
+        <p class="text-xl font-bold text-green-400 mt-1">${{ policy.premium_amount|floatformat:0|intcomma|default:"N/A" }}</p>
+        {% if policy.premium_amount %}<p class="text-xs text-gray-400">{{ policy.get_premium_frequency_display }}</p>{% endif %}
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Coverage Limit</p>
+        <p class="text-xl font-bold text-blue-400 mt-1">${{ policy.coverage_limit|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Deductible</p>
+        <p class="text-xl font-bold text-orange-400 mt-1">${{ policy.deductible|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if policy.status == 'active' %}text-green-300{% elif policy.status == 'expired' or policy.status == 'cancelled' %}text-red-300{% elif policy.status == 'pending' %}text-yellow-300{% else %}text-gray-200{% endif %}">{{ policy.get_status_display }}</p>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Policy Details</p>
+    </div>
+    <div class="px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+        <div>
+            <span class="text-xs text-gray-500">Policy Number</span>
+            <p class="text-sm text-gray-200">{{ policy.policy_number|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Type</span>
+            <p class="text-sm text-gray-200">{{ policy.policy_type|choice_label:"policy_type" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Carrier</span>
+            <p class="text-sm text-gray-200">{% if policy.carrier %}<a href="{{ policy.carrier.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ policy.carrier.name }}</a>{% else %}N/A{% endif %}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Agent</span>
+            <p class="text-sm text-gray-200">{% if policy.agent %}<a href="{{ policy.agent.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ policy.agent.name }}</a>{% else %}N/A{% endif %}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Effective Date</span>
+            <p class="text-sm text-gray-200">{{ policy.effective_date|date:"M j, Y"|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Expiration Date</span>
+            <p class="text-sm text-gray-200">{{ policy.expiration_date|date:"M j, Y"|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Auto Renew</span>
+            <p class="text-sm text-gray-200">{% if policy.auto_renew %}Yes{% else %}No{% endif %}</p>
+        </div>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Policyholders</p>
+        <button hx-get="{% url 'assets:policyholder_add' policy.pk %}"
+                hx-target="#policyholder-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Policyholder</button>
+    </div>
+    <div id="policyholder-form-container"></div>
+    <div id="policyholder-list">
+        {% include "assets/partials/_policyholder_list.html" %}
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Covered Properties</p>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for prop in covered_properties %}
+        <a href="{{ prop.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-blue-400 hover:text-blue-300">{{ prop.name }}</span>
+            <span class="text-xs text-gray-400">{{ prop.address|truncatewords:6 }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No covered properties</p>
+        {% endfor %}
+    </div>
+</div>
+
+{% if policy.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Internal Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ policy.notes_text }}</p>
+</div>
+{% endif %}
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Linked Notes</h2>
+        <a href="{% url 'notes:create' %}?policy={{ policy.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for note in notes %}
+        <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ note.title }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

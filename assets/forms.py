@@ -1,7 +1,9 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
+from dashboard.choices import get_choices
 from stakeholders.models import Stakeholder
-from .models import AssetTab, RealEstate, Investment, Loan, PropertyOwnership, InvestmentParticipant, LoanParty
+from .models import (AssetTab, InsurancePolicy, Investment, Loan, LoanParty,
+                     PolicyHolder, PropertyOwnership, RealEstate, InvestmentParticipant)
 
 
 class AssetTabForm(TailwindFormMixin, forms.Form):
@@ -121,6 +123,51 @@ class LoanPartyForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = LoanParty
         fields = ["stakeholder", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class InsurancePolicyForm(TailwindFormMixin, forms.ModelForm):
+    initial_stakeholder = forms.ModelChoiceField(
+        queryset=Stakeholder.objects.all(), required=False, label="Initial Policyholder",
+    )
+    initial_role = forms.CharField(max_length=100, required=False, label="Role")
+
+    field_order = [
+        "name", "policy_number", "policy_type", "status",
+        "carrier", "agent",
+        "premium_amount", "premium_frequency", "deductible", "coverage_limit",
+        "effective_date", "expiration_date", "auto_renew",
+        "covered_properties", "notes_text",
+        "initial_stakeholder", "initial_role",
+    ]
+
+    class Meta:
+        model = InsurancePolicy
+        fields = [
+            "name", "policy_number", "policy_type", "status",
+            "carrier", "agent",
+            "premium_amount", "premium_frequency", "deductible", "coverage_limit",
+            "effective_date", "expiration_date", "auto_renew",
+            "covered_properties", "notes_text",
+        ]
+        widgets = {
+            "effective_date": forms.DateInput(attrs={"type": "date"}),
+            "expiration_date": forms.DateInput(attrs={"type": "date"}),
+            "covered_properties": forms.SelectMultiple(attrs={"size": 4}),
+            "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["policy_type"].widget = forms.Select(choices=get_choices("policy_type"))
+
+
+class PolicyHolderForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = PolicyHolder
+        fields = ["stakeholder", "role", "notes"]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 2}),
         }

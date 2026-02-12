@@ -85,6 +85,9 @@ class Note(models.Model):
     related_tasks = models.ManyToManyField(
         "tasks.Task", blank=True, related_name="notes",
     )
+    related_policies = models.ManyToManyField(
+        "assets.InsurancePolicy", blank=True, related_name="notes",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

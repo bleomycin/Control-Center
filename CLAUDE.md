@@ -100,7 +100,7 @@ Seven Django apps, all relationally linked:
 |-----|--------|---------|
 | **dashboard** | ChoiceOption, EmailSettings, Notification, SampleDataStatus | Homepage, global search, timeline, calendar, email/SMTP, notifications, choice management, settings hub, sample data toggle |
 | **stakeholders** | Stakeholder, StakeholderTab, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationships, contact logs; firm/employee hierarchy via `parent_organization` self-FK; dynamic DB-backed list tabs |
-| **assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty | Unified `/assets/` page with dynamic DB-backed tabs; M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing |
+| **assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty, InsurancePolicy, PolicyHolder | Unified `/assets/` page with dynamic DB-backed tabs; M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing; insurance policy tracking with carrier/agent FKs, covered_properties M2M, policyholders through model |
 | **legal** | LegalMatter, Evidence | Case status, attorneys (M2M), evidence, related stakeholders/properties |
 | **tasks** | Task, FollowUp, SubTask | Deadlines, priorities, follow-ups, subtask checklists; bidirectional direction; multi-stakeholder M2M; meetings with time; kanban board; recurring tasks; grouped views |
 | **cashflow** | CashFlowEntry | Actual + projected inflows/outflows with category filtering and charts |
@@ -121,7 +121,7 @@ Seven Django apps, all relationally linked:
 - **Currency**: `django.contrib.humanize` `intcomma` filter everywhere
 
 ### Editable Choices (DB-backed dropdowns)
-- `ChoiceOption` model in `dashboard/models.py` — 4 categories: `entity_type`, `contact_method`, `matter_type`, `note_type`
+- `ChoiceOption` model in `dashboard/models.py` — 5 categories: `entity_type`, `contact_method`, `matter_type`, `note_type`, `policy_type`
 - `dashboard/choices.py`: `get_choices(category)` (cached), `get_choice_label(category, value)`, `invalidate_choice_cache()`
 - Template: `{% load choice_labels %}` then `{{ value|choice_label:"category" }}`
 - Status/workflow fields (task status, priority, direction) are NOT DB-backed — their values are in business logic
@@ -138,6 +138,14 @@ Seven Django apps, all relationally linked:
 - Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty` — each stores percentage and role
 - HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern)
 - Create forms include optional "Initial Owner/Participant" fields, hidden on edit via `get_form()` field deletion
+
+### Insurance Policy Tracking
+- `InsurancePolicy`: `policy_type` (DB-backed ChoiceOption), `status` (hardcoded: active/expired/cancelled/pending), carrier/agent FKs → Stakeholder
+- `PolicyHolder` through model (role, notes — no percentage); `covered_properties` M2M → RealEstate
+- Integrated into unified `/assets/` page as "policies" asset type; "Insurance" seed tab
+- HTMX inline policyholder add/delete on detail page; inline status editing on list
+- Graph shows octagon nodes (prefix `ins-`) for carrier, agent, and policyholder edges
+- Notes link via `related_policies` M2M; property detail shows linked policies
 
 ### Task System
 - `Task.direction`: `personal`/`outbound`/`inbound` — NOT a DB-backed ChoiceOption

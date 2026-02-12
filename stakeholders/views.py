@@ -468,6 +468,23 @@ def relationship_graph_data(request, pk):
         add_node(f"t-{task.pk}", task.title, "Task", "star", task.get_absolute_url())
         edges.append({"source": f"s-{center.pk}", "target": f"t-{task.pk}", "label": task.get_priority_display()})
 
+    # Insurance policies (as carrier, agent, or policyholder)
+    from assets.models import InsurancePolicy, PolicyHolder
+    for holder in PolicyHolder.objects.filter(stakeholder=center).select_related("policy"):
+        pol = holder.policy
+        add_node(f"ins-{pol.pk}", pol.name, "Insurance Policy", "octagon", pol.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"ins-{pol.pk}", "label": holder.role or "policyholder"})
+
+    for pol in InsurancePolicy.objects.filter(carrier=center):
+        node_id = f"ins-{pol.pk}"
+        add_node(node_id, pol.name, "Insurance Policy", "octagon", pol.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": node_id, "label": "carrier"})
+
+    for pol in InsurancePolicy.objects.filter(agent=center):
+        node_id = f"ins-{pol.pk}"
+        add_node(node_id, pol.name, "Insurance Policy", "octagon", pol.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": node_id, "label": "agent"})
+
     return JsonResponse({"nodes": list(nodes.values()), "edges": edges})
 
 

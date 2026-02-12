@@ -4,10 +4,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from .forms import (AssetTabForm, InvestmentForm, InvestmentParticipantForm, LoanForm,
-                     LoanPartyForm, PropertyOwnershipForm, RealEstateForm)
-from .models import (AssetTab, Investment, InvestmentParticipant, Loan, LoanParty,
-                     PropertyOwnership, RealEstate)
+from .forms import (AssetTabForm, InsurancePolicyForm, InvestmentForm, InvestmentParticipantForm,
+                     LoanForm, LoanPartyForm, PolicyHolderForm, PropertyOwnershipForm, RealEstateForm)
+from .models import (AssetTab, InsurancePolicy, Investment, InvestmentParticipant, Loan, LoanParty,
+                     PolicyHolder, PropertyOwnership, RealEstate)
 
 
 # --- Asset Tab Config ---
@@ -15,7 +15,7 @@ from .models import (AssetTab, Investment, InvestmentParticipant, Loan, LoanPart
 def _get_asset_tab_config():
     """Build dynamic tab config from AssetTab + computed Other tab."""
     tabs = list(AssetTab.objects.all())
-    all_types = {"properties", "investments", "loans"}
+    all_types = {"properties", "investments", "loans", "policies"}
 
     # Collect asset_types claimed by non-builtin tabs
     claimed = set()
@@ -30,6 +30,7 @@ def _get_asset_tab_config():
         "properties": RealEstate.objects.count(),
         "investments": Investment.objects.count(),
         "loans": Loan.objects.count(),
+        "policies": InsurancePolicy.objects.count(),
     }
 
     result = []
@@ -86,7 +87,7 @@ def asset_list(request):
         "search_query": q,
         "current_sort": sort,
         "current_dir": request.GET.get("dir", ""),
-        "total_count": counts["properties"] + counts["investments"] + counts["loans"],
+        "total_count": counts["properties"] + counts["investments"] + counts["loans"] + counts["policies"],
     }
 
     if "properties" in current_asset_types:
@@ -139,12 +140,36 @@ def asset_list(request):
         ctx["loans"] = qs
         ctx["loan_status_choices"] = Loan.STATUS_CHOICES
 
+    if "policies" in current_asset_types:
+        qs = InsurancePolicy.objects.select_related("carrier").all()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        statuses = [s for s in request.GET.getlist("status") if s]
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(expiration_date__gte=date_from)
+        date_to = request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(expiration_date__lte=date_to)
+        if len(current_asset_types) == 1:
+            ALLOWED_SORTS = {"name", "status", "premium_amount", "expiration_date"}
+            if sort in ALLOWED_SORTS:
+                qs = qs.order_by(f"{direction}{sort}")
+        ctx["policies"] = qs
+        ctx["policy_status_choices"] = InsurancePolicy.STATUS_CHOICES
+
     ctx["hide_checkboxes"] = len(current_asset_types) > 1
 
     # For status filters / date filters in single-type tabs
     if len(current_asset_types) == 1:
-        if current_asset_types[0] in ("properties", "loans"):
-            ctx["status_choices"] = ctx.get("property_status_choices") or ctx.get("loan_status_choices", [])
+        if current_asset_types[0] in ("properties", "loans", "policies"):
+            ctx["status_choices"] = (
+                ctx.get("property_status_choices")
+                or ctx.get("loan_status_choices")
+                or ctx.get("policy_status_choices", [])
+            )
             ctx["selected_statuses"] = [s for s in request.GET.getlist("status") if s]
             ctx["date_from"] = request.GET.get("date_from", "")
             ctx["date_to"] = request.GET.get("date_to", "")
@@ -423,6 +448,7 @@ class RealEstateDetailView(DetailView):
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
         ctx["notes"] = obj.notes.all()[:5]
         ctx["cash_flow_entries"] = obj.cash_flow_entries.all()[:10]
+        ctx["insurance_policies"] = obj.insurance_policies.all()
         return ctx
 
 
@@ -802,3 +828,220 @@ def loan_party_delete(request, pk):
         party.delete()
     return render(request, "assets/partials/_party_list.html",
                   {"parties": loan.parties.select_related("stakeholder").all(), "loan": loan})
+
+
+# --- Insurance Policies ---
+
+class InsurancePolicyListView(ListView):
+    model = InsurancePolicy
+    template_name = "assets/policy_list.html"
+    context_object_name = "policies"
+    paginate_by = 25
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related("carrier")
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        statuses = [s for s in self.request.GET.getlist("status") if s]
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        ALLOWED_SORTS = {"name", "status", "premium_amount", "expiration_date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["search_query"] = self.request.GET.get("q", "")
+        ctx["status_choices"] = InsurancePolicy.STATUS_CHOICES
+        ctx["selected_statuses"] = self.request.GET.getlist("status")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
+        return ctx
+
+
+class InsurancePolicyCreateView(CreateView):
+    model = InsurancePolicy
+    form_class = InsurancePolicyForm
+    template_name = "assets/policy_form.html"
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        stakeholder = form.cleaned_data.get("initial_stakeholder")
+        if stakeholder:
+            PolicyHolder.objects.create(
+                policy=self.object,
+                stakeholder=stakeholder,
+                role=form.cleaned_data.get("initial_role", ""),
+            )
+        messages.success(self.request, "Insurance policy created.")
+        return response
+
+
+class InsurancePolicyDetailView(DetailView):
+    model = InsurancePolicy
+    template_name = "assets/policy_detail.html"
+    context_object_name = "policy"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["policyholders"] = self.object.policyholders.select_related("stakeholder").all()
+        ctx["covered_properties"] = self.object.covered_properties.all()
+        ctx["notes"] = self.object.notes.all()[:5]
+        return ctx
+
+
+class InsurancePolicyUpdateView(UpdateView):
+    model = InsurancePolicy
+    form_class = InsurancePolicyForm
+    template_name = "assets/policy_form.html"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        del form.fields["initial_stakeholder"]
+        del form.fields["initial_role"]
+        return form
+
+    def form_valid(self, form):
+        messages.success(self.request, "Insurance policy updated.")
+        return super().form_valid(form)
+
+
+class InsurancePolicyDeleteView(DeleteView):
+    model = InsurancePolicy
+    template_name = "partials/_confirm_delete.html"
+    success_url = reverse_lazy("assets:policy_list")
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Policy "{self.object}" deleted.')
+        return super().form_valid(form)
+
+
+def inline_update_policy_status(request, pk):
+    policy = get_object_or_404(InsurancePolicy, pk=pk)
+    status = request.POST.get("status", "")
+    valid = [s[0] for s in InsurancePolicy.STATUS_CHOICES]
+    if status not in valid:
+        return HttpResponseBadRequest("Invalid status")
+    policy.status = status
+    policy.save(update_fields=["status"])
+    return render(request, "assets/partials/_policy_row.html", {"policy": policy})
+
+
+def export_policy_csv(request):
+    from legacy.export import export_csv as do_export
+    from dashboard.choices import get_choice_label
+    qs = InsurancePolicy.objects.select_related("carrier").all()
+    for p in qs:
+        p._carrier_name = p.carrier.name if p.carrier else ""
+        p._policy_type_label = get_choice_label("policy_type", p.policy_type)
+    fields = [
+        ("name", "Name"),
+        ("policy_number", "Policy Number"),
+        ("_policy_type_label", "Type"),
+        ("_carrier_name", "Carrier"),
+        ("premium_amount", "Premium"),
+        ("premium_frequency", "Frequency"),
+        ("status", "Status"),
+        ("effective_date", "Effective Date"),
+        ("expiration_date", "Expiration Date"),
+    ]
+    return do_export(qs, fields, "insurance_policies")
+
+
+def bulk_export_policy_csv(request):
+    from legacy.export import export_csv as do_export
+    from dashboard.choices import get_choice_label
+    pks = request.GET.getlist("selected")
+    qs = InsurancePolicy.objects.filter(pk__in=pks) if pks else InsurancePolicy.objects.none()
+    qs = qs.select_related("carrier")
+    for p in qs:
+        p._carrier_name = p.carrier.name if p.carrier else ""
+        p._policy_type_label = get_choice_label("policy_type", p.policy_type)
+    fields = [
+        ("name", "Name"),
+        ("policy_number", "Policy Number"),
+        ("_policy_type_label", "Type"),
+        ("_carrier_name", "Carrier"),
+        ("premium_amount", "Premium"),
+        ("status", "Status"),
+        ("expiration_date", "Expiration Date"),
+    ]
+    return do_export(qs, fields, "insurance_policies_selected")
+
+
+def export_pdf_policy_detail(request, pk):
+    from legacy.pdf_export import render_pdf
+    from dashboard.choices import get_choice_label
+    p = get_object_or_404(InsurancePolicy.objects.select_related("carrier", "agent"), pk=pk)
+    sections = [
+        {"heading": "Policy Information", "type": "info", "rows": [
+            ("Policy Number", p.policy_number or "N/A"),
+            ("Type", get_choice_label("policy_type", p.policy_type)),
+            ("Status", p.get_status_display()),
+            ("Carrier", p.carrier.name if p.carrier else "N/A"),
+            ("Agent", p.agent.name if p.agent else "N/A"),
+            ("Premium", f"${p.premium_amount:,.2f} ({p.get_premium_frequency_display()})" if p.premium_amount else "N/A"),
+            ("Deductible", f"${p.deductible:,.2f}" if p.deductible else "N/A"),
+            ("Coverage Limit", f"${p.coverage_limit:,.0f}" if p.coverage_limit else "N/A"),
+            ("Effective Date", p.effective_date.strftime("%b %d, %Y") if p.effective_date else "N/A"),
+            ("Expiration Date", p.expiration_date.strftime("%b %d, %Y") if p.expiration_date else "N/A"),
+            ("Auto Renew", "Yes" if p.auto_renew else "No"),
+        ]},
+    ]
+    holders = p.policyholders.select_related("stakeholder").all()
+    if holders:
+        sections.append({"heading": "Policyholders", "type": "table",
+                         "headers": ["Name", "Role"],
+                         "rows": [[h.stakeholder.name, h.role or "-"] for h in holders]})
+    props = p.covered_properties.all()
+    if props:
+        sections.append({"heading": "Covered Properties", "type": "table",
+                         "headers": ["Name", "Address"],
+                         "rows": [[pr.name, pr.address] for pr in props]})
+    if p.notes_text:
+        sections.append({"heading": "Notes", "type": "text", "content": p.notes_text})
+    return render_pdf(request, f"policy-{p.pk}", p.name,
+                      f"Insurance Policy — {p.get_status_display()}", sections)
+
+
+def bulk_delete_policy(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = InsurancePolicy.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("assets:policy_bulk_delete"),
+            })
+        InsurancePolicy.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} policy(ies) deleted.")
+    return redirect("assets:policy_list")
+
+
+def policyholder_add(request, pk):
+    policy = get_object_or_404(InsurancePolicy, pk=pk)
+    if request.method == "POST":
+        form = PolicyHolderForm(request.POST)
+        if form.is_valid():
+            holder = form.save(commit=False)
+            holder.policy = policy
+            holder.save()
+            return render(request, "assets/partials/_policyholder_list.html",
+                          {"policyholders": policy.policyholders.select_related("stakeholder").all(), "policy": policy})
+    else:
+        form = PolicyHolderForm()
+    return render(request, "assets/partials/_policyholder_form.html",
+                  {"form": form, "policy": policy})
+
+
+def policyholder_delete(request, pk):
+    holder = get_object_or_404(PolicyHolder, pk=pk)
+    policy = holder.policy
+    if request.method == "POST":
+        holder.delete()
+    return render(request, "assets/partials/_policyholder_list.html",
+                  {"policyholders": policy.policyholders.select_related("stakeholder").all(), "policy": policy})
