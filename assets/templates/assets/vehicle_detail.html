@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ vehicle.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'assets:vehicle_list' %}" class="hover:text-gray-300">Vehicles</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ vehicle.name }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ vehicle.name }}</h1>
+        {% if vehicle.vin %}<p class="text-sm text-gray-400 mt-1">VIN: {{ vehicle.vin }}</p>{% endif %}
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'assets:vehicle_export_pdf' vehicle.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'assets:vehicle_edit' vehicle.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'assets:vehicle_delete' vehicle.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Value</p>
+        <p class="text-xl font-bold text-green-400 mt-1">${{ vehicle.estimated_value|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if vehicle.status == 'active' %}text-green-300{% elif vehicle.status == 'in_dispute' %}text-red-300{% elif vehicle.status == 'stored' %}text-yellow-300{% else %}text-gray-200{% endif %}">{{ vehicle.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Type</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ vehicle.vehicle_type|choice_label:"vehicle_type" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Mileage</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{% if vehicle.mileage %}{{ vehicle.mileage|intcomma }} mi{% else %}N/A{% endif %}</p>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Vehicle Details</p>
+    </div>
+    <div class="px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+        <div>
+            <span class="text-xs text-gray-500">Year</span>
+            <p class="text-sm text-gray-200">{{ vehicle.year|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Make / Model</span>
+            <p class="text-sm text-gray-200">{{ vehicle.make|default:"" }} {{ vehicle.model_name|default:"" }}{% if not vehicle.make and not vehicle.model_name %}N/A{% endif %}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Color</span>
+            <p class="text-sm text-gray-200">{{ vehicle.color|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">License Plate</span>
+            <p class="text-sm text-gray-200">{{ vehicle.license_plate|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Registration State</span>
+            <p class="text-sm text-gray-200">{{ vehicle.registration_state|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Acquisition Date</span>
+            <p class="text-sm text-gray-200">{{ vehicle.acquisition_date|date:"M j, Y"|default:"N/A" }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Owners</p>
+        <button hx-get="{% url 'assets:vehicle_owner_add' vehicle.pk %}"
+                hx-target="#owner-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Owner</button>
+    </div>
+    <div id="owner-form-container"></div>
+    <div id="owner-list">
+        {% include "assets/partials/_vehicle_owner_list.html" with owners=vehicle.owners.all %}
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Insurance Policies</p>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for pol in insurance_policies %}
+        <a href="{{ pol.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <div class="flex-1">
+                <span class="text-sm text-gray-200">{{ pol.name }}</span>
+                {% if pol.policy_number %}<span class="text-xs text-gray-400 ml-1">#{{ pol.policy_number }}</span>{% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-medium text-green-400">${{ pol.premium_amount|floatformat:0|intcomma|default:"--" }}</span>
+                <span class="text-xs px-2 py-0.5 rounded-full {% if pol.status == 'active' %}bg-green-900/50 text-green-300{% elif pol.status == 'expired' or pol.status == 'cancelled' %}bg-red-900/50 text-red-300{% elif pol.status == 'pending' %}bg-yellow-900/50 text-yellow-300{% else %}bg-gray-700 text-gray-300{% endif %}">{{ pol.get_status_display }}</span>
+            </div>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No insurance policies linked to this vehicle</p>
+        {% endfor %}
+    </div>
+</div>
+
+{% if vehicle.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Internal Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ vehicle.notes_text }}</p>
+</div>
+{% endif %}
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Linked Notes</h2>
+        <a href="{% url 'notes:create' %}?vehicle={{ vehicle.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for note in notes %}
+        <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ note.title }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

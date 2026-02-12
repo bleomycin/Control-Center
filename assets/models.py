@@ -8,6 +8,8 @@ class AssetTab(models.Model):
         ("investments", "Investments"),
         ("loans", "Loans"),
         ("policies", "Policies"),
+        ("vehicles", "Vehicles"),
+        ("aircraft", "Aircraft"),
     ]
 
     key = models.SlugField(max_length=50, unique=True)
@@ -247,6 +249,12 @@ class InsurancePolicy(models.Model):
     covered_properties = models.ManyToManyField(
         RealEstate, blank=True, related_name="insurance_policies",
     )
+    covered_vehicles = models.ManyToManyField(
+        "Vehicle", blank=True, related_name="insurance_policies",
+    )
+    covered_aircraft = models.ManyToManyField(
+        "Aircraft", blank=True, related_name="insurance_policies",
+    )
     stakeholders = models.ManyToManyField(
         "stakeholders.Stakeholder",
         through="PolicyHolder",
@@ -284,3 +292,130 @@ class PolicyHolder(models.Model):
     def __str__(self):
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{role}"
+
+
+class Vehicle(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("stored", "Stored"),
+        ("sold", "Sold"),
+        ("in_dispute", "In Dispute"),
+    ]
+
+    name = models.CharField(max_length=255)
+    vin = models.CharField("VIN", max_length=50, blank=True)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    make = models.CharField(max_length=100, blank=True)
+    model_name = models.CharField("Model", max_length=100, blank=True)
+    vehicle_type = models.CharField(max_length=30, default="other")
+    color = models.CharField(max_length=50, blank=True)
+    license_plate = models.CharField(max_length=20, blank=True)
+    registration_state = models.CharField(max_length=50, blank=True)
+    mileage = models.PositiveIntegerField(null=True, blank=True)
+    estimated_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    acquisition_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    stakeholders = models.ManyToManyField(
+        "stakeholders.Stakeholder",
+        through="VehicleOwner",
+        related_name="vehicles",
+        blank=True,
+    )
+    notes_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("assets:vehicle_detail", kwargs={"pk": self.pk})
+
+    class Meta:
+        ordering = ["name"]
+
+
+class VehicleOwner(models.Model):
+    """Through model for Vehicle-Stakeholder M2M with ownership details."""
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE, related_name="owners")
+    stakeholder = models.ForeignKey("stakeholders.Stakeholder", on_delete=models.CASCADE, related_name="vehicle_ownerships")
+    ownership_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Ownership percentage (e.g., 50.00 for 50%)"
+    )
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name_plural = "Vehicle owners"
+        ordering = ["-ownership_percentage", "stakeholder__name"]
+
+    def __str__(self):
+        percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
+        role = f" - {self.role}" if self.role else ""
+        return f"{self.stakeholder.name}{percentage}{role}"
+
+
+class Aircraft(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("in_maintenance", "In Maintenance"),
+        ("stored", "Stored"),
+        ("sold", "Sold"),
+        ("in_dispute", "In Dispute"),
+    ]
+
+    name = models.CharField(max_length=255)
+    tail_number = models.CharField("Tail Number", max_length=20, blank=True)
+    serial_number = models.CharField(max_length=100, blank=True)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    make = models.CharField(max_length=100, blank=True)
+    model_name = models.CharField("Model", max_length=100, blank=True)
+    aircraft_type = models.CharField(max_length=30, default="single_engine")
+    num_engines = models.PositiveSmallIntegerField(null=True, blank=True)
+    base_airport = models.CharField("Base Airport", max_length=10, blank=True)
+    total_hours = models.DecimalField("Total Hours", max_digits=10, decimal_places=1, null=True, blank=True)
+    estimated_value = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    acquisition_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    registration_country = models.CharField(max_length=50, blank=True, default="US")
+    stakeholders = models.ManyToManyField(
+        "stakeholders.Stakeholder",
+        through="AircraftOwner",
+        related_name="aircraft_owned",
+        blank=True,
+    )
+    notes_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("assets:aircraft_detail", kwargs={"pk": self.pk})
+
+    class Meta:
+        verbose_name_plural = "Aircraft"
+        ordering = ["name"]
+
+
+class AircraftOwner(models.Model):
+    """Through model for Aircraft-Stakeholder M2M with ownership details."""
+    aircraft = models.ForeignKey(Aircraft, on_delete=models.CASCADE, related_name="owners")
+    stakeholder = models.ForeignKey("stakeholders.Stakeholder", on_delete=models.CASCADE, related_name="aircraft_ownerships")
+    ownership_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True,
+        help_text="Ownership percentage (e.g., 50.00 for 50%)"
+    )
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner, Operator")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name_plural = "Aircraft owners"
+        ordering = ["-ownership_percentage", "stakeholder__name"]
+
+    def __str__(self):
+        percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
+        role = f" - {self.role}" if self.role else ""
+        return f"{self.stakeholder.name}{percentage}{role}"

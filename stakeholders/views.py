@@ -196,11 +196,13 @@ class StakeholderDetailView(DetailView):
         ctx["all_notes"] = obj.notes.all()
         ctx["all_legal_matters"] = obj.legal_matters.all()
 
-        # Properties, investments, loans via through models
-        from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty
+        # Properties, investments, loans, vehicles, aircraft via through models
+        from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty, VehicleOwner, AircraftOwner
         ctx["property_ownerships"] = PropertyOwnership.objects.filter(stakeholder=obj).select_related("property")
         ctx["investment_participants"] = InvestmentParticipant.objects.filter(stakeholder=obj).select_related("investment")
         ctx["loan_parties"] = LoanParty.objects.filter(stakeholder=obj).select_related("loan")
+        ctx["vehicle_ownerships"] = VehicleOwner.objects.filter(stakeholder=obj).select_related("vehicle")
+        ctx["aircraft_ownerships"] = AircraftOwner.objects.filter(stakeholder=obj).select_related("aircraft")
         ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
 
         # Firm/employee hierarchy
@@ -217,6 +219,8 @@ class StakeholderDetailView(DetailView):
             "properties": ctx["property_ownerships"].count(),
             "investments": ctx["investment_participants"].count(),
             "loans": ctx["loan_parties"].count(),
+            "vehicles": ctx["vehicle_ownerships"].count(),
+            "aircraft": ctx["aircraft_ownerships"].count(),
             "legal_matters": ctx["all_legal_matters"].count(),
             "tasks": ctx["all_tasks"].count(),
             "notes": ctx["all_notes"].count(),
@@ -467,6 +471,24 @@ def relationship_graph_data(request, pk):
     for task in center.tasks.filter(priority__in=["critical", "high"]).exclude(status="complete")[:5]:
         add_node(f"t-{task.pk}", task.title, "Task", "star", task.get_absolute_url())
         edges.append({"source": f"s-{center.pk}", "target": f"t-{task.pk}", "label": task.get_priority_display()})
+
+    # Vehicles (via ownership)
+    for vo in center.vehicle_ownerships.all():
+        v = vo.vehicle
+        add_node(f"v-{v.pk}", v.name, "Vehicle", "pentagon", v.get_absolute_url())
+        label = vo.role or "owns"
+        if vo.ownership_percentage:
+            label += f" ({vo.ownership_percentage}%)"
+        edges.append({"source": f"s-{center.pk}", "target": f"v-{v.pk}", "label": label})
+
+    # Aircraft (via ownership)
+    for ao in center.aircraft_ownerships.all():
+        ac = ao.aircraft
+        add_node(f"ac-{ac.pk}", ac.name, "Aircraft", "vee", ac.get_absolute_url())
+        label = ao.role or "owns"
+        if ao.ownership_percentage:
+            label += f" ({ao.ownership_percentage}%)"
+        edges.append({"source": f"s-{center.pk}", "target": f"ac-{ac.pk}", "label": label})
 
     # Insurance policies (as carrier, agent, or policyholder)
     from assets.models import InsurancePolicy, PolicyHolder

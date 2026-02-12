@@ -2,8 +2,9 @@ from django import forms
 from legacy.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from stakeholders.models import Stakeholder
-from .models import (AssetTab, InsurancePolicy, Investment, Loan, LoanParty,
-                     PolicyHolder, PropertyOwnership, RealEstate, InvestmentParticipant)
+from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
+                     Loan, LoanParty, PolicyHolder, PropertyOwnership, RealEstate,
+                     InvestmentParticipant, Vehicle, VehicleOwner)
 
 
 class AssetTabForm(TailwindFormMixin, forms.Form):
@@ -139,7 +140,7 @@ class InsurancePolicyForm(TailwindFormMixin, forms.ModelForm):
         "carrier", "agent",
         "premium_amount", "premium_frequency", "deductible", "coverage_limit",
         "effective_date", "expiration_date", "auto_renew",
-        "covered_properties", "notes_text",
+        "covered_properties", "covered_vehicles", "covered_aircraft", "notes_text",
         "initial_stakeholder", "initial_role",
     ]
 
@@ -150,12 +151,14 @@ class InsurancePolicyForm(TailwindFormMixin, forms.ModelForm):
             "carrier", "agent",
             "premium_amount", "premium_frequency", "deductible", "coverage_limit",
             "effective_date", "expiration_date", "auto_renew",
-            "covered_properties", "notes_text",
+            "covered_properties", "covered_vehicles", "covered_aircraft", "notes_text",
         ]
         widgets = {
             "effective_date": forms.DateInput(attrs={"type": "date"}),
             "expiration_date": forms.DateInput(attrs={"type": "date"}),
             "covered_properties": forms.SelectMultiple(attrs={"size": 4}),
+            "covered_vehicles": forms.SelectMultiple(attrs={"size": 4}),
+            "covered_aircraft": forms.SelectMultiple(attrs={"size": 4}),
             "notes_text": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -168,6 +171,84 @@ class PolicyHolderForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = PolicyHolder
         fields = ["stakeholder", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class VehicleForm(TailwindFormMixin, forms.ModelForm):
+    initial_stakeholder = forms.ModelChoiceField(
+        queryset=Stakeholder.objects.all(), required=False, label="Initial Owner",
+    )
+    initial_role = forms.CharField(max_length=100, required=False, label="Role")
+    initial_percentage = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Ownership %",
+    )
+
+    field_order = ["name", "vin", "year", "make", "model_name", "vehicle_type",
+                   "color", "license_plate", "registration_state", "mileage",
+                   "estimated_value", "acquisition_date", "status", "notes_text",
+                   "initial_stakeholder", "initial_role", "initial_percentage"]
+
+    class Meta:
+        model = Vehicle
+        fields = ["name", "vin", "year", "make", "model_name", "vehicle_type",
+                  "color", "license_plate", "registration_state", "mileage",
+                  "estimated_value", "acquisition_date", "status", "notes_text"]
+        widgets = {
+            "acquisition_date": forms.DateInput(attrs={"type": "date"}),
+            "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["vehicle_type"].widget = forms.Select(choices=get_choices("vehicle_type"))
+
+
+class VehicleOwnerForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = VehicleOwner
+        fields = ["stakeholder", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class AircraftForm(TailwindFormMixin, forms.ModelForm):
+    initial_stakeholder = forms.ModelChoiceField(
+        queryset=Stakeholder.objects.all(), required=False, label="Initial Owner",
+    )
+    initial_role = forms.CharField(max_length=100, required=False, label="Role")
+    initial_percentage = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Ownership %",
+    )
+
+    field_order = ["name", "tail_number", "serial_number", "year", "make", "model_name",
+                   "aircraft_type", "num_engines", "base_airport", "total_hours",
+                   "estimated_value", "acquisition_date", "status",
+                   "registration_country", "notes_text",
+                   "initial_stakeholder", "initial_role", "initial_percentage"]
+
+    class Meta:
+        model = Aircraft
+        fields = ["name", "tail_number", "serial_number", "year", "make", "model_name",
+                  "aircraft_type", "num_engines", "base_airport", "total_hours",
+                  "estimated_value", "acquisition_date", "status",
+                  "registration_country", "notes_text"]
+        widgets = {
+            "acquisition_date": forms.DateInput(attrs={"type": "date"}),
+            "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["aircraft_type"].widget = forms.Select(choices=get_choices("aircraft_type"))
+
+
+class AircraftOwnerForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = AircraftOwner
+        fields = ["stakeholder", "ownership_percentage", "role", "notes"]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 2}),
         }

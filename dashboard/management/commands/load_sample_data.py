@@ -9,7 +9,10 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from stakeholders.models import Stakeholder, Relationship, ContactLog
-from assets.models import InsurancePolicy, PolicyHolder, RealEstate, Investment, Loan
+from assets.models import (
+    Aircraft, AircraftOwner, InsurancePolicy, Investment, Loan,
+    PolicyHolder, RealEstate, Vehicle, VehicleOwner,
+)
 from legal.models import LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
@@ -313,6 +316,79 @@ class Command(BaseCommand):
             )
             insurance_policies[name] = pol
             policy_pks.append(pol.pk)
+
+        self.stdout.write("Creating vehicles...")
+        vehicles = {}
+        vehicle_data = [
+            ("2023 Ford F-150 Lariat", "1FTFW1E85NFA00001", 2023, "Ford", "F-150 Lariat",
+             "truck", "White", "ABC-1234", "TX", 12500, Decimal("45000.00"),
+             today - timedelta(days=365), "active",
+             "Primary truck. Loan through credit union.", []),
+            ("2021 Toyota Land Cruiser", "JTDKN3DU5M1000002", 2021, "Toyota", "Land Cruiser",
+             "suv", "Black", "XYZ-5678", "TX", 34000, Decimal("72000.00"),
+             today - timedelta(days=730), "active",
+             "Family SUV. Paid off.", []),
+            ("2019 Harley-Davidson Road King", "1HD1FBV19KB000003", 2019, "Harley-Davidson", "Road King",
+             "motorcycle", "Black", "", "TX", 8200, Decimal("18500.00"),
+             today - timedelta(days=1460), "stored",
+             "In storage at home garage. Seasonal use only.", []),
+            ("2022 Sea Ray 250 SLX", "SERV2500A222000004", 2022, "Sea Ray", "250 SLX",
+             "boat", "", "", "TX", None, Decimal("95000.00"),
+             today - timedelta(days=900), "active",
+             "Docked at Lake Travis Marina. Co-owned 50/50 with Tom Driscoll.",
+             [("Tom Driscoll", Decimal("50.00"), "Co-owner")]),
+        ]
+        for name, vin, year, make, model_name, vtype, color, plate, state, miles, val, acq, status, notes, owners in vehicle_data:
+            v = Vehicle.objects.create(
+                name=name, vin=vin, year=year, make=make, model_name=model_name,
+                vehicle_type=vtype, color=color, license_plate=plate,
+                registration_state=state, mileage=miles, estimated_value=val,
+                acquisition_date=acq, status=status, notes_text=notes,
+            )
+            vehicles[name] = v
+            for owner_name, percentage, role in owners:
+                VehicleOwner.objects.create(
+                    vehicle=v, stakeholder=stakeholders[owner_name],
+                    ownership_percentage=percentage, role=role,
+                )
+
+        # Link auto policy to all vehicles
+        auto_policy = insurance_policies.get("Auto Policy - Fleet")
+        if auto_policy:
+            for v in vehicles.values():
+                auto_policy.covered_vehicles.add(v)
+
+        self.stdout.write("Creating aircraft...")
+        aircraft_dict = {}
+        aircraft_data = [
+            ("N172SP — Cessna 172 Skyhawk", "N172SP", "", 1998, "Cessna", "172 Skyhawk",
+             "single_engine", 1, "KAUS", Decimal("1245.6"), Decimal("285000.00"),
+             today - timedelta(days=1825), "active", "US",
+             "Primary trainer/personal aircraft. Based at Austin-Bergstrom.", []),
+            ("N525BL — Cessna Citation CJ3+", "N525BL", "525B-0601", 2018, "Cessna", "Citation CJ3+",
+             "jet", 2, "KAUS", Decimal("3420.0"), Decimal("6200000.00"),
+             today - timedelta(days=1095), "active", "US",
+             "Business jet. Co-owned 75/25 with Nina Patel.",
+             [("Nina Patel", Decimal("25.00"), "Co-owner")]),
+            ("N44RH — Robinson R44 Raven II", "N44RH", "13876", 2015, "Robinson", "R44 Raven II",
+             "helicopter", 1, "KAUS", Decimal("2180.3"), Decimal("320000.00"),
+             today - timedelta(days=2190), "in_maintenance", "US",
+             "In maintenance for 2200-hour overhaul. Expected back in 6 weeks.", []),
+        ]
+        for name, tail, serial, year, make, model_name, atype, engines, airport, hours, val, acq, status, country, notes, owners in aircraft_data:
+            ac = Aircraft.objects.create(
+                name=name, tail_number=tail, serial_number=serial, year=year,
+                make=make, model_name=model_name, aircraft_type=atype,
+                num_engines=engines, base_airport=airport, total_hours=hours,
+                estimated_value=val, acquisition_date=acq, status=status,
+                registration_country=country, notes_text=notes,
+            )
+            aircraft_dict[name] = ac
+            for owner_name, percentage, role in owners:
+                AircraftOwner.objects.create(
+                    aircraft=ac, stakeholder=stakeholders[owner_name],
+                    ownership_percentage=percentage, role=role,
+                )
 
         self.stdout.write("Creating legal matters...")
         legal_matters = {}
@@ -822,6 +898,18 @@ class Command(BaseCommand):
                     policy__pk__in=policy_pks
                 ).values_list("pk", flat=True)
             ),
+            "assets.vehicle": [v.pk for v in vehicles.values()],
+            "assets.vehicleowner": list(
+                VehicleOwner.objects.filter(
+                    vehicle__in=vehicles.values()
+                ).values_list("pk", flat=True)
+            ),
+            "assets.aircraft": [ac.pk for ac in aircraft_dict.values()],
+            "assets.aircraftowner": list(
+                AircraftOwner.objects.filter(
+                    aircraft__in=aircraft_dict.values()
+                ).values_list("pk", flat=True)
+            ),
             "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
             "legal.evidence": list(
                 Evidence.objects.filter(
@@ -856,6 +944,8 @@ class Command(BaseCommand):
             f"  Investments:    {len(manifest['assets.investment'])}\n"
             f"  Loans:          {len(manifest['assets.loan'])}\n"
             f"  Policies:       {len(manifest['assets.insurancepolicy'])}\n"
+            f"  Vehicles:       {len(manifest['assets.vehicle'])}\n"
+            f"  Aircraft:       {len(manifest['assets.aircraft'])}\n"
             f"  Legal Matters:  {len(manifest['legal.legalmatter'])}\n"
             f"  Evidence:       {len(manifest['legal.evidence'])}\n"
             f"  Tasks:          {len(manifest['tasks.task'])}\n"
