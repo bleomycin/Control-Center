@@ -32,4 +32,13 @@ SEED_DATA = [
     ("note_type", "research", "Research", 3),
     ("note_type", "legal_update", "Legal Update", 4),
     ("note_type", "general", "General", 5),
+    # Insurance policy types
+    ("policy_type", "auto", "Auto", 0),
+    ("policy_type", "homeowners", "Homeowners", 1),
+    ("policy_type", "commercial_property", "Commercial Property", 2),
+    ("policy_type", "aviation", "Aviation", 3),
+    ("policy_type", "umbrella", "Umbrella", 4),
+    ("policy_type", "liability", "Liability", 5),
+    ("policy_type", "life", "Life", 6),
+    ("policy_type", "general", "General", 7),
 ]

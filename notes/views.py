@@ -47,7 +47,7 @@ class NoteListView(ListView):
             "participants", "related_stakeholders",
             "related_legal_matters", "related_properties",
             "related_investments", "related_loans", "related_tasks",
-            "tags",
+            "related_policies", "tags",
         ).annotate(
             attachment_count=Count("attachments", distinct=True),
             link_count=Count("links", distinct=True),
@@ -190,6 +190,8 @@ class NoteCreateView(CreateView):
             initial["related_investments"] = [self.request.GET["investment"]]
         if self.request.GET.get("loan"):
             initial["related_loans"] = [self.request.GET["loan"]]
+        if self.request.GET.get("policy"):
+            initial["related_policies"] = [self.request.GET["policy"]]
         return initial
 
     def form_valid(self, form):
@@ -288,6 +290,11 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Related Loans", "type": "table",
                          "headers": ["Name", "Status"],
                          "rows": [[lo.name, lo.get_status_display()] for lo in loans]})
+    policies = n.related_policies.all()
+    if policies:
+        sections.append({"heading": "Related Insurance Policies", "type": "table",
+                         "headers": ["Name", "Status"],
+                         "rows": [[p.name, p.get_status_display()] for p in policies]})
     legal_matters = n.related_legal_matters.all()
     if legal_matters:
         sections.append({"heading": "Related Legal Matters", "type": "table",

@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from stakeholders.models import Stakeholder, Relationship, ContactLog
-from assets.models import RealEstate, Investment, Loan
+from assets.models import InsurancePolicy, PolicyHolder, RealEstate, Investment, Loan
 from legal.models import LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
@@ -261,6 +261,58 @@ class Command(BaseCommand):
                     loan=ln, stakeholder=stakeholders[party_name],
                     ownership_percentage=percentage, role=role
                 )
+
+        self.stdout.write("Creating insurance policies...")
+        insurance_policies = {}
+        policy_data = [
+            ("Homeowners - 1200 Oak Ave", "HOI-2024-001", "homeowners", "active",
+             "National Property Ins", None, Decimal("2400.00"), "annual",
+             Decimal("2500.00"), Decimal("500000.00"),
+             date(2024, 3, 1), date(2025, 3, 1), True,
+             ["1200 Oak Ave - Holston Duplex"], "Standard homeowners policy"),
+            ("Commercial Property - Magnolia Blvd", "CP-2024-050", "commercial_property", "active",
+             "National Property Ins", None, Decimal("8500.00"), "annual",
+             Decimal("5000.00"), Decimal("2000000.00"),
+             date(2024, 6, 15), date(2025, 6, 15), True,
+             ["Magnolia Blvd Commercial"], "Commercial building coverage"),
+            ("Umbrella Policy", "UMB-2024-100", "umbrella", "active",
+             "National Property Ins", None, Decimal("1200.00"), "annual",
+             Decimal("10000.00"), Decimal("5000000.00"),
+             date(2024, 1, 1), date(2025, 1, 1), True,
+             [], "Excess liability umbrella policy"),
+            ("Auto Policy - Fleet", "AUTO-2024-200", "auto", "active",
+             "National Property Ins", None, Decimal("3600.00"), "semi_annual",
+             Decimal("1000.00"), Decimal("300000.00"),
+             date(2024, 7, 1), date(2025, 1, 1), False,
+             [], "Blanket auto coverage for all vehicles"),
+        ]
+        # Get or create carrier stakeholder
+        carrier, created = Stakeholder.objects.get_or_create(
+            name="National Property Ins",
+            defaults={"entity_type": "lender", "email": "claims@natpropins.com",
+                      "phone": "555-800-4567", "notes_text": "Insurance carrier for property and auto policies"},
+        )
+        if created:
+            stakeholders["National Property Ins"] = carrier
+        policy_pks = []
+        for (name, policy_num, ptype, status, carrier_name, agent_name,
+             premium, freq, deductible, coverage, eff, exp, auto_renew,
+             covered_prop_names, notes) in policy_data:
+            pol = InsurancePolicy.objects.create(
+                name=name, policy_number=policy_num, policy_type=ptype,
+                status=status, carrier=carrier, premium_amount=premium,
+                premium_frequency=freq, deductible=deductible,
+                coverage_limit=coverage, effective_date=eff,
+                expiration_date=exp, auto_renew=auto_renew, notes_text=notes,
+            )
+            for pname in covered_prop_names:
+                if pname in properties:
+                    pol.covered_properties.add(properties[pname])
+            PolicyHolder.objects.create(
+                policy=pol, stakeholder=stakeholders["Tom Driscoll"], role="Named Insured",
+            )
+            insurance_policies[name] = pol
+            policy_pks.append(pol.pk)
 
         self.stdout.write("Creating legal matters...")
         legal_matters = {}
@@ -764,6 +816,12 @@ class Command(BaseCommand):
                     loan__in=loans.values()
                 ).values_list("pk", flat=True)
             ),
+            "assets.insurancepolicy": policy_pks,
+            "assets.policyholder": list(
+                PolicyHolder.objects.filter(
+                    policy__pk__in=policy_pks
+                ).values_list("pk", flat=True)
+            ),
             "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
             "legal.evidence": list(
                 Evidence.objects.filter(
@@ -797,6 +855,7 @@ class Command(BaseCommand):
             f"  Properties:     {len(manifest['assets.realestate'])}\n"
             f"  Investments:    {len(manifest['assets.investment'])}\n"
             f"  Loans:          {len(manifest['assets.loan'])}\n"
+            f"  Policies:       {len(manifest['assets.insurancepolicy'])}\n"
             f"  Legal Matters:  {len(manifest['legal.legalmatter'])}\n"
             f"  Evidence:       {len(manifest['legal.evidence'])}\n"
             f"  Tasks:          {len(manifest['tasks.task'])}\n"

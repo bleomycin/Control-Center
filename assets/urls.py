@@ -49,4 +49,17 @@ urlpatterns = [
     path("party/<int:pk>/delete/", views.loan_party_delete, name="loan_party_delete"),
     path("loans/bulk/delete/", views.bulk_delete_loan, name="loan_bulk_delete"),
     path("loans/bulk/export/", views.bulk_export_loan_csv, name="loan_bulk_export_csv"),
+    # Insurance Policies
+    path("policies/", views.InsurancePolicyListView.as_view(), name="policy_list"),
+    path("policies/<int:pk>/inline-status/", views.inline_update_policy_status, name="policy_inline_status"),
+    path("policies/export/", views.export_policy_csv, name="policy_export_csv"),
+    path("policies/create/", views.InsurancePolicyCreateView.as_view(), name="policy_create"),
+    path("policies/<int:pk>/", views.InsurancePolicyDetailView.as_view(), name="policy_detail"),
+    path("policies/<int:pk>/pdf/", views.export_pdf_policy_detail, name="policy_export_pdf"),
+    path("policies/<int:pk>/edit/", views.InsurancePolicyUpdateView.as_view(), name="policy_edit"),
+    path("policies/<int:pk>/delete/", views.InsurancePolicyDeleteView.as_view(), name="policy_delete"),
+    path("policies/<int:pk>/policyholder/add/", views.policyholder_add, name="policyholder_add"),
+    path("policyholder/<int:pk>/delete/", views.policyholder_delete, name="policyholder_delete"),
+    path("policies/bulk/delete/", views.bulk_delete_policy, name="policy_bulk_delete"),
+    path("policies/bulk/export/", views.bulk_export_policy_csv, name="policy_bulk_export_csv"),
 ]
