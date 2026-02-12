@@ -1,0 +1,24 @@
+{% load humanize %}
+<div class="divide-y divide-gray-700">
+    {% for pol in policies %}
+    <div class="flex items-center justify-between px-4 py-3 group">
+        <a href="{{ pol.get_absolute_url }}" class="flex-1 flex items-center">
+            <span class="text-sm text-blue-400 hover:text-blue-300">{{ pol.name }}</span>
+            {% if pol.policy_number %}<span class="text-xs text-gray-400 ml-1">#{{ pol.policy_number }}</span>{% endif %}
+        </a>
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-medium text-green-400">${{ pol.premium_amount|floatformat:0|intcomma|default:"--" }}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full {% if pol.status == 'active' %}bg-green-900/50 text-green-300{% elif pol.status == 'expired' or pol.status == 'cancelled' %}bg-red-900/50 text-red-300{% elif pol.status == 'pending' %}bg-yellow-900/50 text-yellow-300{% else %}bg-gray-700 text-gray-300{% endif %}">{{ pol.get_status_display }}</span>
+            <button hx-post="{% url unlink_url_name asset_pk pol.pk %}"
+                    hx-target="#policy-list"
+                    hx-swap="innerHTML"
+                    hx-confirm="Unlink this policy?"
+                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                &times;
+            </button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No insurance policies linked</p>
+    {% endfor %}
+</div>
