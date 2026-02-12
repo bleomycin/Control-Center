@@ -335,3 +335,152 @@ class AssetCreateWithInitialOwnerTests(TestCase):
         prop = RealEstate.objects.create(name="Existing", address="1 St")
         resp = self.client.get(reverse("assets:realestate_edit", args=[prop.pk]))
         self.assertNotContains(resp, "Initial Owner")
+
+
+class UnifiedAssetListTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(
+            name="Test Property", address="100 Main St",
+            estimated_value=Decimal("500000.00"), status="owned",
+        )
+        cls.inv = Investment.objects.create(
+            name="Test Investment", investment_type="equities",
+        )
+        cls.loan = Loan.objects.create(
+            name="Test Loan", status="active",
+            current_balance=Decimal("200000.00"),
+        )
+
+    def test_asset_list_default_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test Property")
+        self.assertTemplateUsed(resp, "assets/asset_list.html")
+
+    def test_asset_list_properties_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "properties"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test Property")
+
+    def test_asset_list_investments_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "investments"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test Investment")
+
+    def test_asset_list_loans_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "loans"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test Loan")
+
+    def test_asset_list_invalid_tab_defaults_to_properties(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "invalid"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Test Property")
+
+    def test_asset_list_htmx_returns_partial(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "properties"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_asset_tab_content.html")
+
+    def test_asset_list_htmx_investments(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "investments"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertContains(resp, "Test Investment")
+        self.assertTemplateUsed(resp, "assets/partials/_asset_tab_content.html")
+
+    def test_asset_list_htmx_loans(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "loans"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertContains(resp, "Test Loan")
+
+    def test_asset_list_search_properties(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "properties", "q": "Test Prop"})
+        self.assertContains(resp, "Test Property")
+
+    def test_asset_list_search_no_match(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "properties", "q": "Nonexistent"})
+        self.assertNotContains(resp, "Test Property")
+
+    def test_asset_list_filter_status(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "properties", "status": "sold"})
+        self.assertNotContains(resp, "Test Property")
+
+    def test_asset_list_tab_counts(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.context["tab_counts"]["properties"], 1)
+        self.assertEqual(resp.context["tab_counts"]["investments"], 1)
+        self.assertEqual(resp.context["tab_counts"]["loans"], 1)
+
+
+class InlineStatusUpdateTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(
+            name="Inline Prop", address="1 Test", status="owned",
+        )
+        cls.loan = Loan.objects.create(
+            name="Inline Loan", status="active",
+        )
+
+    def test_realestate_inline_status_update(self):
+        resp = self.client.post(
+            reverse("assets:realestate_inline_status", args=[self.prop.pk]),
+            {"status": "sold"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.prop.refresh_from_db()
+        self.assertEqual(self.prop.status, "sold")
+        self.assertTemplateUsed(resp, "assets/partials/_realestate_row.html")
+
+    def test_realestate_inline_status_invalid(self):
+        resp = self.client.post(
+            reverse("assets:realestate_inline_status", args=[self.prop.pk]),
+            {"status": "bogus"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_realestate_inline_status_empty(self):
+        resp = self.client.post(
+            reverse("assets:realestate_inline_status", args=[self.prop.pk]),
+            {},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_loan_inline_status_update(self):
+        resp = self.client.post(
+            reverse("assets:loan_inline_status", args=[self.loan.pk]),
+            {"status": "paid_off"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertEqual(self.loan.status, "paid_off")
+        self.assertTemplateUsed(resp, "assets/partials/_loan_row.html")
+
+    def test_loan_inline_status_invalid(self):
+        resp = self.client.post(
+            reverse("assets:loan_inline_status", args=[self.loan.pk]),
+            {"status": "bogus"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_realestate_inline_status_404(self):
+        resp = self.client.post(
+            reverse("assets:realestate_inline_status", args=[99999]),
+            {"status": "owned"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_loan_inline_status_404(self):
+        resp = self.client.post(
+            reverse("assets:loan_inline_status", args=[99999]),
+            {"status": "active"},
+        )
+        self.assertEqual(resp.status_code, 404)

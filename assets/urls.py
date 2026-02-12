@@ -4,8 +4,11 @@ from . import views
 app_name = "assets"
 
 urlpatterns = [
+    # Unified asset list
+    path("", views.asset_list, name="asset_list"),
     # Real Estate
     path("real-estate/", views.RealEstateListView.as_view(), name="realestate_list"),
+    path("real-estate/<int:pk>/inline-status/", views.inline_update_realestate_status, name="realestate_inline_status"),
     path("real-estate/export/", views.export_realestate_csv, name="realestate_export_csv"),
     path("real-estate/create/", views.RealEstateCreateView.as_view(), name="realestate_create"),
     path("real-estate/<int:pk>/", views.RealEstateDetailView.as_view(), name="realestate_detail"),
@@ -30,6 +33,7 @@ urlpatterns = [
     path("investments/bulk/export/", views.bulk_export_investment_csv, name="investment_bulk_export_csv"),
     # Loans
     path("loans/", views.LoanListView.as_view(), name="loan_list"),
+    path("loans/<int:pk>/inline-status/", views.inline_update_loan_status, name="loan_inline_status"),
     path("loans/export/", views.export_loan_csv, name="loan_export_csv"),
     path("loans/create/", views.LoanCreateView.as_view(), name="loan_create"),
     path("loans/<int:pk>/", views.LoanDetailView.as_view(), name="loan_detail"),

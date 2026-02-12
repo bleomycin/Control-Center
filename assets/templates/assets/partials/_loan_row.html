@@ -1,0 +1,24 @@
+{% load humanize %}
+<tr id="loan-row-{{ loan.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ loan.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    <td class="px-4 py-3">
+        <a href="{{ loan.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ loan.name }}</a>
+        {% if loan.borrower_description %}<p class="text-xs text-gray-400">{{ loan.borrower_description }}</p>{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">${{ loan.current_balance|floatformat:0|intcomma|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ loan.monthly_payment|floatformat:0|intcomma|default:"-" }}/mo</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ loan.next_payment_date|date:"M j"|default:"-" }}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'assets:loan_inline_status' loan.pk %}',{target:'#loan-row-{{ loan.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if loan.status == 'active' %}text-green-300
+                    {% elif loan.status == 'defaulted' or loan.status == 'in_dispute' %}text-red-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in loan.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if loan.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>

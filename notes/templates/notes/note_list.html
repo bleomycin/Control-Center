@@ -69,7 +69,7 @@
                    {% if tag.slug in selected_tags %}checked{% endif %}
                    hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
                    hx-include="#filter-form" hx-indicator="#loading-spinner"
-                   class="hidden peer">
+                   class="sr-only peer">
             <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
                          peer-checked:{{ tc.bg }} peer-checked:{{ tc.text }} peer-checked:{{ tc.border }}
                          border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500">

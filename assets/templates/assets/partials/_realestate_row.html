@@ -1,0 +1,24 @@
+{% load humanize %}
+<tr id="realestate-row-{{ prop.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ prop.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    <td class="px-4 py-3">
+        <a href="{{ prop.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ prop.name }}</a>
+        <p class="text-xs text-gray-400 truncate max-w-xs">{{ prop.address|truncatewords:8 }}</p>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ prop.property_type|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ prop.estimated_value|floatformat:0|intcomma|default:"-" }}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'assets:realestate_inline_status' prop.pk %}',{target:'#realestate-row-{{ prop.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if prop.status == 'owned' %}text-green-300
+                    {% elif prop.status == 'in_dispute' %}text-red-300
+                    {% elif prop.status == 'under_contract' %}text-yellow-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in prop.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if prop.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>

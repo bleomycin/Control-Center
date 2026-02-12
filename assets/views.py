@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
@@ -7,6 +8,113 @@ from .forms import (InvestmentForm, InvestmentParticipantForm, LoanForm,
                      LoanPartyForm, PropertyOwnershipForm, RealEstateForm)
 from .models import (Investment, InvestmentParticipant, Loan, LoanParty,
                      PropertyOwnership, RealEstate)
+
+
+# --- Unified Asset List ---
+
+def asset_list(request):
+    current_tab = request.GET.get("tab", "properties")
+    if current_tab not in ("properties", "investments", "loans"):
+        current_tab = "properties"
+
+    # Counts for tab badges
+    tab_counts = {
+        "properties": RealEstate.objects.count(),
+        "investments": Investment.objects.count(),
+        "loans": Loan.objects.count(),
+    }
+
+    q = request.GET.get("q", "").strip()
+    sort = request.GET.get("sort", "")
+    direction = "" if request.GET.get("dir") == "asc" else "-"
+
+    ctx = {
+        "current_tab": current_tab,
+        "tab_counts": tab_counts,
+        "search_query": q,
+        "current_sort": sort,
+        "current_dir": request.GET.get("dir", ""),
+    }
+
+    if current_tab == "properties":
+        qs = RealEstate.objects.all()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        statuses = [s for s in request.GET.getlist("status") if s]
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(acquisition_date__gte=date_from)
+        date_to = request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(acquisition_date__lte=date_to)
+        ALLOWED_SORTS = {"name", "status", "estimated_value", "acquisition_date"}
+        if sort in ALLOWED_SORTS:
+            qs = qs.order_by(f"{direction}{sort}")
+        ctx["properties"] = qs
+        ctx["status_choices"] = RealEstate.STATUS_CHOICES
+        ctx["selected_statuses"] = statuses
+        ctx["date_from"] = request.GET.get("date_from", "")
+        ctx["date_to"] = request.GET.get("date_to", "")
+
+    elif current_tab == "investments":
+        qs = Investment.objects.all()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        ALLOWED_SORTS = {"name", "investment_type", "current_value"}
+        if sort in ALLOWED_SORTS:
+            qs = qs.order_by(f"{direction}{sort}")
+        ctx["investments"] = qs
+
+    elif current_tab == "loans":
+        qs = Loan.objects.all()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        statuses = [s for s in request.GET.getlist("status") if s]
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(next_payment_date__gte=date_from)
+        date_to = request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(next_payment_date__lte=date_to)
+        ALLOWED_SORTS = {"name", "status", "current_balance", "next_payment_date"}
+        if sort in ALLOWED_SORTS:
+            qs = qs.order_by(f"{direction}{sort}")
+        ctx["loans"] = qs
+        ctx["status_choices"] = Loan.STATUS_CHOICES
+        ctx["selected_statuses"] = statuses
+        ctx["date_from"] = request.GET.get("date_from", "")
+        ctx["date_to"] = request.GET.get("date_to", "")
+
+    is_htmx = request.headers.get("HX-Request")
+    if is_htmx:
+        return render(request, "assets/partials/_asset_tab_content.html", ctx)
+    return render(request, "assets/asset_list.html", ctx)
+
+
+def inline_update_realestate_status(request, pk):
+    prop = get_object_or_404(RealEstate, pk=pk)
+    status = request.POST.get("status", "")
+    valid = [s[0] for s in RealEstate.STATUS_CHOICES]
+    if status not in valid:
+        return HttpResponseBadRequest("Invalid status")
+    prop.status = status
+    prop.save(update_fields=["status"])
+    return render(request, "assets/partials/_realestate_row.html", {"prop": prop})
+
+
+def inline_update_loan_status(request, pk):
+    loan = get_object_or_404(Loan, pk=pk)
+    status = request.POST.get("status", "")
+    valid = [s[0] for s in Loan.STATUS_CHOICES]
+    if status not in valid:
+        return HttpResponseBadRequest("Invalid status")
+    loan.status = status
+    loan.save(update_fields=["status"])
+    return render(request, "assets/partials/_loan_row.html", {"loan": loan})
 
 
 def export_realestate_csv(request):
