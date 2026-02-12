@@ -560,6 +560,31 @@ class FolderViewTests(TestCase):
         resp = self.client.get(reverse("notes:detail", args=[note.pk]))
         self.assertContains(resp, "Meetings")
 
+    def test_folder_tabs_endpoint(self):
+        Folder.objects.create(name="Research", color="cyan")
+        resp = self.client.get(reverse("notes:folder_tabs"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Research")
+        self.assertContains(resp, "All Notes")
+        self.assertContains(resp, "Unfiled")
+
+    def test_notes_list_shows_manage_folders_panel(self):
+        resp = self.client.get(reverse("notes:list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Manage Folders")
+        self.assertContains(resp, "Add Folder")
+
+    def test_folder_add_triggers_folders_changed(self):
+        resp = self.client.post(reverse("notes:folder_add"), {"name": "New", "color": "blue"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["HX-Trigger"], "foldersChanged")
+
+    def test_folder_delete_triggers_folders_changed(self):
+        f = Folder.objects.create(name="Gone")
+        resp = self.client.post(reverse("notes:folder_delete", args=[f.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["HX-Trigger"], "foldersChanged")
+
 
 class CompactListViewTests(TestCase):
     @classmethod
