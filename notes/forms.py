@@ -22,7 +22,7 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
         fields = ["title", "content", "date", "note_type", "folder", "tags",
                   "participants", "related_stakeholders", "related_legal_matters",
                   "related_properties", "related_investments", "related_loans",
-                  "related_tasks"]
+                  "related_tasks", "related_policies"]
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "content": forms.Textarea(attrs={"rows": 6}),
@@ -33,6 +33,7 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
             "related_investments": forms.SelectMultiple(attrs={"size": 4}),
             "related_loans": forms.SelectMultiple(attrs={"size": 4}),
             "related_tasks": forms.SelectMultiple(attrs={"size": 4}),
+            "related_policies": forms.SelectMultiple(attrs={"size": 4}),
             "tags": forms.CheckboxSelectMultiple(),
         }
 

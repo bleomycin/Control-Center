@@ -7,6 +7,7 @@ CATEGORY_CHOICES = [
     ("contact_method", "Contact Method"),
     ("matter_type", "Legal Matter Type"),
     ("note_type", "Note Type"),
+    ("policy_type", "Insurance Policy Type"),
 ]
 
 
