@@ -6,8 +6,9 @@ from django.urls import reverse
 from stakeholders.models import Stakeholder
 
 from .models import (
-    AssetTab, InsurancePolicy, Investment, InvestmentParticipant, Loan,
-    LoanParty, PolicyHolder, PropertyOwnership, RealEstate,
+    Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
+    InvestmentParticipant, Loan, LoanParty, PolicyHolder,
+    PropertyOwnership, RealEstate, Vehicle, VehicleOwner,
 )
 
 
@@ -489,18 +490,20 @@ class InlineStatusUpdateTests(TestCase):
 class AssetTabModelTests(TestCase):
     def test_seed_data_exists(self):
         tabs = AssetTab.objects.all()
-        self.assertEqual(tabs.count(), 5)
+        self.assertEqual(tabs.count(), 7)
         keys = list(tabs.values_list("key", flat=True))
         self.assertIn("all", keys)
         self.assertIn("properties", keys)
         self.assertIn("investments", keys)
         self.assertIn("loans", keys)
         self.assertIn("insurance", keys)
+        self.assertIn("vehicles", keys)
+        self.assertIn("aircraft", keys)
 
     def test_builtin_tab(self):
         tab = AssetTab.objects.get(key="all")
         self.assertTrue(tab.is_builtin)
-        self.assertEqual(sorted(tab.asset_types), ["investments", "loans", "policies", "properties"])
+        self.assertEqual(sorted(tab.asset_types), ["aircraft", "investments", "loans", "policies", "properties", "vehicles"])
 
     def test_create_with_auto_key(self):
         tab = AssetTab(label="My Custom Tab", asset_types=["properties"])
@@ -877,3 +880,411 @@ class InsurancePolicyUnifiedListTests(TestCase):
         self.policy.covered_properties.add(self.prop)
         resp = self.client.get(reverse("assets:realestate_detail", args=[self.prop.pk]))
         self.assertContains(resp, "UL Policy")
+
+
+class VehicleModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Car Owner")
+        cls.vehicle = Vehicle.objects.create(
+            name="Test Truck", vin="1HGCM82633A123456",
+            year=2023, make="Ford", model_name="F-150",
+            vehicle_type="truck", estimated_value=Decimal("45000.00"),
+        )
+        cls.owner = VehicleOwner.objects.create(
+            vehicle=cls.vehicle, stakeholder=cls.stakeholder,
+            ownership_percentage=Decimal("100.00"), role="Owner",
+        )
+
+    def test_defaults(self):
+        v = Vehicle.objects.create(name="Basic Car")
+        self.assertEqual(v.status, "active")
+        self.assertIsNone(v.estimated_value)
+
+    def test_str(self):
+        self.assertEqual(str(self.vehicle), "Test Truck")
+
+    def test_get_absolute_url(self):
+        self.assertEqual(
+            self.vehicle.get_absolute_url(),
+            reverse("assets:vehicle_detail", kwargs={"pk": self.vehicle.pk}),
+        )
+
+    def test_stakeholder_m2m(self):
+        self.assertIn(self.stakeholder, self.vehicle.stakeholders.all())
+
+    def test_ownership_cascade_on_stakeholder_delete(self):
+        s = Stakeholder.objects.create(name="Temp Owner")
+        v = Vehicle.objects.create(name="Temp", make="x")
+        VehicleOwner.objects.create(vehicle=v, stakeholder=s, role="Owner")
+        s.delete()
+        self.assertEqual(v.stakeholders.count(), 0)
+
+    def test_ordering(self):
+        Vehicle.objects.create(name="Alpha Car")
+        Vehicle.objects.create(name="Zulu Car")
+        names = list(Vehicle.objects.values_list("name", flat=True))
+        self.assertEqual(names, sorted(names))
+
+    def test_owner_str(self):
+        self.assertEqual(str(self.owner), "Car Owner (100.00%) - Owner")
+
+
+class AircraftModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Pilot Owner")
+        cls.aircraft = Aircraft.objects.create(
+            name="N172SP", tail_number="N172SP",
+            year=1998, make="Cessna", model_name="172 Skyhawk",
+            aircraft_type="single_engine", num_engines=1,
+            estimated_value=Decimal("285000.00"),
+        )
+        cls.owner = AircraftOwner.objects.create(
+            aircraft=cls.aircraft, stakeholder=cls.stakeholder,
+            ownership_percentage=Decimal("100.00"), role="Owner",
+        )
+
+    def test_defaults(self):
+        ac = Aircraft.objects.create(name="Basic Plane")
+        self.assertEqual(ac.status, "active")
+        self.assertEqual(ac.registration_country, "US")
+
+    def test_str(self):
+        self.assertEqual(str(self.aircraft), "N172SP")
+
+    def test_get_absolute_url(self):
+        self.assertEqual(
+            self.aircraft.get_absolute_url(),
+            reverse("assets:aircraft_detail", kwargs={"pk": self.aircraft.pk}),
+        )
+
+    def test_stakeholder_m2m(self):
+        self.assertIn(self.stakeholder, self.aircraft.stakeholders.all())
+
+    def test_ownership_cascade_on_stakeholder_delete(self):
+        s = Stakeholder.objects.create(name="Temp Owner")
+        ac = Aircraft.objects.create(name="Temp Plane")
+        AircraftOwner.objects.create(aircraft=ac, stakeholder=s, role="Owner")
+        s.delete()
+        self.assertEqual(ac.stakeholders.count(), 0)
+
+    def test_ordering(self):
+        Aircraft.objects.create(name="Alpha Plane")
+        Aircraft.objects.create(name="Zulu Plane")
+        names = list(Aircraft.objects.values_list("name", flat=True))
+        self.assertEqual(names, sorted(names))
+
+    def test_owner_str(self):
+        self.assertEqual(str(self.owner), "Pilot Owner (100.00%) - Owner")
+
+
+class VehicleCRUDTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="CRUD Owner")
+        cls.vehicle = Vehicle.objects.create(
+            name="CRUD Vehicle", make="Toyota", model_name="Camry",
+            vehicle_type="sedan", status="active",
+            estimated_value=Decimal("30000.00"),
+        )
+
+    def test_vehicle_list(self):
+        resp = self.client.get(reverse("assets:vehicle_list"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_vehicle_create(self):
+        resp = self.client.post(reverse("assets:vehicle_create"), {
+            "name": "New Car",
+            "vehicle_type": "sedan",
+            "status": "active",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Vehicle.objects.filter(name="New Car").exists())
+
+    def test_vehicle_create_with_initial_owner(self):
+        resp = self.client.post(reverse("assets:vehicle_create"), {
+            "name": "Owned Car",
+            "vehicle_type": "suv",
+            "status": "active",
+            "initial_stakeholder": self.stakeholder.pk,
+            "initial_role": "Owner",
+            "initial_percentage": "100.00",
+        })
+        self.assertEqual(resp.status_code, 302)
+        v = Vehicle.objects.get(name="Owned Car")
+        owner = VehicleOwner.objects.get(vehicle=v)
+        self.assertEqual(owner.stakeholder, self.stakeholder)
+
+    def test_vehicle_detail(self):
+        resp = self.client.get(reverse("assets:vehicle_detail", args=[self.vehicle.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "CRUD Vehicle")
+
+    def test_vehicle_edit_hides_initial_fields(self):
+        resp = self.client.get(reverse("assets:vehicle_edit", args=[self.vehicle.pk]))
+        self.assertNotContains(resp, "Initial Owner")
+
+    def test_vehicle_csv(self):
+        resp = self.client.get(reverse("assets:vehicle_export_csv"))
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("Name", resp.content.decode())
+
+    def test_vehicle_pdf(self):
+        resp = self.client.get(reverse("assets:vehicle_export_pdf", args=[self.vehicle.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class AircraftCRUDTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="CRUD Pilot")
+        cls.aircraft = Aircraft.objects.create(
+            name="CRUD Aircraft", make="Cessna", model_name="172",
+            aircraft_type="single_engine", status="active",
+            estimated_value=Decimal("200000.00"),
+        )
+
+    def test_aircraft_list(self):
+        resp = self.client.get(reverse("assets:aircraft_list"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_aircraft_create(self):
+        resp = self.client.post(reverse("assets:aircraft_create"), {
+            "name": "New Plane",
+            "aircraft_type": "single_engine",
+            "status": "active",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Aircraft.objects.filter(name="New Plane").exists())
+
+    def test_aircraft_create_with_initial_owner(self):
+        resp = self.client.post(reverse("assets:aircraft_create"), {
+            "name": "Owned Plane",
+            "aircraft_type": "jet",
+            "status": "active",
+            "initial_stakeholder": self.stakeholder.pk,
+            "initial_role": "Owner",
+            "initial_percentage": "75.00",
+        })
+        self.assertEqual(resp.status_code, 302)
+        ac = Aircraft.objects.get(name="Owned Plane")
+        owner = AircraftOwner.objects.get(aircraft=ac)
+        self.assertEqual(owner.stakeholder, self.stakeholder)
+        self.assertEqual(owner.ownership_percentage, Decimal("75.00"))
+
+    def test_aircraft_detail(self):
+        resp = self.client.get(reverse("assets:aircraft_detail", args=[self.aircraft.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "CRUD Aircraft")
+
+    def test_aircraft_edit_hides_initial_fields(self):
+        resp = self.client.get(reverse("assets:aircraft_edit", args=[self.aircraft.pk]))
+        self.assertNotContains(resp, "Initial Owner")
+
+    def test_aircraft_csv(self):
+        resp = self.client.get(reverse("assets:aircraft_export_csv"))
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("Name", resp.content.decode())
+
+    def test_aircraft_pdf(self):
+        resp = self.client.get(reverse("assets:aircraft_export_pdf", args=[self.aircraft.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class VehicleInlineStatusTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.vehicle = Vehicle.objects.create(
+            name="Status Vehicle", status="active",
+        )
+
+    def test_inline_status_update(self):
+        resp = self.client.post(
+            reverse("assets:vehicle_inline_status", args=[self.vehicle.pk]),
+            {"status": "sold"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.vehicle.refresh_from_db()
+        self.assertEqual(self.vehicle.status, "sold")
+        self.assertTemplateUsed(resp, "assets/partials/_vehicle_row.html")
+
+    def test_inline_status_invalid(self):
+        resp = self.client.post(
+            reverse("assets:vehicle_inline_status", args=[self.vehicle.pk]),
+            {"status": "bogus"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_status_404(self):
+        resp = self.client.post(
+            reverse("assets:vehicle_inline_status", args=[99999]),
+            {"status": "active"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+class AircraftInlineStatusTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.aircraft = Aircraft.objects.create(
+            name="Status Aircraft", status="active",
+        )
+
+    def test_inline_status_update(self):
+        resp = self.client.post(
+            reverse("assets:aircraft_inline_status", args=[self.aircraft.pk]),
+            {"status": "in_maintenance"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.aircraft.refresh_from_db()
+        self.assertEqual(self.aircraft.status, "in_maintenance")
+        self.assertTemplateUsed(resp, "assets/partials/_aircraft_row.html")
+
+    def test_inline_status_invalid(self):
+        resp = self.client.post(
+            reverse("assets:aircraft_inline_status", args=[self.aircraft.pk]),
+            {"status": "bogus"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_status_404(self):
+        resp = self.client.post(
+            reverse("assets:aircraft_inline_status", args=[99999]),
+            {"status": "active"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+class VehicleBulkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.v1 = Vehicle.objects.create(name="Bulk Vehicle 1", status="active")
+        cls.v2 = Vehicle.objects.create(name="Bulk Vehicle 2", status="active")
+
+    def test_bulk_delete(self):
+        resp = self.client.post(reverse("assets:vehicle_bulk_delete"), {
+            "selected": [self.v1.pk, self.v2.pk],
+            "confirm": "1",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Vehicle.objects.filter(pk__in=[self.v1.pk, self.v2.pk]).exists())
+
+    def test_bulk_export(self):
+        resp = self.client.get(
+            reverse("assets:vehicle_bulk_export_csv"),
+            {"selected": [self.v1.pk]},
+        )
+        self.assertEqual(resp["Content-Type"], "text/csv")
+
+
+class AircraftBulkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.ac1 = Aircraft.objects.create(name="Bulk Aircraft 1", status="active")
+        cls.ac2 = Aircraft.objects.create(name="Bulk Aircraft 2", status="active")
+
+    def test_bulk_delete(self):
+        resp = self.client.post(reverse("assets:aircraft_bulk_delete"), {
+            "selected": [self.ac1.pk, self.ac2.pk],
+            "confirm": "1",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Aircraft.objects.filter(pk__in=[self.ac1.pk, self.ac2.pk]).exists())
+
+    def test_bulk_export(self):
+        resp = self.client.get(
+            reverse("assets:aircraft_bulk_export_csv"),
+            {"selected": [self.ac1.pk]},
+        )
+        self.assertEqual(resp["Content-Type"], "text/csv")
+
+
+class VehicleUnifiedListTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.vehicle = Vehicle.objects.create(
+            name="UL Vehicle", status="active",
+            estimated_value=Decimal("50000.00"),
+        )
+
+    def test_all_tab_includes_vehicles(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "all"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "UL Vehicle")
+
+    def test_vehicles_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "vehicles"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "UL Vehicle")
+
+    def test_tab_counts_include_vehicles(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.context["tab_counts"]["vehicles"], 1)
+
+    def test_vehicles_htmx(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "vehicles"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertContains(resp, "UL Vehicle")
+        self.assertTemplateUsed(resp, "assets/partials/_asset_tab_content.html")
+
+
+class AircraftUnifiedListTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.aircraft = Aircraft.objects.create(
+            name="UL Aircraft", status="active",
+            estimated_value=Decimal("500000.00"),
+        )
+
+    def test_all_tab_includes_aircraft(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "all"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "UL Aircraft")
+
+    def test_aircraft_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "aircraft"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "UL Aircraft")
+
+    def test_tab_counts_include_aircraft(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.context["tab_counts"]["aircraft"], 1)
+
+    def test_aircraft_htmx(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "aircraft"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertContains(resp, "UL Aircraft")
+        self.assertTemplateUsed(resp, "assets/partials/_asset_tab_content.html")
+
+
+class InsurancePolicyCoverageTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.vehicle = Vehicle.objects.create(name="Covered Car", status="active")
+        cls.aircraft = Aircraft.objects.create(name="Covered Plane", status="active")
+        cls.policy = InsurancePolicy.objects.create(
+            name="Coverage Policy", status="active",
+        )
+        cls.policy.covered_vehicles.add(cls.vehicle)
+        cls.policy.covered_aircraft.add(cls.aircraft)
+
+    def test_policy_detail_shows_covered_vehicles(self):
+        resp = self.client.get(reverse("assets:policy_detail", args=[self.policy.pk]))
+        self.assertContains(resp, "Covered Car")
+
+    def test_policy_detail_shows_covered_aircraft(self):
+        resp = self.client.get(reverse("assets:policy_detail", args=[self.policy.pk]))
+        self.assertContains(resp, "Covered Plane")
+
+    def test_vehicle_detail_shows_insurance(self):
+        resp = self.client.get(reverse("assets:vehicle_detail", args=[self.vehicle.pk]))
+        self.assertContains(resp, "Coverage Policy")
+
+    def test_aircraft_detail_shows_insurance(self):
+        resp = self.client.get(reverse("assets:aircraft_detail", args=[self.aircraft.pk]))
+        self.assertContains(resp, "Coverage Policy")
