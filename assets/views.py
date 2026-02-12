@@ -139,6 +139,8 @@ def asset_list(request):
         ctx["loans"] = qs
         ctx["loan_status_choices"] = Loan.STATUS_CHOICES
 
+    ctx["hide_checkboxes"] = len(current_asset_types) > 1
+
     # For status filters / date filters in single-type tabs
     if len(current_asset_types) == 1:
         if current_asset_types[0] in ("properties", "loans"):
@@ -510,6 +512,7 @@ class InvestmentDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
+        ctx["notes"] = self.object.notes.all()[:5]
         return ctx
 
 
@@ -612,6 +615,7 @@ class LoanDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["cash_flow_entries"] = self.object.cash_flow_entries.all()[:10]
+        ctx["notes"] = self.object.notes.all()[:5]
         return ctx
 
 

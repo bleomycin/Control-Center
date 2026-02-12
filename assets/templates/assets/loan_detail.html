@@ -75,10 +75,27 @@
 
 {% if loan.notes_text %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
-    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Internal Notes</p>
     <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ loan.notes_text }}</p>
 </div>
 {% endif %}
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+        <a href="{% url 'notes:create' %}?loan={{ loan.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for note in notes %}
+        <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ note.title }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+        {% endfor %}
+    </div>
+</div>
 
 {% if cash_flow_entries %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">

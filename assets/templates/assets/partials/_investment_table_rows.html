@@ -1,9 +1,11 @@
 {% load humanize %}
 {% for inv in investments %}
 <tr class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
     <td class="px-4 py-3 w-8">
         <input type="checkbox" name="selected" value="{{ inv.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
     </td>
+    {% endif %}
     <td class="px-4 py-3"><a href="{{ inv.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ inv.name }}</a></td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ inv.investment_type|default:"-" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ inv.institution|default:"-" }}</td>
