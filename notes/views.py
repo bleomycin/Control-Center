@@ -497,6 +497,23 @@ def tag_delete(request, pk):
 
 # --- Folder CRUD ---
 
+def _folder_list_response(request, template="notes/partials/_folder_list.html"):
+    folders = Folder.objects.annotate(note_count=Count("notes")).all()
+    resp = render(request, template, {"folders": folders})
+    resp["HX-Trigger"] = "foldersChanged"
+    return resp
+
+
+def folder_tabs(request):
+    folders = Folder.objects.annotate(note_count=Count("notes")).all()
+    unfiled_count = Note.objects.filter(folder__isnull=True).count()
+    return render(request, "notes/partials/_folder_tabs.html", {
+        "folders": folders,
+        "unfiled_count": unfiled_count,
+        "current_folder": request.GET.get("folder", ""),
+    })
+
+
 def folder_list(request):
     folders = Folder.objects.annotate(note_count=Count("notes")).all()
     return render(request, "notes/folder_settings.html", {"folders": folders})
@@ -507,8 +524,7 @@ def folder_add(request):
         form = FolderForm(request.POST)
         if form.is_valid():
             form.save()
-            folders = Folder.objects.annotate(note_count=Count("notes")).all()
-            return render(request, "notes/partials/_folder_list.html", {"folders": folders})
+            return _folder_list_response(request)
     else:
         form = FolderForm()
     return render(request, "notes/partials/_folder_form.html", {"form": form})
@@ -520,8 +536,7 @@ def folder_edit(request, pk):
         form = FolderForm(request.POST, instance=folder)
         if form.is_valid():
             form.save()
-            folders = Folder.objects.annotate(note_count=Count("notes")).all()
-            return render(request, "notes/partials/_folder_list.html", {"folders": folders})
+            return _folder_list_response(request)
     else:
         form = FolderForm(instance=folder)
     from django.urls import reverse
@@ -536,5 +551,4 @@ def folder_delete(request, pk):
     folder = get_object_or_404(Folder, pk=pk)
     if request.method == "POST":
         folder.delete()
-    folders = Folder.objects.annotate(note_count=Count("notes")).all()
-    return render(request, "notes/partials/_folder_list.html", {"folders": folders})
+    return _folder_list_response(request)

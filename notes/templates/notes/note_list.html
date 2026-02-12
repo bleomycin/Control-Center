@@ -13,22 +13,22 @@
 </div>
 
 <!-- Folder Tabs -->
-<div id="folder-tabs" class="flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2">
-    <button onclick="switchFolder('')" data-folder="" class="folder-tab px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == '' or current_folder == 'all' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
-        All Notes
-    </button>
-    {% for folder in folders %}
-    {% folder_classes folder.color as fc %}
-    <button onclick="switchFolder('{{ folder.pk }}')" data-folder="{{ folder.pk }}" data-active-classes="{{ fc.bg }} {{ fc.text }}" class="folder-tab px-3 py-1.5 text-sm rounded-md transition-colors inline-flex items-center gap-1 {% if current_folder == folder.pk|stringformat:'d' %}{{ fc.bg }} {{ fc.text }}{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-        {{ folder.name }}
-        <span class="text-xs opacity-75">({{ folder.note_count }})</span>
-    </button>
-    {% endfor %}
-    <button onclick="switchFolder('unfiled')" data-folder="unfiled" class="folder-tab px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == 'unfiled' %}bg-gray-700 text-gray-200{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
-        Unfiled
-        <span class="text-xs opacity-75">({{ unfiled_count }})</span>
-    </button>
+<div id="folder-tabs" class="flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2 items-center"
+     hx-get="{% url 'notes:folder_tabs' %}" hx-trigger="foldersChanged from:body" hx-include="#current-folder" hx-swap="innerHTML">
+    {% include "notes/partials/_folder_tabs.html" %}
+</div>
+
+<!-- Inline Folder Management Panel -->
+<div id="folder-manage-panel" class="hidden bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Manage Folders</h2>
+        <button hx-get="{% url 'notes:folder_add' %}" hx-target="#folder-form-container" hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Folder</button>
+    </div>
+    <div id="folder-form-container"></div>
+    <div id="folder-list">
+        {% include "notes/partials/_folder_list.html" %}
+    </div>
 </div>
 
 <form id="filter-form" class="flex flex-col gap-3 mb-4">
