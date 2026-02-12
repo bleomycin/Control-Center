@@ -76,6 +76,12 @@ class Note(models.Model):
     related_properties = models.ManyToManyField(
         "assets.RealEstate", blank=True, related_name="notes",
     )
+    related_investments = models.ManyToManyField(
+        "assets.Investment", blank=True, related_name="notes",
+    )
+    related_loans = models.ManyToManyField(
+        "assets.Loan", blank=True, related_name="notes",
+    )
     related_tasks = models.ManyToManyField(
         "tasks.Task", blank=True, related_name="notes",
     )

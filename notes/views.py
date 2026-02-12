@@ -45,7 +45,8 @@ class NoteListView(ListView):
     def get_queryset(self):
         qs = super().get_queryset().select_related("folder").prefetch_related(
             "participants", "related_stakeholders",
-            "related_legal_matters", "related_properties", "related_tasks",
+            "related_legal_matters", "related_properties",
+            "related_investments", "related_loans", "related_tasks",
             "tags",
         ).annotate(
             attachment_count=Count("attachments", distinct=True),
@@ -183,6 +184,12 @@ class NoteCreateView(CreateView):
             initial["related_tasks"] = [self.request.GET["task"]]
         if self.request.GET.get("stakeholder"):
             initial["participants"] = [self.request.GET["stakeholder"]]
+        if self.request.GET.get("property"):
+            initial["related_properties"] = [self.request.GET["property"]]
+        if self.request.GET.get("investment"):
+            initial["related_investments"] = [self.request.GET["investment"]]
+        if self.request.GET.get("loan"):
+            initial["related_loans"] = [self.request.GET["loan"]]
         return initial
 
     def form_valid(self, form):
@@ -266,6 +273,21 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Related Stakeholders", "type": "table",
                          "headers": ["Name", "Type"],
                          "rows": [[s.name, get_choice_label("entity_type", s.entity_type)] for s in stakeholders]})
+    properties = n.related_properties.all()
+    if properties:
+        sections.append({"heading": "Related Properties", "type": "table",
+                         "headers": ["Name", "Type"],
+                         "rows": [[p.name, p.property_type or "-"] for p in properties]})
+    investments = n.related_investments.all()
+    if investments:
+        sections.append({"heading": "Related Investments", "type": "table",
+                         "headers": ["Name", "Type"],
+                         "rows": [[i.name, i.investment_type or "-"] for i in investments]})
+    loans = n.related_loans.all()
+    if loans:
+        sections.append({"heading": "Related Loans", "type": "table",
+                         "headers": ["Name", "Status"],
+                         "rows": [[lo.name, lo.get_status_display()] for lo in loans]})
     legal_matters = n.related_legal_matters.all()
     if legal_matters:
         sections.append({"heading": "Related Legal Matters", "type": "table",
