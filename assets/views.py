@@ -4,10 +4,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from .forms import (AircraftForm, AircraftOwnerForm, AssetTabForm, InsurancePolicyForm,
-                     InvestmentForm, InvestmentParticipantForm, LoanForm, LoanPartyForm,
-                     PolicyHolderForm, PropertyOwnershipForm, RealEstateForm,
-                     VehicleForm, VehicleOwnerForm)
+from .forms import (AircraftForm, AircraftOwnerForm, AssetPolicyLinkForm, AssetTabForm,
+                     InsurancePolicyForm, InvestmentForm, InvestmentParticipantForm,
+                     LoanForm, LoanPartyForm, PolicyHolderForm, PropertyOwnershipForm,
+                     RealEstateForm, VehicleForm, VehicleOwnerForm)
 from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
                      InvestmentParticipant, Loan, LoanParty, PolicyHolder,
                      PropertyOwnership, RealEstate, Vehicle, VehicleOwner)
@@ -915,6 +915,16 @@ class InsurancePolicyCreateView(CreateView):
     form_class = InsurancePolicyForm
     template_name = "assets/policy_form.html"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("property"):
+            initial["covered_properties"] = [self.request.GET["property"]]
+        if self.request.GET.get("vehicle"):
+            initial["covered_vehicles"] = [self.request.GET["vehicle"]]
+        if self.request.GET.get("aircraft"):
+            initial["covered_aircraft"] = [self.request.GET["aircraft"]]
+        return initial
+
     def form_valid(self, form):
         response = super().form_valid(form)
         stakeholder = form.cleaned_data.get("initial_stakeholder")
@@ -1531,3 +1541,92 @@ def aircraft_owner_delete(request, pk):
         owner.delete()
     return render(request, "assets/partials/_aircraft_owner_list.html",
                   {"owners": ac.owners.select_related("stakeholder").all(), "aircraft": ac})
+
+
+# --- Asset ↔ Policy linking ---
+
+def _policy_list_ctx(asset, m2m_field, unlink_url_name, new_policy_param):
+    return {
+        "policies": getattr(asset, "insurance_policies").all(),
+        "unlink_url_name": unlink_url_name,
+        "asset_pk": asset.pk,
+        "new_policy_url": reverse("assets:policy_create") + f"?{new_policy_param}={asset.pk}",
+    }
+
+
+def property_policy_link(request, pk):
+    prop = get_object_or_404(RealEstate, pk=pk)
+    if request.method == "POST":
+        form = AssetPolicyLinkForm(request.POST)
+        if form.is_valid():
+            policy = form.cleaned_data["policy"]
+            policy.covered_properties.add(prop)
+            return render(request, "assets/partials/_asset_policy_list.html",
+                          _policy_list_ctx(prop, "covered_properties", "assets:property_policy_unlink", "property"))
+    else:
+        form = AssetPolicyLinkForm()
+    return render(request, "assets/partials/_asset_policy_form.html", {
+        "form": form,
+        "link_url": reverse("assets:property_policy_link", args=[prop.pk]),
+    })
+
+
+def property_policy_unlink(request, pk, policy_pk):
+    prop = get_object_or_404(RealEstate, pk=pk)
+    policy = get_object_or_404(InsurancePolicy, pk=policy_pk)
+    if request.method == "POST":
+        policy.covered_properties.remove(prop)
+    return render(request, "assets/partials/_asset_policy_list.html",
+                  _policy_list_ctx(prop, "covered_properties", "assets:property_policy_unlink", "property"))
+
+
+def vehicle_policy_link(request, pk):
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    if request.method == "POST":
+        form = AssetPolicyLinkForm(request.POST)
+        if form.is_valid():
+            policy = form.cleaned_data["policy"]
+            policy.covered_vehicles.add(vehicle)
+            return render(request, "assets/partials/_asset_policy_list.html",
+                          _policy_list_ctx(vehicle, "covered_vehicles", "assets:vehicle_policy_unlink", "vehicle"))
+    else:
+        form = AssetPolicyLinkForm()
+    return render(request, "assets/partials/_asset_policy_form.html", {
+        "form": form,
+        "link_url": reverse("assets:vehicle_policy_link", args=[vehicle.pk]),
+    })
+
+
+def vehicle_policy_unlink(request, pk, policy_pk):
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    policy = get_object_or_404(InsurancePolicy, pk=policy_pk)
+    if request.method == "POST":
+        policy.covered_vehicles.remove(vehicle)
+    return render(request, "assets/partials/_asset_policy_list.html",
+                  _policy_list_ctx(vehicle, "covered_vehicles", "assets:vehicle_policy_unlink", "vehicle"))
+
+
+def aircraft_policy_link(request, pk):
+    ac = get_object_or_404(Aircraft, pk=pk)
+    if request.method == "POST":
+        form = AssetPolicyLinkForm(request.POST)
+        if form.is_valid():
+            policy = form.cleaned_data["policy"]
+            policy.covered_aircraft.add(ac)
+            return render(request, "assets/partials/_asset_policy_list.html",
+                          _policy_list_ctx(ac, "covered_aircraft", "assets:aircraft_policy_unlink", "aircraft"))
+    else:
+        form = AssetPolicyLinkForm()
+    return render(request, "assets/partials/_asset_policy_form.html", {
+        "form": form,
+        "link_url": reverse("assets:aircraft_policy_link", args=[ac.pk]),
+    })
+
+
+def aircraft_policy_unlink(request, pk, policy_pk):
+    ac = get_object_or_404(Aircraft, pk=pk)
+    policy = get_object_or_404(InsurancePolicy, pk=policy_pk)
+    if request.method == "POST":
+        policy.covered_aircraft.remove(ac)
+    return render(request, "assets/partials/_asset_policy_list.html",
+                  _policy_list_ctx(ac, "covered_aircraft", "assets:aircraft_policy_unlink", "aircraft"))
