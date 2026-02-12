@@ -1,42 +1,95 @@
 from django.contrib import messages
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from .forms import (InvestmentForm, InvestmentParticipantForm, LoanForm,
+from .forms import (AssetTabForm, InvestmentForm, InvestmentParticipantForm, LoanForm,
                      LoanPartyForm, PropertyOwnershipForm, RealEstateForm)
-from .models import (Investment, InvestmentParticipant, Loan, LoanParty,
+from .models import (AssetTab, Investment, InvestmentParticipant, Loan, LoanParty,
                      PropertyOwnership, RealEstate)
+
+
+# --- Asset Tab Config ---
+
+def _get_asset_tab_config():
+    """Build dynamic tab config from AssetTab + computed Other tab."""
+    tabs = list(AssetTab.objects.all())
+    all_types = {"properties", "investments", "loans"}
+
+    # Collect asset_types claimed by non-builtin tabs
+    claimed = set()
+    for tab in tabs:
+        if not tab.is_builtin:
+            claimed.update(tab.asset_types)
+
+    unclaimed = all_types - claimed
+
+    # Counts
+    counts = {
+        "properties": RealEstate.objects.count(),
+        "investments": Investment.objects.count(),
+        "loans": Loan.objects.count(),
+    }
+
+    result = []
+    for tab in tabs:
+        tab_count = sum(counts.get(t, 0) for t in tab.asset_types)
+        result.append({
+            "key": tab.key,
+            "label": tab.label,
+            "asset_types": tab.asset_types,
+            "is_builtin": tab.is_builtin,
+            "pk": tab.pk,
+            "count": tab_count,
+        })
+
+    if unclaimed:
+        tab_count = sum(counts.get(t, 0) for t in unclaimed)
+        result.append({
+            "key": "other",
+            "label": "Other",
+            "asset_types": sorted(unclaimed),
+            "is_builtin": False,
+            "pk": None,
+            "count": tab_count,
+        })
+
+    return result, counts
 
 
 # --- Unified Asset List ---
 
 def asset_list(request):
-    current_tab = request.GET.get("tab", "properties")
-    if current_tab not in ("properties", "investments", "loans"):
-        current_tab = "properties"
+    tabs, counts = _get_asset_tab_config()
+    tab_key = request.GET.get("tab", "")
+    valid_keys = {t["key"] for t in tabs}
+    if tab_key not in valid_keys:
+        tab_key = tabs[0]["key"] if tabs else "all"
 
-    # Counts for tab badges
-    tab_counts = {
-        "properties": RealEstate.objects.count(),
-        "investments": Investment.objects.count(),
-        "loans": Loan.objects.count(),
-    }
+    # Find current tab's asset_types
+    current_asset_types = []
+    for t in tabs:
+        if t["key"] == tab_key:
+            current_asset_types = t["asset_types"]
+            break
 
     q = request.GET.get("q", "").strip()
     sort = request.GET.get("sort", "")
     direction = "" if request.GET.get("dir") == "asc" else "-"
 
     ctx = {
-        "current_tab": current_tab,
-        "tab_counts": tab_counts,
+        "tabs": tabs,
+        "current_tab": tab_key,
+        "current_asset_types": current_asset_types,
+        "tab_counts": counts,
         "search_query": q,
         "current_sort": sort,
         "current_dir": request.GET.get("dir", ""),
+        "total_count": counts["properties"] + counts["investments"] + counts["loans"],
     }
 
-    if current_tab == "properties":
+    if "properties" in current_asset_types:
         qs = RealEstate.objects.all()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -49,25 +102,24 @@ def asset_list(request):
         date_to = request.GET.get("date_to")
         if date_to:
             qs = qs.filter(acquisition_date__lte=date_to)
-        ALLOWED_SORTS = {"name", "status", "estimated_value", "acquisition_date"}
-        if sort in ALLOWED_SORTS:
-            qs = qs.order_by(f"{direction}{sort}")
+        if len(current_asset_types) == 1:
+            ALLOWED_SORTS = {"name", "status", "estimated_value", "acquisition_date"}
+            if sort in ALLOWED_SORTS:
+                qs = qs.order_by(f"{direction}{sort}")
         ctx["properties"] = qs
-        ctx["status_choices"] = RealEstate.STATUS_CHOICES
-        ctx["selected_statuses"] = statuses
-        ctx["date_from"] = request.GET.get("date_from", "")
-        ctx["date_to"] = request.GET.get("date_to", "")
+        ctx["property_status_choices"] = RealEstate.STATUS_CHOICES
 
-    elif current_tab == "investments":
+    if "investments" in current_asset_types:
         qs = Investment.objects.all()
         if q:
             qs = qs.filter(name__icontains=q)
-        ALLOWED_SORTS = {"name", "investment_type", "current_value"}
-        if sort in ALLOWED_SORTS:
-            qs = qs.order_by(f"{direction}{sort}")
+        if len(current_asset_types) == 1:
+            ALLOWED_SORTS = {"name", "investment_type", "current_value"}
+            if sort in ALLOWED_SORTS:
+                qs = qs.order_by(f"{direction}{sort}")
         ctx["investments"] = qs
 
-    elif current_tab == "loans":
+    if "loans" in current_asset_types:
         qs = Loan.objects.all()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -80,19 +132,73 @@ def asset_list(request):
         date_to = request.GET.get("date_to")
         if date_to:
             qs = qs.filter(next_payment_date__lte=date_to)
-        ALLOWED_SORTS = {"name", "status", "current_balance", "next_payment_date"}
-        if sort in ALLOWED_SORTS:
-            qs = qs.order_by(f"{direction}{sort}")
+        if len(current_asset_types) == 1:
+            ALLOWED_SORTS = {"name", "status", "current_balance", "next_payment_date"}
+            if sort in ALLOWED_SORTS:
+                qs = qs.order_by(f"{direction}{sort}")
         ctx["loans"] = qs
-        ctx["status_choices"] = Loan.STATUS_CHOICES
-        ctx["selected_statuses"] = statuses
-        ctx["date_from"] = request.GET.get("date_from", "")
-        ctx["date_to"] = request.GET.get("date_to", "")
+        ctx["loan_status_choices"] = Loan.STATUS_CHOICES
+
+    # For status filters / date filters in single-type tabs
+    if len(current_asset_types) == 1:
+        if current_asset_types[0] in ("properties", "loans"):
+            ctx["status_choices"] = ctx.get("property_status_choices") or ctx.get("loan_status_choices", [])
+            ctx["selected_statuses"] = [s for s in request.GET.getlist("status") if s]
+            ctx["date_from"] = request.GET.get("date_from", "")
+            ctx["date_to"] = request.GET.get("date_to", "")
 
     is_htmx = request.headers.get("HX-Request")
     if is_htmx:
         return render(request, "assets/partials/_asset_tab_content.html", ctx)
     return render(request, "assets/asset_list.html", ctx)
+
+
+# --- Asset Tab Settings ---
+
+def asset_tab_settings(request):
+    tabs = AssetTab.objects.all()
+    return render(request, "assets/asset_tab_settings.html", {"tabs": tabs})
+
+
+def asset_tab_add(request):
+    if request.method == "POST":
+        form = AssetTabForm(request.POST)
+        if form.is_valid():
+            form.save()
+            tabs = AssetTab.objects.all()
+            return render(request, "assets/partials/_asset_tab_settings_list.html", {"tabs": tabs})
+    else:
+        form = AssetTabForm()
+    return render(request, "assets/partials/_asset_tab_settings_form.html", {"form": form})
+
+
+def asset_tab_edit(request, pk):
+    tab = get_object_or_404(AssetTab, pk=pk)
+    if tab.is_builtin:
+        return HttpResponse(status=403)
+    if request.method == "POST":
+        form = AssetTabForm(request.POST, instance=tab)
+        if form.is_valid():
+            form.save()
+            tabs = AssetTab.objects.all()
+            return render(request, "assets/partials/_asset_tab_settings_list.html", {"tabs": tabs})
+    else:
+        form = AssetTabForm(instance=tab)
+    return render(request, "assets/partials/_asset_tab_settings_form.html", {
+        "form": form,
+        "form_url": reverse("assets:asset_tab_edit", args=[pk]),
+        "edit_mode": True,
+    })
+
+
+def asset_tab_delete(request, pk):
+    tab = get_object_or_404(AssetTab, pk=pk)
+    if tab.is_builtin:
+        return HttpResponse(status=403)
+    if request.method == "POST":
+        tab.delete()
+    tabs = AssetTab.objects.all()
+    return render(request, "assets/partials/_asset_tab_settings_list.html", {"tabs": tabs})
 
 
 def inline_update_realestate_status(request, pk):
