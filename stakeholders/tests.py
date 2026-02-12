@@ -385,12 +385,12 @@ class StakeholderTabTests(TestCase):
             name="Test Contact", entity_type="contact",
         )
 
-    def test_all_tab_excludes_employees(self):
+    def test_all_tab_includes_everyone(self):
         resp = self.client.get(reverse("stakeholders:list"))
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["current_tab"], "all")
         stakeholder_names = [s.name for s in resp.context["stakeholders"]]
-        self.assertNotIn("Employee One", stakeholder_names)
+        self.assertIn("Employee One", stakeholder_names)
         self.assertIn("Test Firm", stakeholder_names)
         self.assertIn("Test Attorney", stakeholder_names)
 
@@ -423,8 +423,8 @@ class StakeholderTabTests(TestCase):
     def test_tab_counts_correct(self):
         resp = self.client.get(reverse("stakeholders:list"))
         counts = resp.context["tab_counts"]
-        # All = non-employees (firm + attorney + lender + advisor + contact = 5)
-        self.assertEqual(counts["all"], 5)
+        # All = everyone (firm + employee + attorney + lender + advisor + contact = 6)
+        self.assertEqual(counts["all"], 6)
         self.assertEqual(counts["firms"], 1)
         self.assertEqual(counts["attorneys"], 1)
         self.assertEqual(counts["lenders"], 1)
