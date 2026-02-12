@@ -1,0 +1,28 @@
+{% load choice_labels %}
+<div class="divide-y divide-gray-700">
+    {% for tab in tabs %}
+    <div class="px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-medium text-gray-200">{{ tab.label }}</span>
+            {% if tab.is_builtin %}
+            <span class="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">Built-in</span>
+            {% elif tab.entity_types %}
+            <span class="text-xs text-gray-500">
+                {% for et in tab.entity_types %}{{ et|choice_label:"entity_type" }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            </span>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if not tab.is_builtin %}
+            <button hx-get="{% url 'stakeholders:tab_edit' tab.pk %}" hx-target="#tab-form-container" hx-swap="innerHTML"
+                    class="text-xs text-gray-400 hover:text-blue-400">Edit</button>
+            <button hx-post="{% url 'stakeholders:tab_delete' tab.pk %}" hx-target="#tab-list" hx-swap="innerHTML"
+                    hx-confirm="Delete tab &quot;{{ tab.label }}&quot;? Stakeholders won't be affected."
+                    class="text-xs text-gray-400 hover:text-red-400">Delete</button>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="px-4 py-8 text-center text-sm text-gray-500">No tabs yet. Click "+ Add Tab" to create one.</div>
+    {% endfor %}
+</div>
