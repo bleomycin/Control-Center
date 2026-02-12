@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Stakeholder, Relationship, ContactLog
+from .models import Stakeholder, StakeholderTab, Relationship, ContactLog
 
 
 class ContactLogInline(admin.TabularInline):
@@ -22,6 +22,13 @@ class StakeholderAdmin(admin.ModelAdmin):
     list_filter = ["entity_type", "trust_rating", "risk_rating", "parent_organization"]
     search_fields = ["name", "email", "organization", "notes_text"]
     inlines = [ContactLogInline, RelationshipFromInline]
+
+
+@admin.register(StakeholderTab)
+class StakeholderTabAdmin(admin.ModelAdmin):
+    list_display = ["label", "key", "entity_types", "sort_order", "is_builtin"]
+    list_filter = ["is_builtin"]
+    readonly_fields = ["key"]
 
 
 @admin.register(Relationship)

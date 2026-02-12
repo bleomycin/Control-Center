@@ -3,6 +3,33 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.urls import reverse
 
 
+class StakeholderTab(models.Model):
+    key = models.SlugField(max_length=50, unique=True)
+    label = models.CharField(max_length=100)
+    entity_types = models.JSONField(default=list, blank=True,
+                                    help_text="List of entity_type values for this tab")
+    sort_order = models.PositiveIntegerField(default=0)
+    is_builtin = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["sort_order", "pk"]
+
+    def __str__(self):
+        return self.label
+
+    def save(self, *args, **kwargs):
+        if not self.key:
+            from django.utils.text import slugify
+            base_key = slugify(self.label)
+            key = base_key
+            n = 1
+            while StakeholderTab.objects.filter(key=key).exclude(pk=self.pk).exists():
+                key = f"{base_key}-{n}"
+                n += 1
+            self.key = key
+        super().save(*args, **kwargs)
+
+
 class Stakeholder(models.Model):
     ENTITY_TYPE_CHOICES = [
         ("advisor", "Advisor"),
