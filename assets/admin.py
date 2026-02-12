@@ -1,6 +1,7 @@
 from django.contrib import admin
-from .models import (InsurancePolicy, Investment, Loan, LoanParty,
-                     PolicyHolder, PropertyOwnership, RealEstate, InvestmentParticipant)
+from .models import (Aircraft, AircraftOwner, InsurancePolicy, Investment, Loan,
+                     LoanParty, PolicyHolder, PropertyOwnership, RealEstate,
+                     InvestmentParticipant, Vehicle, VehicleOwner)
 
 
 class PropertyOwnershipInline(admin.TabularInline):
@@ -57,3 +58,31 @@ class InsurancePolicyAdmin(admin.ModelAdmin):
     list_filter = ["status", "policy_type"]
     search_fields = ["name", "policy_number", "notes_text"]
     inlines = [PolicyHolderInline]
+
+
+class VehicleOwnerInline(admin.TabularInline):
+    model = VehicleOwner
+    extra = 1
+    fields = ["stakeholder", "ownership_percentage", "role", "notes"]
+
+
+@admin.register(Vehicle)
+class VehicleAdmin(admin.ModelAdmin):
+    list_display = ["name", "year", "make", "model_name", "vehicle_type", "estimated_value", "status"]
+    list_filter = ["status", "vehicle_type"]
+    search_fields = ["name", "vin", "make", "model_name", "notes_text"]
+    inlines = [VehicleOwnerInline]
+
+
+class AircraftOwnerInline(admin.TabularInline):
+    model = AircraftOwner
+    extra = 1
+    fields = ["stakeholder", "ownership_percentage", "role", "notes"]
+
+
+@admin.register(Aircraft)
+class AircraftAdmin(admin.ModelAdmin):
+    list_display = ["name", "tail_number", "make", "model_name", "aircraft_type", "estimated_value", "status"]
+    list_filter = ["status", "aircraft_type"]
+    search_fields = ["name", "tail_number", "serial_number", "make", "model_name", "notes_text"]
+    inlines = [AircraftOwnerInline]

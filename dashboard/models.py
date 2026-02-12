@@ -8,6 +8,8 @@ CATEGORY_CHOICES = [
     ("matter_type", "Legal Matter Type"),
     ("note_type", "Note Type"),
     ("policy_type", "Insurance Policy Type"),
+    ("vehicle_type", "Vehicle Type"),
+    ("aircraft_type", "Aircraft Type"),
 ]
 
 

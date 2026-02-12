@@ -1,0 +1,28 @@
+{% load humanize choice_labels %}
+<tr id="aircraft-row-{{ ac.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ ac.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    {% endif %}
+    <td class="px-4 py-3">
+        <a href="{{ ac.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ ac.name }}</a>
+        {% if ac.tail_number %}<p class="text-xs text-gray-400">{{ ac.tail_number }}</p>{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ ac.aircraft_type|choice_label:"aircraft_type" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ ac.estimated_value|floatformat:0|intcomma|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{% if ac.total_hours %}{{ ac.total_hours|floatformat:1 }}{% else %}-{% endif %}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'assets:aircraft_inline_status' ac.pk %}',{target:'#aircraft-row-{{ ac.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if ac.status == 'active' %}text-green-300
+                    {% elif ac.status == 'in_dispute' %}text-red-300
+                    {% elif ac.status == 'in_maintenance' %}text-yellow-300
+                    {% elif ac.status == 'stored' %}text-orange-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in ac.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if ac.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>

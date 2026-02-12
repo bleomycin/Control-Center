@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize choice_labels %}
 {% if "properties" in current_asset_types %}
 {% if current_asset_types|length > 1 %}
 <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Properties ({{ properties|length }})</h3>
@@ -338,6 +338,181 @@
                     <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     <p class="text-sm text-gray-500 mb-3">No loans found</p>
                     <a href="{% url 'assets:loan_create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Loan</a>
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if "vehicles" in current_asset_types %}
+{% if current_asset_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Vehicles ({{ vehicles|length }})</h3>
+{% endif %}
+{% if current_asset_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'assets:vehicle_bulk_delete' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+    <button onclick="const pks = Array.from(document.querySelectorAll('input[name=selected]:checked')).map(cb => cb.value); window.location.href='{% url 'assets:vehicle_bulk_export_csv' %}?' + pks.map(pk => 'selected=' + pk).join('&');"
+            class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_asset_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_asset_types|length == 1 %}
+                    <th class="px-4 py-3 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=name&dir={% if current_sort == 'name' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Name
+                            {% if current_sort == "name" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Name{% endif %}
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Type</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden md:table-cell">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=estimated_value&dir={% if current_sort == 'estimated_value' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Value
+                            {% if current_sort == "estimated_value" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Value{% endif %}
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden lg:table-cell">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=status&dir={% if current_sort == 'status' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Status
+                            {% if current_sort == "status" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Status{% endif %}
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="table-body" class="divide-y divide-gray-700">
+                {% for vehicle in vehicles %}
+                    {% include "assets/partials/_vehicle_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-12 text-center">
+                    <p class="text-sm text-gray-500 mb-3">No vehicles found</p>
+                    <a href="{% url 'assets:vehicle_create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Vehicle</a>
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% if "aircraft" in current_asset_types %}
+{% if current_asset_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Aircraft ({{ aircraft_list|length }})</h3>
+{% endif %}
+{% if current_asset_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'assets:aircraft_bulk_delete' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+    <button onclick="const pks = Array.from(document.querySelectorAll('input[name=selected]:checked')).map(cb => cb.value); window.location.href='{% url 'assets:aircraft_bulk_export_csv' %}?' + pks.map(pk => 'selected=' + pk).join('&');"
+            class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_asset_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_asset_types|length == 1 %}
+                    <th class="px-4 py-3 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=name&dir={% if current_sort == 'name' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Name
+                            {% if current_sort == "name" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Name{% endif %}
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Type</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden md:table-cell">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=estimated_value&dir={% if current_sort == 'estimated_value' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Value
+                            {% if current_sort == "estimated_value" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Value{% endif %}
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden md:table-cell">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=total_hours&dir={% if current_sort == 'total_hours' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Hours
+                            {% if current_sort == "total_hours" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Hours{% endif %}
+                    </th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden lg:table-cell">
+                        {% if current_asset_types|length == 1 %}
+                        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&sort=status&dir={% if current_sort == 'status' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
+                           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
+                            Status
+                            {% if current_sort == "status" %}
+                                {% if current_dir == "asc" %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M5.293 9.707l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L10 7.414l-3.293 3.293a1 1 0 01-1.414-1.414z"/></svg>
+                                {% else %}<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path d="M14.707 10.293l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L10 12.586l3.293-3.293a1 1 0 111.414 1.414z"/></svg>{% endif %}
+                            {% endif %}
+                        </a>
+                        {% else %}Status{% endif %}
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="table-body" class="divide-y divide-gray-700">
+                {% for ac in aircraft_list %}
+                    {% include "assets/partials/_aircraft_row.html" %}
+                {% empty %}
+                <tr><td colspan="6" class="px-4 py-12 text-center">
+                    <p class="text-sm text-gray-500 mb-3">No aircraft found</p>
+                    <a href="{% url 'assets:aircraft_create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Aircraft</a>
                 </td></tr>
                 {% endfor %}
             </tbody>

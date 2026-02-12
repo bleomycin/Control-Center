@@ -88,6 +88,12 @@ class Note(models.Model):
     related_policies = models.ManyToManyField(
         "assets.InsurancePolicy", blank=True, related_name="notes",
     )
+    related_vehicles = models.ManyToManyField(
+        "assets.Vehicle", blank=True, related_name="notes",
+    )
+    related_aircraft = models.ManyToManyField(
+        "assets.Aircraft", blank=True, related_name="notes",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
