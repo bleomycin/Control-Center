@@ -81,7 +81,7 @@ class StakeholderListView(ListView):
 
         # Tab-specific filtering
         if tab == "all":
-            qs = qs.filter(parent_organization__isnull=True)
+            pass  # Show everyone
         else:
             tab_types = self._get_tab_types(tab)
             if tab_types:
@@ -136,16 +136,17 @@ class StakeholderListView(ListView):
         ctx["current_dir"] = self.request.GET.get("dir", "")
 
         # Tab counts
-        all_qs = Stakeholder.objects.filter(parent_organization__isnull=True)
-        ctx["total_count"] = Stakeholder.objects.count()
+        total = Stakeholder.objects.count()
+        non_employees = Stakeholder.objects.filter(parent_organization__isnull=True)
+        ctx["total_count"] = total
         tab_counts = {}
         for t in tab_config:
             if t["key"] == "all":
-                tab_counts["all"] = all_qs.count()
+                tab_counts["all"] = total
             elif t["key"] == "firms":
                 tab_counts["firms"] = Stakeholder.objects.filter(entity_type="firm").count()
             elif t["types"]:
-                tab_counts[t["key"]] = all_qs.filter(entity_type__in=t["types"]).count()
+                tab_counts[t["key"]] = non_employees.filter(entity_type__in=t["types"]).count()
             else:
                 tab_counts[t["key"]] = 0
         ctx["tab_counts"] = tab_counts
