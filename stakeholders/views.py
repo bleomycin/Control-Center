@@ -85,7 +85,7 @@ class StakeholderListView(ListView):
         else:
             tab_types = self._get_tab_types(tab)
             if tab_types:
-                qs = qs.filter(entity_type__in=tab_types, parent_organization__isnull=True)
+                qs = qs.filter(entity_type__in=tab_types)
             else:
                 # Tab with no entity_types configured — show nothing
                 return qs.none()
@@ -137,7 +137,6 @@ class StakeholderListView(ListView):
 
         # Tab counts
         total = Stakeholder.objects.count()
-        non_employees = Stakeholder.objects.filter(parent_organization__isnull=True)
         ctx["total_count"] = total
         tab_counts = {}
         for t in tab_config:
@@ -146,7 +145,7 @@ class StakeholderListView(ListView):
             elif t["key"] == "firms":
                 tab_counts["firms"] = Stakeholder.objects.filter(entity_type="firm").count()
             elif t["types"]:
-                tab_counts[t["key"]] = non_employees.filter(entity_type__in=t["types"]).count()
+                tab_counts[t["key"]] = Stakeholder.objects.filter(entity_type__in=t["types"]).count()
             else:
                 tab_counts[t["key"]] = 0
         ctx["tab_counts"] = tab_counts
