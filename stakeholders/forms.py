@@ -74,6 +74,17 @@ class StakeholderTabForm(TailwindFormMixin, forms.Form):
         return tab
 
 
+class EmployeeAssignForm(TailwindFormMixin, forms.Form):
+    stakeholder = forms.ModelChoiceField(queryset=Stakeholder.objects.none())
+
+    def __init__(self, *args, firm=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = Stakeholder.objects.exclude(entity_type="firm")
+        if firm:
+            qs = qs.exclude(parent_organization=firm)
+        self.fields["stakeholder"].queryset = qs
+
+
 class StakeholderPropertyForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = PropertyOwnership
