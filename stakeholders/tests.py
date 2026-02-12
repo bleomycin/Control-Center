@@ -10,7 +10,7 @@ from assets.models import (
     Investment, InvestmentParticipant, Loan, LoanParty,
     PropertyOwnership, RealEstate,
 )
-from .models import ContactLog, Relationship, Stakeholder
+from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
 
 
 class StakeholderModelTests(TestCase):
@@ -502,3 +502,162 @@ class StakeholderAssetInlineTests(TestCase):
         self.assertContains(resp, "123 Main St")
         self.assertContains(resp, "Co-owner")
         self.assertContains(resp, "50")
+
+
+class StakeholderTabModelTests(TestCase):
+    def test_create_tab(self):
+        tab = StakeholderTab.objects.create(
+            label="Custom Tab", entity_types=["attorney", "lender"], sort_order=10,
+        )
+        self.assertEqual(tab.label, "Custom Tab")
+        self.assertEqual(tab.entity_types, ["attorney", "lender"])
+
+    def test_auto_key_generation(self):
+        tab = StakeholderTab(label="My Custom Tab", entity_types=["contact"])
+        tab.save()
+        self.assertEqual(tab.key, "my-custom-tab")
+
+    def test_unique_key_collision(self):
+        StakeholderTab.objects.create(key="test-tab", label="Test Tab", entity_types=[])
+        tab2 = StakeholderTab(label="Test Tab", entity_types=[])
+        tab2.save()
+        self.assertEqual(tab2.key, "test-tab-1")
+
+    def test_ordering(self):
+        StakeholderTab.objects.all().delete()
+        t1 = StakeholderTab.objects.create(key="b", label="B", sort_order=2)
+        t2 = StakeholderTab.objects.create(key="a", label="A", sort_order=1)
+        tabs = list(StakeholderTab.objects.all())
+        self.assertEqual(tabs[0], t2)
+        self.assertEqual(tabs[1], t1)
+
+    def test_seed_data_created(self):
+        # Migration seeds 6 tabs
+        self.assertTrue(StakeholderTab.objects.filter(key="all", is_builtin=True).exists())
+        self.assertTrue(StakeholderTab.objects.filter(key="firms", is_builtin=True).exists())
+        self.assertTrue(StakeholderTab.objects.filter(key="attorneys").exists())
+        self.assertTrue(StakeholderTab.objects.filter(key="lenders").exists())
+        self.assertTrue(StakeholderTab.objects.filter(key="business-partners").exists())
+        self.assertTrue(StakeholderTab.objects.filter(key="advisors").exists())
+
+
+class StakeholderTabSettingsTests(TestCase):
+    def test_tab_settings_page(self):
+        resp = self.client.get(reverse("stakeholders:tab_settings"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Manage Stakeholder Tabs")
+
+    def test_tab_add_get(self):
+        resp = self.client.get(reverse("stakeholders:tab_add"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_tab_add_post(self):
+        resp = self.client.post(reverse("stakeholders:tab_add"), {
+            "label": "New Category",
+            "entity_types": ["contact"],
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(StakeholderTab.objects.filter(label="New Category").exists())
+
+    def test_tab_edit_get(self):
+        tab = StakeholderTab.objects.create(label="Editable", entity_types=["contact"])
+        resp = self.client.get(reverse("stakeholders:tab_edit", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_tab_edit_post(self):
+        tab = StakeholderTab.objects.create(label="Old Name", entity_types=["contact"])
+        resp = self.client.post(reverse("stakeholders:tab_edit", args=[tab.pk]), {
+            "label": "New Name",
+            "entity_types": ["contact", "lender"],
+        })
+        self.assertEqual(resp.status_code, 200)
+        tab.refresh_from_db()
+        self.assertEqual(tab.label, "New Name")
+        self.assertEqual(tab.entity_types, ["contact", "lender"])
+
+    def test_tab_delete(self):
+        tab = StakeholderTab.objects.create(label="To Delete", entity_types=["contact"])
+        resp = self.client.post(reverse("stakeholders:tab_delete", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(StakeholderTab.objects.filter(pk=tab.pk).exists())
+
+    def test_builtin_tab_edit_forbidden(self):
+        tab = StakeholderTab.objects.get(key="all")
+        resp = self.client.get(reverse("stakeholders:tab_edit", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_builtin_tab_delete_forbidden(self):
+        tab = StakeholderTab.objects.get(key="firms")
+        resp = self.client.post(reverse("stakeholders:tab_delete", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 403)
+        self.assertTrue(StakeholderTab.objects.filter(pk=tab.pk).exists())
+
+
+class InlineTypeEditTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Inline Test", entity_type="contact")
+
+    def test_inline_update_type_valid(self):
+        resp = self.client.post(
+            reverse("stakeholders:inline_update_type", args=[self.stakeholder.pk]),
+            {"entity_type": "attorney"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.stakeholder.refresh_from_db()
+        self.assertEqual(self.stakeholder.entity_type, "attorney")
+
+    def test_inline_update_type_invalid_value(self):
+        resp = self.client.post(
+            reverse("stakeholders:inline_update_type", args=[self.stakeholder.pk]),
+            {"entity_type": "nonexistent"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_update_type_renders_row(self):
+        resp = self.client.post(
+            reverse("stakeholders:inline_update_type", args=[self.stakeholder.pk]),
+            {"entity_type": "lender"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, f"stakeholder-row-{self.stakeholder.pk}")
+
+    def test_inline_update_type_get_not_allowed(self):
+        resp = self.client.get(
+            reverse("stakeholders:inline_update_type", args=[self.stakeholder.pk]),
+        )
+        self.assertEqual(resp.status_code, 405)
+
+
+class DynamicTabIntegrationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.attorney = Stakeholder.objects.create(name="Tab Attorney", entity_type="attorney")
+        cls.lender = Stakeholder.objects.create(name="Tab Lender", entity_type="lender")
+        cls.contact = Stakeholder.objects.create(name="Tab Contact", entity_type="contact")
+
+    def test_tabs_from_db(self):
+        resp = self.client.get(reverse("stakeholders:list"))
+        self.assertEqual(resp.status_code, 200)
+        tab_keys = [t["key"] for t in resp.context["tabs"]]
+        self.assertIn("all", tab_keys)
+        self.assertIn("firms", tab_keys)
+        self.assertIn("attorneys", tab_keys)
+
+    def test_dynamic_tab_filters_correctly(self):
+        resp = self.client.get(reverse("stakeholders:list"), {"tab": "attorneys"})
+        stakeholder_names = [s.name for s in resp.context["stakeholders"]]
+        self.assertIn("Tab Attorney", stakeholder_names)
+        self.assertNotIn("Tab Lender", stakeholder_names)
+
+    def test_other_tab_catches_unclaimed(self):
+        # "contact" and "other" aren't claimed by any seeded tab
+        resp = self.client.get(reverse("stakeholders:list"))
+        tab_keys = [t["key"] for t in resp.context["tabs"]]
+        self.assertIn("other", tab_keys)
+
+    def test_tab_counts_dynamic(self):
+        resp = self.client.get(reverse("stakeholders:list"))
+        counts = resp.context["tab_counts"]
+        self.assertGreaterEqual(counts["attorneys"], 1)
+        self.assertGreaterEqual(counts["lenders"], 1)

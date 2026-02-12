@@ -1,0 +1,29 @@
+{% load choice_labels %}
+<tr id="stakeholder-row-{{ s.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ s.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    <td class="px-4 py-3">
+        <a href="{{ s.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ s.name }}</a>
+        <p class="text-xs text-gray-400 sm:hidden">{{ s.entity_type|choice_label:"entity_type" }}</p>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'stakeholders:inline_update_type' s.pk %}',{target:'#stakeholder-row-{{ s.pk }}',swap:'outerHTML',values:{'entity_type':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-sm text-gray-300 cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1">
+            {% for val, label in entity_type_choices %}
+            <option value="{{ val }}" {% if s.entity_type == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{% if s.parent_organization %}<a href="{{ s.parent_organization.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ s.parent_organization.name }}</a>{% else %}{{ s.organization|default:"-" }}{% endif %}</td>
+    <td class="px-4 py-3 text-sm hidden lg:table-cell">
+        {% if s.trust_rating %}
+        <span class="{% if s.trust_rating >= 4 %}text-green-400{% elif s.trust_rating >= 3 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ s.trust_rating }}/5</span>
+        {% else %}-{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm hidden lg:table-cell">
+        {% if s.risk_rating %}
+        <span class="{% if s.risk_rating >= 4 %}text-red-400{% elif s.risk_rating >= 3 %}text-yellow-400{% else %}text-green-400{% endif %}">{{ s.risk_rating }}/5</span>
+        {% else %}-{% endif %}
+    </td>
+</tr>
