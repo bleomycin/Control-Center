@@ -428,7 +428,7 @@ class StakeholderTabTests(TestCase):
         self.assertEqual(counts["firms"], 1)
         self.assertEqual(counts["attorneys"], 1)
         self.assertEqual(counts["lenders"], 1)
-        self.assertEqual(counts["advisors"], 1)  # advisor only (professional is employee)
+        self.assertEqual(counts["advisors"], 2)  # advisor + professional (employee still counted)
         self.assertEqual(counts["other"], 1)  # contact
 
 
