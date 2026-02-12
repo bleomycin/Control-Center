@@ -3,7 +3,8 @@
 {% if current_asset_types|length > 1 %}
 <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Properties ({{ properties|length }})</h3>
 {% endif %}
-<div id="bulk-bar-properties" class="{% if current_asset_types|length == 1 %}hidden{% else %}hidden{% endif %} bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+{% if current_asset_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
     <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
     <form method="post" action="{% url 'assets:realestate_bulk_delete' %}" class="inline">
         {% csrf_token %}
@@ -13,6 +14,7 @@
     <button onclick="const pks = Array.from(document.querySelectorAll('input[name=selected]:checked')).map(cb => cb.value); window.location.href='{% url 'assets:realestate_bulk_export_csv' %}?' + pks.map(pk => 'selected=' + pk).join('&');"
             class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
 </div>
+{% endif %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_asset_types|length > 1 %}mb-6{% endif %}">
     <div class="overflow-x-auto">
         <table class="w-full">
