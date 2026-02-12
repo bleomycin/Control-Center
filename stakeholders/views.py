@@ -86,6 +86,9 @@ class StakeholderListView(ListView):
             tab_types = self._get_tab_types(tab)
             if tab_types:
                 qs = qs.filter(entity_type__in=tab_types, parent_organization__isnull=True)
+            else:
+                # Tab with no entity_types configured — show nothing
+                return qs.none()
 
         # Search
         q = self.request.GET.get("q", "").strip()
