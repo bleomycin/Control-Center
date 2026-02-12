@@ -6,11 +6,18 @@
  *   input[name=selected] — row checkboxes
  *   #bulk-bar            — action bar (hidden by default)
  *   #bulk-count          — span showing selected count
+ *
+ * All DOM lookups are dynamic so elements swapped in by HTMX are found.
  */
 document.addEventListener('DOMContentLoaded', function () {
-    const bar = document.getElementById('bulk-bar');
-    const countEl = document.getElementById('bulk-count');
-    if (!bar) return;
+
+    function getBar() {
+        return document.getElementById('bulk-bar');
+    }
+
+    function getCountEl() {
+        return document.getElementById('bulk-count');
+    }
 
     function getSelectAll() {
         return document.getElementById('select-all');
@@ -21,14 +28,18 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function updateBar() {
+        const bar = getBar();
+        const countEl = getCountEl();
         const selectAll = getSelectAll();
         const boxes = getCheckboxes();
         const checked = Array.from(boxes).filter(cb => cb.checked).length;
-        if (checked > 0) {
-            bar.classList.remove('hidden');
-            if (countEl) countEl.textContent = checked;
-        } else {
-            bar.classList.add('hidden');
+        if (bar) {
+            if (checked > 0) {
+                bar.classList.remove('hidden');
+                if (countEl) countEl.textContent = checked;
+            } else {
+                bar.classList.add('hidden');
+            }
         }
         // Sync select-all state
         if (selectAll) {
@@ -50,13 +61,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // After HTMX swaps table rows, reset select-all and bar
     document.body.addEventListener('htmx:afterSwap', function (e) {
-        if (e.detail.target.tagName === 'TBODY' || e.detail.target.id === 'note-content' || e.detail.target.id === 'task-content' || e.detail.target.id === 'note-card-list') {
+        if (e.detail.target.tagName === 'TBODY' || e.detail.target.id === 'note-content' || e.detail.target.id === 'task-content' || e.detail.target.id === 'note-card-list' || e.detail.target.id === 'asset-content') {
             const selectAll = getSelectAll();
             if (selectAll) {
                 selectAll.checked = false;
                 selectAll.indeterminate = false;
             }
-            bar.classList.add('hidden');
+            const bar = getBar();
+            if (bar) bar.classList.add('hidden');
         }
     });
 });
