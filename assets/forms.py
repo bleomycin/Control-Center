@@ -252,3 +252,10 @@ class AircraftOwnerForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
+
+
+class AssetPolicyLinkForm(TailwindFormMixin, forms.Form):
+    policy = forms.ModelChoiceField(
+        queryset=InsurancePolicy.objects.all(),
+        label="Insurance Policy",
+    )

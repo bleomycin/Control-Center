@@ -1288,3 +1288,74 @@ class InsurancePolicyCoverageTests(TestCase):
     def test_aircraft_detail_shows_insurance(self):
         resp = self.client.get(reverse("assets:aircraft_detail", args=[self.aircraft.pk]))
         self.assertContains(resp, "Coverage Policy")
+
+
+class AssetPolicyLinkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Link Prop", address="1 St", status="owned")
+        cls.vehicle = Vehicle.objects.create(name="Link Car", status="active")
+        cls.aircraft = Aircraft.objects.create(name="Link Plane", status="active")
+        cls.policy = InsurancePolicy.objects.create(name="Link Policy", status="active")
+
+    def test_property_policy_link_get(self):
+        resp = self.client.get(reverse("assets:property_policy_link", args=[self.prop.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_asset_policy_form.html")
+
+    def test_property_policy_link_post(self):
+        resp = self.client.post(
+            reverse("assets:property_policy_link", args=[self.prop.pk]),
+            {"policy": self.policy.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(self.prop, self.policy.covered_properties.all())
+
+    def test_property_policy_unlink(self):
+        self.policy.covered_properties.add(self.prop)
+        resp = self.client.post(
+            reverse("assets:property_policy_unlink", args=[self.prop.pk, self.policy.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(self.prop, self.policy.covered_properties.all())
+        self.assertTrue(InsurancePolicy.objects.filter(pk=self.policy.pk).exists())
+
+    def test_vehicle_policy_link_post(self):
+        resp = self.client.post(
+            reverse("assets:vehicle_policy_link", args=[self.vehicle.pk]),
+            {"policy": self.policy.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(self.vehicle, self.policy.covered_vehicles.all())
+
+    def test_vehicle_policy_unlink(self):
+        self.policy.covered_vehicles.add(self.vehicle)
+        resp = self.client.post(
+            reverse("assets:vehicle_policy_unlink", args=[self.vehicle.pk, self.policy.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(self.vehicle, self.policy.covered_vehicles.all())
+
+    def test_aircraft_policy_link_post(self):
+        resp = self.client.post(
+            reverse("assets:aircraft_policy_link", args=[self.aircraft.pk]),
+            {"policy": self.policy.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(self.aircraft, self.policy.covered_aircraft.all())
+
+    def test_aircraft_policy_unlink(self):
+        self.policy.covered_aircraft.add(self.aircraft)
+        resp = self.client.post(
+            reverse("assets:aircraft_policy_unlink", args=[self.aircraft.pk, self.policy.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn(self.aircraft, self.policy.covered_aircraft.all())
+
+    def test_policy_create_preselects_property(self):
+        resp = self.client.get(
+            reverse("assets:policy_create") + f"?property={self.prop.pk}",
+        )
+        self.assertEqual(resp.status_code, 200)
+        form = resp.context["form"]
+        self.assertEqual(form.initial.get("covered_properties"), [str(self.prop.pk)])
