@@ -22,7 +22,7 @@
            hx-push-url="{% url 'stakeholders:list' %}?tab={{ tab.key }}"
            hx-indicator="#loading-spinner"
            class="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors cursor-pointer {% if current_tab == tab.key %}border-blue-500 text-blue-400{% else %}border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500{% endif %}"
-           onclick="switchStakeholderTab(this, '{{ tab.key }}')"
+           onclick="switchStakeholderTab(this, '{{ tab.key }}')">
             {{ tab.label }}
             <span class="ml-1 text-xs {% if current_tab == tab.key %}text-blue-400/70{% else %}text-gray-500{% endif %}">({{ tab.count }})</span>
         </a>
