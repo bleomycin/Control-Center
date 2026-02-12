@@ -59,15 +59,15 @@
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Team Members <span class="text-xs text-gray-400 font-normal">({{ counts.employees }})</span></h2>
         <div class="flex gap-3">
             <button hx-get="{% url 'stakeholders:employee_add' stakeholder.pk %}"
-                    hx-target="#employee-form-container"
+                    hx-target="#employee-form-container-{{ stakeholder.pk }}"
                     hx-swap="innerHTML"
                     class="text-xs text-blue-400 hover:text-blue-300">+ Add Existing</button>
             <a href="{% url 'stakeholders:create' %}?parent_organization={{ stakeholder.pk }}"
                class="text-xs text-blue-400 hover:text-blue-300">+ Add Employee</a>
         </div>
     </div>
-    <div id="employee-form-container"></div>
-    <div id="employee-list">
+    <div id="employee-form-container-{{ stakeholder.pk }}"></div>
+    <div id="employee-list-{{ stakeholder.pk }}">
         {% include "stakeholders/partials/_employee_list.html" %}
     </div>
 </div>

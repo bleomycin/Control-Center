@@ -721,3 +721,8 @@ class EmployeeInlineTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Team Members")
         self.assertContains(resp, "Add Existing")
+
+    def test_firm_cards_show_add_existing_button(self):
+        resp = self.client.get(reverse("stakeholders:list"), {"tab": "firms"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Add Existing")

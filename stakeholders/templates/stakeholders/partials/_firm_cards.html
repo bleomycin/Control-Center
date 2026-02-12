@@ -20,22 +20,16 @@
         </div>
     </div>
     <!-- Employee list -->
-    <div class="divide-y divide-gray-700/50">
-        {% for emp in firm.employees.all %}
-        <div class="px-5 py-3 flex flex-wrap items-center justify-between gap-2 hover:bg-gray-700/30 transition-colors">
-            <div class="flex items-center gap-3">
-                <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                <a href="{{ emp.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ emp.name }}</a>
-                <span class="text-xs text-gray-500">{{ emp.entity_type|choice_label:"entity_type" }}</span>
-            </div>
-            <span class="text-sm text-gray-400">{{ emp.email|default:"" }}</span>
-        </div>
-        {% empty %}
-        <div class="px-5 py-3 text-sm text-gray-500 italic">No team members yet</div>
-        {% endfor %}
+    <div id="employee-form-container-{{ firm.pk }}"></div>
+    <div id="employee-list-{{ firm.pk }}">
+        {% include "stakeholders/partials/_employee_list.html" with employees=firm.employees.all stakeholder=firm %}
     </div>
-    <!-- Add employee link -->
-    <div class="px-5 py-3 border-t border-gray-700">
+    <!-- Action links -->
+    <div class="px-5 py-3 border-t border-gray-700 flex gap-4">
+        <button hx-get="{% url 'stakeholders:employee_add' firm.pk %}"
+                hx-target="#employee-form-container-{{ firm.pk }}"
+                hx-swap="innerHTML"
+                class="text-sm text-blue-400 hover:text-blue-300 font-medium">+ Add Existing</button>
         <a href="{% url 'stakeholders:create' %}?parent_organization={{ firm.pk }}" class="text-sm text-blue-400 hover:text-blue-300 font-medium">+ Add Employee</a>
     </div>
 </div>
