@@ -43,7 +43,7 @@ class StakeholderTabForm(TailwindFormMixin, forms.Form):
     entity_types = forms.MultipleChoiceField(
         choices=[],
         widget=forms.CheckboxSelectMultiple,
-        required=False,
+        error_messages={"required": "Select at least one entity type."},
     )
 
     def __init__(self, *args, instance=None, **kwargs):

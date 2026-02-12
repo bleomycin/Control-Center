@@ -661,3 +661,16 @@ class DynamicTabIntegrationTests(TestCase):
         counts = resp.context["tab_counts"]
         self.assertGreaterEqual(counts["attorneys"], 1)
         self.assertGreaterEqual(counts["lenders"], 1)
+
+    def test_tab_with_empty_types_shows_nothing(self):
+        """A tab with no entity_types configured should show zero results."""
+        StakeholderTab.objects.create(label="Empty Tab", entity_types=[], sort_order=99)
+        resp = self.client.get(reverse("stakeholders:list"), {"tab": "empty-tab"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(list(resp.context["stakeholders"]), [])
+
+    def test_tab_add_requires_entity_types(self):
+        """Creating a tab without selecting entity types should fail validation."""
+        resp = self.client.post(reverse("stakeholders:tab_add"), {"label": "No Types"})
+        self.assertEqual(resp.status_code, 200)  # re-renders form with errors
+        self.assertFalse(StakeholderTab.objects.filter(label="No Types").exists())
