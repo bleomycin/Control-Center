@@ -1,0 +1,24 @@
+<div class="divide-y divide-gray-700">
+    {% for ownership in aircraft_ownerships %}
+    <div class="px-4 py-3 flex items-center justify-between group">
+        <div>
+            <a href="{{ ownership.aircraft.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ ownership.aircraft.name }}</a>
+            {% if ownership.role %}<span class="text-xs text-gray-400 ml-2">({{ ownership.role }})</span>{% endif %}
+        </div>
+        <div class="flex items-center gap-3">
+            {% if ownership.ownership_percentage %}
+            <span class="text-sm font-medium text-green-400">{{ ownership.ownership_percentage }}%</span>
+            {% endif %}
+            <button hx-post="{% url 'stakeholders:aircraft_ownership_delete' ownership.pk %}"
+                    hx-target="#sh-aircraft-list"
+                    hx-swap="innerHTML"
+                    hx-confirm="Remove this aircraft ownership?"
+                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                &times;
+            </button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No aircraft</p>
+    {% endfor %}
+</div>

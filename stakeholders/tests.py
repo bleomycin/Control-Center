@@ -7,8 +7,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from assets.models import (
-    Investment, InvestmentParticipant, Loan, LoanParty,
-    PropertyOwnership, RealEstate,
+    Aircraft, AircraftOwner, InsurancePolicy, Investment,
+    InvestmentParticipant, Loan, LoanParty, PolicyHolder,
+    PropertyOwnership, RealEstate, Vehicle, VehicleOwner,
 )
 from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
 
@@ -726,3 +727,89 @@ class EmployeeInlineTests(TestCase):
         resp = self.client.get(reverse("stakeholders:list"), {"tab": "firms"})
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Add Existing")
+
+
+class StakeholderVehicleAircraftPolicyInlineTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Inline Owner", entity_type="contact")
+        cls.vehicle = Vehicle.objects.create(name="Test Sedan", status="active")
+        cls.aircraft = Aircraft.objects.create(name="Test Cessna", status="active")
+        cls.policy = InsurancePolicy.objects.create(name="Test Policy", status="active")
+
+    def test_vehicle_ownership_add_get(self):
+        resp = self.client.get(reverse("stakeholders:vehicle_ownership_add", args=[self.stakeholder.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "stakeholders/partials/_sh_vehicle_form.html")
+
+    def test_vehicle_ownership_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:vehicle_ownership_add", args=[self.stakeholder.pk]),
+            {"vehicle": self.vehicle.pk, "role": "Owner", "ownership_percentage": "100.00"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(VehicleOwner.objects.filter(stakeholder=self.stakeholder, vehicle=self.vehicle).exists())
+
+    def test_vehicle_ownership_delete(self):
+        owner = VehicleOwner.objects.create(
+            stakeholder=self.stakeholder, vehicle=self.vehicle, role="Owner", ownership_percentage=100,
+        )
+        resp = self.client.post(reverse("stakeholders:vehicle_ownership_delete", args=[owner.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(VehicleOwner.objects.filter(pk=owner.pk).exists())
+
+    def test_aircraft_ownership_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:aircraft_ownership_add", args=[self.stakeholder.pk]),
+            {"aircraft": self.aircraft.pk, "role": "Owner", "ownership_percentage": "50.00"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(AircraftOwner.objects.filter(stakeholder=self.stakeholder, aircraft=self.aircraft).exists())
+
+    def test_aircraft_ownership_delete(self):
+        owner = AircraftOwner.objects.create(
+            stakeholder=self.stakeholder, aircraft=self.aircraft, role="Owner", ownership_percentage=50,
+        )
+        resp = self.client.post(reverse("stakeholders:aircraft_ownership_delete", args=[owner.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(AircraftOwner.objects.filter(pk=owner.pk).exists())
+
+    def test_policyholder_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:policyholder_add", args=[self.stakeholder.pk]),
+            {"policy": self.policy.pk, "role": "Named Insured"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(PolicyHolder.objects.filter(stakeholder=self.stakeholder, policy=self.policy).exists())
+
+    def test_policyholder_delete(self):
+        holder = PolicyHolder.objects.create(
+            stakeholder=self.stakeholder, policy=self.policy, role="Named Insured",
+        )
+        resp = self.client.post(reverse("stakeholders:policyholder_delete", args=[holder.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(PolicyHolder.objects.filter(pk=holder.pk).exists())
+
+    def test_detail_shows_vehicle_tab(self):
+        VehicleOwner.objects.create(
+            stakeholder=self.stakeholder, vehicle=self.vehicle, role="Owner", ownership_percentage=100,
+        )
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.stakeholder.pk]))
+        self.assertContains(resp, "Test Sedan")
+        self.assertContains(resp, "Vehicles")
+
+    def test_detail_shows_aircraft_tab(self):
+        AircraftOwner.objects.create(
+            stakeholder=self.stakeholder, aircraft=self.aircraft, role="Owner", ownership_percentage=50,
+        )
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.stakeholder.pk]))
+        self.assertContains(resp, "Test Cessna")
+        self.assertContains(resp, "Aircraft")
+
+    def test_detail_shows_policy_tab(self):
+        PolicyHolder.objects.create(
+            stakeholder=self.stakeholder, policy=self.policy, role="Insured",
+        )
+        resp = self.client.get(reverse("stakeholders:detail", args=[self.stakeholder.pk]))
+        self.assertContains(resp, "Test Policy")
+        self.assertContains(resp, "Insurance")
