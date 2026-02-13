@@ -88,6 +88,7 @@ class PropertyOwnership(models.Model):
     class Meta:
         verbose_name_plural = "Property ownerships"
         ordering = ["-ownership_percentage", "stakeholder__name"]
+        unique_together = [("property", "stakeholder")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -140,6 +141,7 @@ class InvestmentParticipant(models.Model):
     class Meta:
         verbose_name_plural = "Investment participants"
         ordering = ["-ownership_percentage", "stakeholder__name"]
+        unique_together = [("investment", "stakeholder")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -213,6 +215,7 @@ class LoanParty(models.Model):
     class Meta:
         verbose_name_plural = "Loan parties"
         ordering = ["role", "-ownership_percentage", "stakeholder__name"]
+        unique_together = [("loan", "stakeholder")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -306,6 +309,7 @@ class PolicyHolder(models.Model):
     class Meta:
         verbose_name_plural = "Policy holders"
         ordering = ["role", "stakeholder__name"]
+        unique_together = [("policy", "stakeholder")]
 
     def __str__(self):
         role = f" - {self.role}" if self.role else ""
@@ -373,6 +377,7 @@ class VehicleOwner(models.Model):
     class Meta:
         verbose_name_plural = "Vehicle owners"
         ordering = ["-ownership_percentage", "stakeholder__name"]
+        unique_together = [("vehicle", "stakeholder")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -444,6 +449,7 @@ class AircraftOwner(models.Model):
     class Meta:
         verbose_name_plural = "Aircraft owners"
         ordering = ["-ownership_percentage", "stakeholder__name"]
+        unique_together = [("aircraft", "stakeholder")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
