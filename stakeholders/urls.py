@@ -27,6 +27,12 @@ urlpatterns = [
     path("participant/<int:pk>/delete/", views.investment_participant_delete, name="investment_participant_delete"),
     path("<int:pk>/loan-party/add/", views.loan_party_add, name="loan_party_add"),
     path("loan-party/<int:pk>/delete/", views.loan_party_delete, name="loan_party_delete"),
+    path("<int:pk>/vehicle-ownership/add/", views.vehicle_ownership_add, name="vehicle_ownership_add"),
+    path("vehicle-ownership/<int:pk>/delete/", views.vehicle_ownership_delete, name="vehicle_ownership_delete"),
+    path("<int:pk>/aircraft-ownership/add/", views.aircraft_ownership_add, name="aircraft_ownership_add"),
+    path("aircraft-ownership/<int:pk>/delete/", views.aircraft_ownership_delete, name="aircraft_ownership_delete"),
+    path("<int:pk>/policyholder/add/", views.policyholder_add, name="policyholder_add"),
+    path("policyholder/<int:pk>/delete/", views.policyholder_delete, name="policyholder_delete"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
 ]

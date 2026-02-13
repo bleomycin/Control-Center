@@ -1,7 +1,8 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
 from dashboard.choices import get_choices
-from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty
+from assets.models import (AircraftOwner, InsurancePolicy, InvestmentParticipant,
+                           LoanParty, PolicyHolder, PropertyOwnership, VehicleOwner)
 from .models import Stakeholder, StakeholderTab, ContactLog
 
 
@@ -107,6 +108,33 @@ class StakeholderLoanForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = LoanParty
         fields = ["loan", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class StakeholderVehicleForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = VehicleOwner
+        fields = ["vehicle", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class StakeholderAircraftForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = AircraftOwner
+        fields = ["aircraft", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class StakeholderPolicyForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = PolicyHolder
+        fields = ["policy", "role", "notes"]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 2}),
         }

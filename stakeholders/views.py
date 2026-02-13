@@ -8,7 +8,10 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from django.views.decorators.http import require_POST
 
 from dashboard.choices import get_choice_label, get_choices
-from .forms import ContactLogForm, EmployeeAssignForm, StakeholderForm, StakeholderPropertyForm, StakeholderInvestmentForm, StakeholderLoanForm, StakeholderTabForm
+from .forms import (ContactLogForm, EmployeeAssignForm, StakeholderAircraftForm,
+                     StakeholderForm, StakeholderInvestmentForm, StakeholderLoanForm,
+                     StakeholderPolicyForm, StakeholderPropertyForm, StakeholderTabForm,
+                     StakeholderVehicleForm)
 from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
 
 
@@ -197,12 +200,16 @@ class StakeholderDetailView(DetailView):
         ctx["all_legal_matters"] = obj.legal_matters.all()
 
         # Properties, investments, loans, vehicles, aircraft via through models
-        from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty, VehicleOwner, AircraftOwner
+        from assets.models import (PropertyOwnership, InvestmentParticipant, LoanParty,
+                                   VehicleOwner, AircraftOwner, PolicyHolder, InsurancePolicy)
         ctx["property_ownerships"] = PropertyOwnership.objects.filter(stakeholder=obj).select_related("property")
         ctx["investment_participants"] = InvestmentParticipant.objects.filter(stakeholder=obj).select_related("investment")
         ctx["loan_parties"] = LoanParty.objects.filter(stakeholder=obj).select_related("loan")
         ctx["vehicle_ownerships"] = VehicleOwner.objects.filter(stakeholder=obj).select_related("vehicle")
         ctx["aircraft_ownerships"] = AircraftOwner.objects.filter(stakeholder=obj).select_related("aircraft")
+        ctx["policyholder_roles"] = PolicyHolder.objects.filter(stakeholder=obj).select_related("policy")
+        ctx["policies_as_carrier"] = InsurancePolicy.objects.filter(carrier=obj)
+        ctx["policies_as_agent"] = InsurancePolicy.objects.filter(agent=obj)
         ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
 
         # Firm/employee hierarchy
@@ -214,6 +221,9 @@ class StakeholderDetailView(DetailView):
 
         # Counts for tab badges
         employee_count = ctx["employees"].count() if ctx["employees"] is not None else 0
+        policy_count = (ctx["policyholder_roles"].count()
+                        + ctx["policies_as_carrier"].count()
+                        + ctx["policies_as_agent"].count())
         ctx["counts"] = {
             "stakeholders": ctx["relationships_from"].count() + ctx["relationships_to"].count(),
             "properties": ctx["property_ownerships"].count(),
@@ -221,6 +231,7 @@ class StakeholderDetailView(DetailView):
             "loans": ctx["loan_parties"].count(),
             "vehicles": ctx["vehicle_ownerships"].count(),
             "aircraft": ctx["aircraft_ownerships"].count(),
+            "policies": policy_count,
             "legal_matters": ctx["all_legal_matters"].count(),
             "tasks": ctx["all_tasks"].count(),
             "notes": ctx["all_notes"].count(),
@@ -628,6 +639,99 @@ def loan_party_delete(request, pk):
         party.delete()
     return render(request, "stakeholders/partials/_sh_party_list.html",
                   {"parties": LoanParty.objects.filter(stakeholder=stakeholder).select_related("loan"),
+                   "stakeholder": stakeholder})
+
+
+# --- Inline vehicle/aircraft/policy management (stakeholder detail) ---
+
+def vehicle_ownership_add(request, pk):
+    from assets.models import VehicleOwner
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderVehicleForm(request.POST)
+        if form.is_valid():
+            owner = form.save(commit=False)
+            owner.stakeholder = stakeholder
+            owner.save()
+            return render(request, "stakeholders/partials/_sh_vehicle_list.html",
+                          {"vehicle_ownerships": VehicleOwner.objects.filter(stakeholder=stakeholder).select_related("vehicle"),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderVehicleForm()
+    return render(request, "stakeholders/partials/_sh_vehicle_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def vehicle_ownership_delete(request, pk):
+    from assets.models import VehicleOwner
+    owner = get_object_or_404(VehicleOwner, pk=pk)
+    stakeholder = owner.stakeholder
+    if request.method == "POST":
+        owner.delete()
+    return render(request, "stakeholders/partials/_sh_vehicle_list.html",
+                  {"vehicle_ownerships": VehicleOwner.objects.filter(stakeholder=stakeholder).select_related("vehicle"),
+                   "stakeholder": stakeholder})
+
+
+def aircraft_ownership_add(request, pk):
+    from assets.models import AircraftOwner
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderAircraftForm(request.POST)
+        if form.is_valid():
+            owner = form.save(commit=False)
+            owner.stakeholder = stakeholder
+            owner.save()
+            return render(request, "stakeholders/partials/_sh_aircraft_list.html",
+                          {"aircraft_ownerships": AircraftOwner.objects.filter(stakeholder=stakeholder).select_related("aircraft"),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderAircraftForm()
+    return render(request, "stakeholders/partials/_sh_aircraft_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def aircraft_ownership_delete(request, pk):
+    from assets.models import AircraftOwner
+    owner = get_object_or_404(AircraftOwner, pk=pk)
+    stakeholder = owner.stakeholder
+    if request.method == "POST":
+        owner.delete()
+    return render(request, "stakeholders/partials/_sh_aircraft_list.html",
+                  {"aircraft_ownerships": AircraftOwner.objects.filter(stakeholder=stakeholder).select_related("aircraft"),
+                   "stakeholder": stakeholder})
+
+
+def policyholder_add(request, pk):
+    from assets.models import PolicyHolder, InsurancePolicy
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderPolicyForm(request.POST)
+        if form.is_valid():
+            holder = form.save(commit=False)
+            holder.stakeholder = stakeholder
+            holder.save()
+            return render(request, "stakeholders/partials/_sh_policy_list.html",
+                          {"policyholder_roles": PolicyHolder.objects.filter(stakeholder=stakeholder).select_related("policy"),
+                           "policies_as_carrier": InsurancePolicy.objects.filter(carrier=stakeholder),
+                           "policies_as_agent": InsurancePolicy.objects.filter(agent=stakeholder),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderPolicyForm()
+    return render(request, "stakeholders/partials/_sh_policy_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def policyholder_delete(request, pk):
+    from assets.models import PolicyHolder, InsurancePolicy
+    holder = get_object_or_404(PolicyHolder, pk=pk)
+    stakeholder = holder.stakeholder
+    if request.method == "POST":
+        holder.delete()
+    return render(request, "stakeholders/partials/_sh_policy_list.html",
+                  {"policyholder_roles": PolicyHolder.objects.filter(stakeholder=stakeholder).select_related("policy"),
+                   "policies_as_carrier": InsurancePolicy.objects.filter(carrier=stakeholder),
+                   "policies_as_agent": InsurancePolicy.objects.filter(agent=stakeholder),
                    "stakeholder": stakeholder})
 
 
