@@ -1,22 +1,25 @@
 <div class="divide-y divide-gray-700">
     {% for party in parties %}
-    <div class="px-4 py-3 flex items-center justify-between group">
-        <div>
-            <a href="{{ party.loan.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ party.loan.name }}</a>
-            {% if party.role %}<span class="text-xs text-gray-400 ml-2">({{ party.role }})</span>{% endif %}
+    <div class="px-4 py-3 group">
+        <div class="flex items-center justify-between">
+            <div>
+                <a href="{{ party.loan.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ party.loan.name }}</a>
+                {% if party.role %}<span class="text-xs text-gray-400 ml-2">({{ party.role }})</span>{% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+                {% if party.ownership_percentage %}
+                <span class="text-sm font-medium text-orange-400">{{ party.ownership_percentage }}%</span>
+                {% endif %}
+                <button hx-post="{% url 'stakeholders:loan_party_delete' party.pk %}"
+                        hx-target="#sh-party-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this loan party?"
+                        class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                    &times;
+                </button>
+            </div>
         </div>
-        <div class="flex items-center gap-3">
-            {% if party.ownership_percentage %}
-            <span class="text-sm font-medium text-orange-400">{{ party.ownership_percentage }}%</span>
-            {% endif %}
-            <button hx-post="{% url 'stakeholders:loan_party_delete' party.pk %}"
-                    hx-target="#sh-party-list"
-                    hx-swap="innerHTML"
-                    hx-confirm="Remove this loan party?"
-                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
-                &times;
-            </button>
-        </div>
+        {% include "assets/partials/_inline_notes.html" with notes=party.notes edit_url=party.get_notes_url notes_id=party.get_notes_id %}
     </div>
     {% empty %}
     <p class="px-4 py-4 text-sm text-gray-500 text-center">No loans</p>

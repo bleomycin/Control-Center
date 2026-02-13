@@ -1,0 +1,16 @@
+<div id="{{ notes_id }}">
+{% if notes %}
+<div class="flex items-center gap-1.5 mt-0.5">
+    <p class="text-xs text-gray-500 italic">{{ notes }}</p>
+    <button hx-get="{{ edit_url }}"
+            hx-target="#{{ notes_id }}"
+            hx-swap="outerHTML"
+            class="text-xs text-gray-600 hover:text-blue-400 shrink-0">&centerdot; edit</button>
+</div>
+{% else %}
+<button hx-get="{{ edit_url }}"
+        hx-target="#{{ notes_id }}"
+        hx-swap="outerHTML"
+        class="text-xs text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100 mt-0.5">+ note</button>
+{% endif %}
+</div>

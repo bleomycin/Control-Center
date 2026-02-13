@@ -1,22 +1,25 @@
 <div class="divide-y divide-gray-700">
     {% for participant in participants %}
-    <div class="px-4 py-3 flex items-center justify-between group">
-        <div>
-            <a href="{{ participant.investment.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ participant.investment.name }}</a>
-            {% if participant.role %}<span class="text-xs text-gray-400 ml-2">({{ participant.role }})</span>{% endif %}
+    <div class="px-4 py-3 group">
+        <div class="flex items-center justify-between">
+            <div>
+                <a href="{{ participant.investment.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ participant.investment.name }}</a>
+                {% if participant.role %}<span class="text-xs text-gray-400 ml-2">({{ participant.role }})</span>{% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+                {% if participant.ownership_percentage %}
+                <span class="text-sm font-medium text-purple-400">{{ participant.ownership_percentage }}%</span>
+                {% endif %}
+                <button hx-post="{% url 'stakeholders:investment_participant_delete' participant.pk %}"
+                        hx-target="#sh-participant-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this investment participation?"
+                        class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                    &times;
+                </button>
+            </div>
         </div>
-        <div class="flex items-center gap-3">
-            {% if participant.ownership_percentage %}
-            <span class="text-sm font-medium text-purple-400">{{ participant.ownership_percentage }}%</span>
-            {% endif %}
-            <button hx-post="{% url 'stakeholders:investment_participant_delete' participant.pk %}"
-                    hx-target="#sh-participant-list"
-                    hx-swap="innerHTML"
-                    hx-confirm="Remove this investment participation?"
-                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
-                &times;
-            </button>
-        </div>
+        {% include "assets/partials/_inline_notes.html" with notes=participant.notes edit_url=participant.get_notes_url notes_id=participant.get_notes_id %}
     </div>
     {% empty %}
     <p class="px-4 py-4 text-sm text-gray-500 text-center">No investments</p>

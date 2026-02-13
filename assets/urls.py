@@ -94,4 +94,11 @@ urlpatterns = [
     path("aircraft-owner/<int:pk>/delete/", views.aircraft_owner_delete, name="aircraft_owner_delete"),
     path("aircraft/bulk/delete/", views.bulk_delete_aircraft, name="aircraft_bulk_delete"),
     path("aircraft/bulk/export/", views.bulk_export_aircraft_csv, name="aircraft_bulk_export_csv"),
+    # Inline notes editing for through models
+    path("ownership/<int:pk>/notes/", views.ownership_notes, name="ownership_notes"),
+    path("participant/<int:pk>/notes/", views.participant_notes, name="participant_notes"),
+    path("party/<int:pk>/notes/", views.loan_party_notes, name="loan_party_notes"),
+    path("vehicle-owner/<int:pk>/notes/", views.vehicle_owner_notes, name="vehicle_owner_notes"),
+    path("aircraft-owner/<int:pk>/notes/", views.aircraft_owner_notes, name="aircraft_owner_notes"),
+    path("policyholder/<int:pk>/notes/", views.policyholder_notes, name="policyholder_notes"),
 ]

@@ -1543,6 +1543,56 @@ def aircraft_owner_delete(request, pk):
                   {"owners": ac.owners.select_related("stakeholder").all(), "aircraft": ac})
 
 
+# --- Inline notes editing for through models ---
+
+def _notes_response(request, obj, notes_id, url):
+    """Shared handler: GET → edit form, POST → save & display, GET?display=1 → display."""
+    if request.method == "POST":
+        obj.notes = request.POST.get("notes", "").strip()
+        obj.save()
+    if request.method == "POST" or request.GET.get("display"):
+        return render(request, "assets/partials/_inline_notes.html",
+                      {"notes": obj.notes, "edit_url": url, "notes_id": notes_id})
+    return render(request, "assets/partials/_inline_notes_form.html",
+                  {"notes": obj.notes, "save_url": url, "notes_id": notes_id})
+
+
+def ownership_notes(request, pk):
+    obj = get_object_or_404(PropertyOwnership, pk=pk)
+    return _notes_response(request, obj, f"notes-ownership-{pk}",
+                           reverse("assets:ownership_notes", args=[pk]))
+
+
+def participant_notes(request, pk):
+    obj = get_object_or_404(InvestmentParticipant, pk=pk)
+    return _notes_response(request, obj, f"notes-participant-{pk}",
+                           reverse("assets:participant_notes", args=[pk]))
+
+
+def loan_party_notes(request, pk):
+    obj = get_object_or_404(LoanParty, pk=pk)
+    return _notes_response(request, obj, f"notes-party-{pk}",
+                           reverse("assets:loan_party_notes", args=[pk]))
+
+
+def vehicle_owner_notes(request, pk):
+    obj = get_object_or_404(VehicleOwner, pk=pk)
+    return _notes_response(request, obj, f"notes-vowner-{pk}",
+                           reverse("assets:vehicle_owner_notes", args=[pk]))
+
+
+def aircraft_owner_notes(request, pk):
+    obj = get_object_or_404(AircraftOwner, pk=pk)
+    return _notes_response(request, obj, f"notes-aowner-{pk}",
+                           reverse("assets:aircraft_owner_notes", args=[pk]))
+
+
+def policyholder_notes(request, pk):
+    obj = get_object_or_404(PolicyHolder, pk=pk)
+    return _notes_response(request, obj, f"notes-holder-{pk}",
+                           reverse("assets:policyholder_notes", args=[pk]))
+
+
 # --- Asset ↔ Policy linking ---
 
 def _policy_list_ctx(asset, m2m_field, unlink_url_name, new_policy_param):

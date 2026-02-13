@@ -1,24 +1,27 @@
 {% load humanize %}
 <div class="divide-y divide-gray-700">
     {% for holder in policyholder_roles %}
-    <div class="px-4 py-3 flex items-center justify-between group">
-        <div>
-            <a href="{{ holder.policy.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ holder.policy.name }}</a>
-            {% if holder.role %}<span class="text-xs text-gray-400 ml-2">({{ holder.role }})</span>{% endif %}
+    <div class="px-4 py-3 group">
+        <div class="flex items-center justify-between">
+            <div>
+                <a href="{{ holder.policy.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ holder.policy.name }}</a>
+                {% if holder.role %}<span class="text-xs text-gray-400 ml-2">({{ holder.role }})</span>{% endif %}
+            </div>
+            <div class="flex items-center gap-3">
+                {% if holder.policy.premium_amount %}
+                <span class="text-sm font-medium text-green-400">${{ holder.policy.premium_amount|floatformat:0|intcomma }}</span>
+                {% endif %}
+                <span class="text-xs px-2 py-0.5 rounded-full {% if holder.policy.status == 'active' %}bg-green-900/50 text-green-300{% elif holder.policy.status == 'expired' or holder.policy.status == 'cancelled' %}bg-red-900/50 text-red-300{% elif holder.policy.status == 'pending' %}bg-yellow-900/50 text-yellow-300{% else %}bg-gray-700 text-gray-300{% endif %}">{{ holder.policy.get_status_display }}</span>
+                <button hx-post="{% url 'stakeholders:policyholder_delete' holder.pk %}"
+                        hx-target="#sh-policy-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this policyholder role?"
+                        class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                    &times;
+                </button>
+            </div>
         </div>
-        <div class="flex items-center gap-3">
-            {% if holder.policy.premium_amount %}
-            <span class="text-sm font-medium text-green-400">${{ holder.policy.premium_amount|floatformat:0|intcomma }}</span>
-            {% endif %}
-            <span class="text-xs px-2 py-0.5 rounded-full {% if holder.policy.status == 'active' %}bg-green-900/50 text-green-300{% elif holder.policy.status == 'expired' or holder.policy.status == 'cancelled' %}bg-red-900/50 text-red-300{% elif holder.policy.status == 'pending' %}bg-yellow-900/50 text-yellow-300{% else %}bg-gray-700 text-gray-300{% endif %}">{{ holder.policy.get_status_display }}</span>
-            <button hx-post="{% url 'stakeholders:policyholder_delete' holder.pk %}"
-                    hx-target="#sh-policy-list"
-                    hx-swap="innerHTML"
-                    hx-confirm="Remove this policyholder role?"
-                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
-                &times;
-            </button>
-        </div>
+        {% include "assets/partials/_inline_notes.html" with notes=holder.notes edit_url=holder.get_notes_url notes_id=holder.get_notes_id %}
     </div>
     {% endfor %}
     {% for pol in policies_as_carrier %}

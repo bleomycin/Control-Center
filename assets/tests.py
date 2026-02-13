@@ -1359,3 +1359,123 @@ class AssetPolicyLinkTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         form = resp.context["form"]
         self.assertEqual(form.initial.get("covered_properties"), [str(self.prop.pk)])
+
+
+class InlineNotesTests(TestCase):
+    """Tests for inline notes editing on through-model records."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Notes Person", entity_type="person")
+        cls.prop = RealEstate.objects.create(name="Notes Prop", address="1 St", status="owned")
+        cls.investment = Investment.objects.create(name="Notes Inv")
+        cls.loan = Loan.objects.create(name="Notes Loan")
+        cls.policy = InsurancePolicy.objects.create(name="Notes Policy", status="active")
+        cls.vehicle = Vehicle.objects.create(name="Notes Car", status="active")
+        cls.aircraft = Aircraft.objects.create(name="Notes Plane", status="active")
+
+        cls.ownership = PropertyOwnership.objects.create(
+            property=cls.prop, stakeholder=cls.stakeholder, notes="old note")
+        cls.participant = InvestmentParticipant.objects.create(
+            investment=cls.investment, stakeholder=cls.stakeholder)
+        cls.party = LoanParty.objects.create(
+            loan=cls.loan, stakeholder=cls.stakeholder)
+        cls.vowner = VehicleOwner.objects.create(
+            vehicle=cls.vehicle, stakeholder=cls.stakeholder)
+        cls.aowner = AircraftOwner.objects.create(
+            aircraft=cls.aircraft, stakeholder=cls.stakeholder)
+        cls.holder = PolicyHolder.objects.create(
+            policy=cls.policy, stakeholder=cls.stakeholder)
+
+    def test_ownership_notes_get_edit_form(self):
+        resp = self.client.get(reverse("assets:ownership_notes", args=[self.ownership.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_inline_notes_form.html")
+
+    def test_ownership_notes_post_saves(self):
+        resp = self.client.post(
+            reverse("assets:ownership_notes", args=[self.ownership.pk]),
+            {"notes": "updated note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_inline_notes.html")
+        self.ownership.refresh_from_db()
+        self.assertEqual(self.ownership.notes, "updated note")
+
+    def test_ownership_notes_cancel(self):
+        resp = self.client.get(
+            reverse("assets:ownership_notes", args=[self.ownership.pk]) + "?display=1")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_inline_notes.html")
+
+    def test_ownership_notes_clear(self):
+        resp = self.client.post(
+            reverse("assets:ownership_notes", args=[self.ownership.pk]),
+            {"notes": ""},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.ownership.refresh_from_db()
+        self.assertEqual(self.ownership.notes, "")
+
+    def test_participant_notes_roundtrip(self):
+        resp = self.client.post(
+            reverse("assets:participant_notes", args=[self.participant.pk]),
+            {"notes": "investor note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.participant.refresh_from_db()
+        self.assertEqual(self.participant.notes, "investor note")
+
+    def test_loan_party_notes_roundtrip(self):
+        resp = self.client.post(
+            reverse("assets:loan_party_notes", args=[self.party.pk]),
+            {"notes": "party note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.party.refresh_from_db()
+        self.assertEqual(self.party.notes, "party note")
+
+    def test_vehicle_owner_notes_roundtrip(self):
+        resp = self.client.post(
+            reverse("assets:vehicle_owner_notes", args=[self.vowner.pk]),
+            {"notes": "vehicle note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.vowner.refresh_from_db()
+        self.assertEqual(self.vowner.notes, "vehicle note")
+
+    def test_aircraft_owner_notes_roundtrip(self):
+        resp = self.client.post(
+            reverse("assets:aircraft_owner_notes", args=[self.aowner.pk]),
+            {"notes": "aircraft note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.aowner.refresh_from_db()
+        self.assertEqual(self.aowner.notes, "aircraft note")
+
+    def test_policyholder_notes_roundtrip(self):
+        resp = self.client.post(
+            reverse("assets:policyholder_notes", args=[self.holder.pk]),
+            {"notes": "holder note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.holder.refresh_from_db()
+        self.assertEqual(self.holder.notes, "holder note")
+
+    def test_get_notes_url_methods(self):
+        """Through models expose get_notes_url for template use."""
+        self.assertIn(str(self.ownership.pk), self.ownership.get_notes_url())
+        self.assertIn(str(self.participant.pk), self.participant.get_notes_url())
+        self.assertIn(str(self.party.pk), self.party.get_notes_url())
+        self.assertIn(str(self.vowner.pk), self.vowner.get_notes_url())
+        self.assertIn(str(self.aowner.pk), self.aowner.get_notes_url())
+        self.assertIn(str(self.holder.pk), self.holder.get_notes_url())
+
+    def test_get_notes_id_methods(self):
+        """Through models expose get_notes_id for template use."""
+        self.assertEqual(self.ownership.get_notes_id(), f"notes-ownership-{self.ownership.pk}")
+        self.assertEqual(self.participant.get_notes_id(), f"notes-participant-{self.participant.pk}")
+        self.assertEqual(self.party.get_notes_id(), f"notes-party-{self.party.pk}")
+        self.assertEqual(self.vowner.get_notes_id(), f"notes-vowner-{self.vowner.pk}")
+        self.assertEqual(self.aowner.get_notes_id(), f"notes-aowner-{self.aowner.pk}")
+        self.assertEqual(self.holder.get_notes_id(), f"notes-holder-{self.holder.pk}")

@@ -94,6 +94,12 @@ class PropertyOwnership(models.Model):
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{percentage}{role}"
 
+    def get_notes_url(self):
+        return reverse("assets:ownership_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-ownership-{self.pk}"
+
 
 class Investment(models.Model):
     name = models.CharField(max_length=255)
@@ -139,6 +145,12 @@ class InvestmentParticipant(models.Model):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{percentage}{role}"
+
+    def get_notes_url(self):
+        return reverse("assets:participant_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-participant-{self.pk}"
 
 
 class Loan(models.Model):
@@ -206,6 +218,12 @@ class LoanParty(models.Model):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{percentage}{role}"
+
+    def get_notes_url(self):
+        return reverse("assets:loan_party_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-party-{self.pk}"
 
 
 class InsurancePolicy(models.Model):
@@ -293,6 +311,12 @@ class PolicyHolder(models.Model):
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{role}"
 
+    def get_notes_url(self):
+        return reverse("assets:policyholder_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-holder-{self.pk}"
+
 
 class Vehicle(models.Model):
     STATUS_CHOICES = [
@@ -354,6 +378,12 @@ class VehicleOwner(models.Model):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{percentage}{role}"
+
+    def get_notes_url(self):
+        return reverse("assets:vehicle_owner_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-vowner-{self.pk}"
 
 
 class Aircraft(models.Model):
@@ -419,3 +449,9 @@ class AircraftOwner(models.Model):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
         role = f" - {self.role}" if self.role else ""
         return f"{self.stakeholder.name}{percentage}{role}"
+
+    def get_notes_url(self):
+        return reverse("assets:aircraft_owner_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-aowner-{self.pk}"
