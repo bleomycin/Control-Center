@@ -136,7 +136,7 @@ Seven Django apps, all relationally linked:
 - Multi-type asset tabs render stacked sections with `<h3>` headers; single-type tabs get sort controls and bulk actions
 
 ### Multi-Stakeholder Ownership
-- Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty`, `VehicleOwner`, `AircraftOwner` — each stores percentage, role, and notes
+- Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty`, `VehicleOwner`, `AircraftOwner` — each stores percentage, role, and notes; all have `unique_together` on (asset FK, stakeholder FK); `PolicyHolder` also has `unique_together`
 - HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern for all 5 through models + PolicyHolder)
 - Inline notes: `_inline_notes.html`/`_inline_notes_form.html` shared partials; click-to-edit, save/cancel/clear; `get_notes_url()`/`get_notes_id()` on each through model
 - Stakeholder detail "All Connections" tabs: Stakeholders, Properties, Investments, Loans, Vehicles, Aircraft, Insurance, Legal, Tasks, Notes, Cash Flow
@@ -195,6 +195,7 @@ Seven Django apps, all relationally linked:
 - Tag/AssetTab slug collision: uniqueness loop generates `base-slug-1`, `-2`, etc.
 - `bulk-actions.js` looks up `#select-all` dynamically and uses fully delegated change events (works after HTMX swaps)
 - `switchView()` uses `source: form` (not `values: getFilterValues()`) for proper multi-select serialization
+- **Timezone**: `TIME_ZONE = 'America/Chicago'` with `USE_TZ = True`. Always use `timezone.localdate()` (not `date.today()`) and `timezone.localdate(dt)` (not `dt.date()`) when comparing dates from DateTimeFields — UTC vs local mismatch causes wrong results
 - Django test runner uses in-memory SQLite — WAL mode returns 'memory', not 'wal'
 - Backup/restore tests must use temp file-based DBs, not the in-memory test DB
 
