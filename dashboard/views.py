@@ -141,9 +141,8 @@ def dashboard(request):
     upcoming_deadlines.sort(key=lambda x: x["date"])
 
     # Asset Risk
-    from django.db.models import Q as DQ
     at_risk_properties = RealEstate.objects.filter(
-        DQ(status="in_dispute") | DQ(legal_matters__status__in=["active", "pending"]),
+        Q(status="in_dispute") | Q(legal_matters__status__in=["active", "pending"]),
     ).distinct()
     at_risk_loans = Loan.objects.filter(
         status__in=["defaulted", "in_dispute"],
@@ -386,7 +385,7 @@ def calendar_events(request):
     for fu in followups:
         events.append({
             "title": f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}",
-            "start": str(fu.outreach_date.date()),
+            "start": str(timezone.localdate(fu.outreach_date)),
             "url": fu.get_absolute_url(),
             "color": "#f59e0b",
             "extendedProps": {"type": "followup"},
