@@ -137,7 +137,9 @@ Seven Django apps, all relationally linked:
 
 ### Multi-Stakeholder Ownership
 - Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty`, `VehicleOwner`, `AircraftOwner` — each stores percentage and role
-- HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern)
+- HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern for all 5 through models + PolicyHolder)
+- Stakeholder detail "All Connections" tabs: Stakeholders, Properties, Investments, Loans, Vehicles, Aircraft, Insurance, Legal, Tasks, Notes, Cash Flow
+- `StakeholderVehicleForm`, `StakeholderAircraftForm`, `StakeholderPolicyForm` in `stakeholders/forms.py`
 - Create forms include optional "Initial Owner/Participant" fields, hidden on edit via `get_form()` field deletion
 
 ### Insurance Policy Tracking
