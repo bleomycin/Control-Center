@@ -132,7 +132,7 @@ class NoteListView(ListView):
             month_start = today.replace(day=1)
 
             def date_group_key(note):
-                d = note.date.date() if hasattr(note.date, 'date') else note.date
+                d = timezone.localdate(note.date) if hasattr(note.date, 'date') else note.date
                 if d == today:
                     return "Today"
                 elif d == yesterday:
