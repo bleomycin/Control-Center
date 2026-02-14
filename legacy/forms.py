@@ -8,6 +8,11 @@ class TailwindFormMixin:
         super().__init__(*args, **kwargs)
         for field_name, field in self.fields.items():
             widget = field.widget
+            # Fix datetime-local widgets: use ISO format with T separator
+            # so Safari/iOS can parse the value and accept form submissions.
+            if isinstance(widget, forms.DateTimeInput) and getattr(widget, "input_type", None) == "datetime-local":
+                widget.format = "%Y-%m-%dT%H:%M"
+                field.input_formats = ["%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"] + list(field.input_formats)
             base_classes = (
                 "block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 "
                 "shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
