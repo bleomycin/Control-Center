@@ -174,9 +174,9 @@ class NoteCreateView(CreateView):
                 parsed = dt.fromisoformat(date_param)
                 initial["date"] = timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
             except (ValueError, TypeError):
-                initial["date"] = timezone.now()
+                initial["date"] = timezone.localtime()
         else:
-            initial["date"] = timezone.now()
+            initial["date"] = timezone.localtime()
         for field in ("title", "content", "note_type"):
             if self.request.GET.get(field):
                 initial[field] = self.request.GET[field]
@@ -410,7 +410,7 @@ def quick_capture(request):
             response["HX-Redirect"] = reverse_lazy("notes:list")
             return response
     else:
-        form = QuickNoteForm(initial={"date": timezone.now()})
+        form = QuickNoteForm()
     return render(request, "notes/partials/_quick_capture_form.html", {"form": form})
 
 

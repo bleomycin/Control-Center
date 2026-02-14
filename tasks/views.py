@@ -466,7 +466,7 @@ def followup_add(request, pk):
             return render(request, "tasks/partials/_followup_list.html",
                           {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
     else:
-        initial = {"outreach_date": timezone.now().strftime("%Y-%m-%dT%H:%M")}
+        initial = {"outreach_date": timezone.localtime().strftime("%Y-%m-%dT%H:%M")}
         first_stakeholder = task.related_stakeholders.first()
         if first_stakeholder:
             initial["stakeholder"] = first_stakeholder.pk
