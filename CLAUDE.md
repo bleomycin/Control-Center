@@ -165,7 +165,7 @@ Seven Django apps, all relationally linked:
 - `Task.related_stakeholders` M2M (plain, no through model); `_grouped_stakeholder_choices()` builds `<optgroup>` widget
 - `SubTask`: HTMX add/toggle/delete; progress bar on detail, `N/M` annotations on list/kanban
 - Recurring: `is_recurring` + `recurrence_rule`; `create_next_recurrence()` called in all 4 completion paths
-- Meeting: `task_type="meeting"` + optional `due_time` TimeField
+- Meeting: `task_type="meeting"` + optional `due_time` TimeField; `QuickTaskForm` also supports meetings (type select + conditional time field)
 - Kanban: SortableJS drag-and-drop, `kanban_update` endpoint
 - Inline edit: clickable status/priority badges cycle values; `_task_row.html` partial for single-row re-render
 

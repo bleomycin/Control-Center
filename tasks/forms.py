@@ -60,10 +60,17 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Task
-        fields = ["title", "due_date", "priority"]
+        fields = ["title", "task_type", "due_date", "due_time", "priority"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
+            "due_time": forms.TimeInput(attrs={"type": "time"}),
         }
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("due_time") and not cleaned.get("due_date"):
+            self.add_error("due_time", "A due date is required when setting a time.")
+        return cleaned
 
 
 class FollowUpForm(TailwindFormMixin, forms.ModelForm):
