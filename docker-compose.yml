@@ -6,12 +6,7 @@ services:
     env_file:
       - .env
     volumes:
-      - legacy-data:/app/data
-      - legacy-media:/app/media
-      - legacy-backups:/app/backups
+      - ./persist/data:/app/data
+      - ./persist/media:/app/media
+      - ./persist/backups:/app/backups
     restart: unless-stopped
-
-volumes:
-  legacy-data:
-  legacy-media:
-  legacy-backups:

@@ -562,21 +562,18 @@ The background worker (`qcluster`) must be running for automated backups to exec
 | Environment | Default Location | Override |
 |-------------|-----------------|----------|
 | Local | `<project-root>/backups/` | `BACKUP_DIR` env var |
-| Docker | `/app/backups/` (named volume `legacy-backups`) | `BACKUP_DIR` env var |
+| Docker | `/app/backups/` (bind mount `./persist/backups/`) | `BACKUP_DIR` env var |
 
-### Docker Backup Volume
+### Docker Bind Mounts
 
-Docker Compose mounts a persistent `legacy-backups` volume at `/app/backups/`. Backups survive container rebuilds.
+Docker Compose uses bind mounts under `./persist/` for all persistent data. Files are directly accessible on the host.
 
 ```bash
-# List backups inside the container
+# List backups directly on host
+ls -la persist/backups/
+
+# Or inside the container
 docker compose exec web ls -la /app/backups/
-
-# Copy a backup to the host
-docker compose cp web:/app/backups/controlcenter-backup-20260209-120000.tar.gz ./
-
-# Copy a backup into the container for restore
-docker compose cp ./controlcenter-backup-20260209-120000.tar.gz web:/app/backups/
 ```
 
 ### Disaster Recovery Example
@@ -585,7 +582,7 @@ docker compose cp ./controlcenter-backup-20260209-120000.tar.gz web:/app/backups
 # 1. Stop the running container
 docker compose down
 
-# 2. Start fresh container (data volume still intact)
+# 2. Start fresh container (persist/ directory still intact)
 docker compose up --build -d
 
 # 3. Restore from backup
@@ -855,13 +852,13 @@ Single container running:
 - **Gunicorn** (foreground, PID 1) — 2 workers, 30-second timeout
 - **qcluster** (background) — 2 worker processes for scheduled tasks
 
-### Volumes
+### Persistent Data (Bind Mounts)
 
-| Volume | Mount Point | Contents |
-|--------|------------|----------|
-| `legacy-data` | `/app/data/` | SQLite database |
-| `legacy-media` | `/app/media/` | Uploaded files |
-| `legacy-backups` | `/app/backups/` | Backup archives |
+| Host Path | Mount Point | Contents |
+|-----------|------------|----------|
+| `./persist/data/` | `/app/data/` | SQLite database |
+| `./persist/media/` | `/app/media/` | Uploaded files |
+| `./persist/backups/` | `/app/backups/` | Backup archives |
 
 ### Startup Sequence
 
@@ -900,8 +897,8 @@ docker compose exec web python manage.py restore /app/backups/<archive>.tar.gz
 # List backups
 docker compose exec web ls -lh /app/backups/
 
-# Copy backup to host
-docker compose cp web:/app/backups/<archive>.tar.gz ./
+# Access backups directly on host
+ls persist/backups/
 
 # Run a one-off management command
 docker compose exec web python manage.py <command>
@@ -909,8 +906,8 @@ docker compose exec web python manage.py <command>
 # Stop
 docker compose down
 
-# Stop and remove volumes (DESTROYS ALL DATA)
-docker compose down -v
+# Stop and remove all persistent data (DESTROYS ALL DATA)
+docker compose down && rm -rf persist/
 ```
 
 ---
