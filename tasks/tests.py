@@ -231,11 +231,34 @@ class TaskViewTests(TestCase):
     def test_quick_create_post(self):
         resp = self.client.post(reverse("tasks:quick_create"), {
             "title": "Quick Task",
+            "task_type": "one_time",
             "priority": "low",
         })
         self.assertEqual(resp.status_code, 204)
         self.assertIn("HX-Trigger", resp)
         self.assertIn("HX-Redirect", resp)
+
+    def test_quick_create_meeting(self):
+        resp = self.client.post(reverse("tasks:quick_create"), {
+            "title": "Team Standup",
+            "task_type": "meeting",
+            "due_date": "2025-03-01",
+            "due_time": "10:00",
+            "priority": "medium",
+        })
+        self.assertEqual(resp.status_code, 204)
+        task = Task.objects.get(title="Team Standup")
+        self.assertEqual(task.task_type, "meeting")
+        self.assertEqual(str(task.due_time), "10:00:00")
+
+    def test_quick_create_meeting_time_requires_date(self):
+        resp = self.client.post(reverse("tasks:quick_create"), {
+            "title": "No Date Meeting",
+            "task_type": "meeting",
+            "due_time": "14:00",
+            "priority": "low",
+        })
+        self.assertEqual(resp.status_code, 200)  # re-renders with error
 
     def test_followup_add(self):
         resp = self.client.post(
