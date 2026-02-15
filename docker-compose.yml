@@ -6,12 +6,7 @@ services:
     env_file:
       - .env
     volumes:
-      - blaine-data:/app/data
-      - blaine-media:/app/media
-      - blaine-backups:/app/backups
+      - ./persist/data:/app/data
+      - ./persist/media:/app/media
+      - ./persist/backups:/app/backups
     restart: unless-stopped
-
-volumes:
-  blaine-data:
-  blaine-media:
-  blaine-backups:
