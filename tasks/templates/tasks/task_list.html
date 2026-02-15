@@ -3,7 +3,7 @@
 {% block title %}Tasks - Control Center{% endblock %}
 {% block extra_head %}
 {% if current_view == "board" %}
-<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+<script src="{% static 'vendor/Sortable.min.js' %}"></script>
 {% endif %}
 {% endblock %}
 {% block content %}
@@ -157,7 +157,7 @@ function switchView(mode) {
         if (mode === 'board') {
             if (typeof Sortable === 'undefined') {
                 var script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js';
+                script.src = '{% static "vendor/Sortable.min.js" %}';
                 script.onload = function() {
                     var kanbanScript = document.createElement('script');
                     kanbanScript.src = '{% static "js/kanban.js" %}';

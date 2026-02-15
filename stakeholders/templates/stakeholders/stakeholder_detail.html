@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize choice_labels %}
+{% load humanize choice_labels static %}
 {% block title %}{{ stakeholder.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
@@ -403,7 +403,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 </script>
 
 <!-- Enhanced Cytoscape Graph -->
-<script src="https://unpkg.com/cytoscape@3.28.1/dist/cytoscape.min.js"></script>
+<script src="{% static 'vendor/cytoscape.min.js' %}"></script>
 <script>
 (function() {
     fetch("{% url 'stakeholders:graph_data' stakeholder.pk %}")
