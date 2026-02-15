@@ -17,6 +17,7 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
             "next_hearing_date": forms.DateInput(attrs={"type": "date"}),
             "outcome": forms.Textarea(attrs={"rows": 3}),
             "description": forms.Textarea(attrs={"rows": 4}),
+            "matter_type": forms.Select(),
             "attorneys": forms.SelectMultiple(attrs={"size": 4}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": 4}),
             "related_properties": forms.SelectMultiple(attrs={"size": 4}),
@@ -24,7 +25,7 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["matter_type"].widget = forms.Select(choices=get_choices("matter_type"))
+        self.fields["matter_type"].widget.choices = get_choices("matter_type")
 
 
 class EvidenceForm(TailwindFormMixin, forms.ModelForm):

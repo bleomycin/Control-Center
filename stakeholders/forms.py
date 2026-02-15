@@ -13,6 +13,7 @@ class StakeholderForm(TailwindFormMixin, forms.ModelForm):
                   "parent_organization", "trust_rating", "risk_rating", "notes_text"]
         widgets = {
             "notes_text": forms.Textarea(attrs={"rows": 3}),
+            "entity_type": forms.Select(),
         }
         labels = {
             "parent_organization": "Firm",
@@ -20,7 +21,7 @@ class StakeholderForm(TailwindFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["entity_type"].widget = forms.Select(choices=get_choices("entity_type"))
+        self.fields["entity_type"].widget.choices = get_choices("entity_type")
         self.fields["parent_organization"].queryset = Stakeholder.objects.filter(entity_type="firm")
 
 
@@ -32,11 +33,12 @@ class ContactLogForm(TailwindFormMixin, forms.ModelForm):
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "follow_up_date": forms.DateInput(attrs={"type": "date"}),
             "summary": forms.Textarea(attrs={"rows": 3}),
+            "method": forms.Select(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["method"].widget = forms.Select(choices=get_choices("contact_method"))
+        self.fields["method"].widget.choices = get_choices("contact_method")
 
 
 class StakeholderTabForm(TailwindFormMixin, forms.Form):
