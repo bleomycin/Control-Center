@@ -2,16 +2,57 @@
     <h2 class="text-lg font-semibold text-white mb-4">Quick Task</h2>
     <form hx-post="{% url 'tasks:quick_create' %}" hx-swap="none" class="space-y-4">
         {% csrf_token %}
-        {% for field in form %}
         <div>
-            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.label }}</label>
-            {{ field }}
-            {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+            <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.title.label }}</label>
+            {{ form.title }}
+            {% if form.title.errors %}<p class="mt-1 text-sm text-red-400">{{ form.title.errors.0 }}</p>{% endif %}
         </div>
-        {% endfor %}
+        <div>
+            <label for="{{ form.task_type.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.task_type.label }}</label>
+            {{ form.task_type }}
+            {% if form.task_type.errors %}<p class="mt-1 text-sm text-red-400">{{ form.task_type.errors.0 }}</p>{% endif %}
+        </div>
+        <div class="flex gap-4">
+            <div class="flex-1">
+                <label for="{{ form.due_date.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="qt-due-date-label">{{ form.due_date.label }}</label>
+                {{ form.due_date }}
+                {% if form.due_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_date.errors.0 }}</p>{% endif %}
+            </div>
+            <div id="qt-due-time-wrapper" class="flex-1 hidden">
+                <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Time</label>
+                {{ form.due_time }}
+                {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+        <div>
+            <label for="{{ form.priority.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.priority.label }}</label>
+            {{ form.priority }}
+            {% if form.priority.errors %}<p class="mt-1 text-sm text-red-400">{{ form.priority.errors.0 }}</p>{% endif %}
+        </div>
         <div class="flex gap-3 pt-2">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Task</button>
             <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
         </div>
     </form>
+    <script>
+        (function() {
+            var typeSelect = document.getElementById('{{ form.task_type.id_for_label }}');
+            if (typeSelect) {
+                function updateMeetingFields() {
+                    var wrapper = document.getElementById('qt-due-time-wrapper');
+                    var dateLabel = document.getElementById('qt-due-date-label');
+                    if (typeSelect.value === 'meeting') {
+                        wrapper.classList.remove('hidden');
+                        if (dateLabel) dateLabel.textContent = 'Meeting date';
+                    } else {
+                        wrapper.classList.add('hidden');
+                        document.getElementById('{{ form.due_time.id_for_label }}').value = '';
+                        if (dateLabel) dateLabel.textContent = 'Due date';
+                    }
+                }
+                typeSelect.addEventListener('change', updateMeetingFields);
+                updateMeetingFields();
+            }
+        })();
+    </script>
 </div>
