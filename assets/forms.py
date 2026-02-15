@@ -156,6 +156,7 @@ class InsurancePolicyForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "effective_date": forms.DateInput(attrs={"type": "date"}),
             "expiration_date": forms.DateInput(attrs={"type": "date"}),
+            "policy_type": forms.Select(),
             "covered_properties": forms.SelectMultiple(attrs={"size": 4}),
             "covered_vehicles": forms.SelectMultiple(attrs={"size": 4}),
             "covered_aircraft": forms.SelectMultiple(attrs={"size": 4}),
@@ -164,7 +165,7 @@ class InsurancePolicyForm(TailwindFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["policy_type"].widget = forms.Select(choices=get_choices("policy_type"))
+        self.fields["policy_type"].widget.choices = get_choices("policy_type")
 
 
 class PolicyHolderForm(TailwindFormMixin, forms.ModelForm):
@@ -197,12 +198,13 @@ class VehicleForm(TailwindFormMixin, forms.ModelForm):
                   "estimated_value", "acquisition_date", "status", "notes_text"]
         widgets = {
             "acquisition_date": forms.DateInput(attrs={"type": "date"}),
+            "vehicle_type": forms.Select(),
             "notes_text": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["vehicle_type"].widget = forms.Select(choices=get_choices("vehicle_type"))
+        self.fields["vehicle_type"].widget.choices = get_choices("vehicle_type")
 
 
 class VehicleOwnerForm(TailwindFormMixin, forms.ModelForm):
@@ -237,12 +239,13 @@ class AircraftForm(TailwindFormMixin, forms.ModelForm):
                   "registration_country", "notes_text"]
         widgets = {
             "acquisition_date": forms.DateInput(attrs={"type": "date"}),
+            "aircraft_type": forms.Select(),
             "notes_text": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["aircraft_type"].widget = forms.Select(choices=get_choices("aircraft_type"))
+        self.fields["aircraft_type"].widget.choices = get_choices("aircraft_type")
 
 
 class AircraftOwnerForm(TailwindFormMixin, forms.ModelForm):
