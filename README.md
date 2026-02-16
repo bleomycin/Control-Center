@@ -38,8 +38,8 @@ A self-hosted personal management system built with Django. Designed as a single
 ### Docker (recommended)
 
 ```bash
-git clone https://github.com/trialskid/control-center.git
-cd control-center
+git clone https://github.com/bleomycin/Control-Center.git
+cd Control-Center
 cp .env.example .env          # edit SECRET_KEY for production
 docker compose up --build
 ```
