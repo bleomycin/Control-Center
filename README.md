@@ -71,7 +71,7 @@ python manage.py runserver
 | Database | SQLite | WAL mode |
 | Frontend | Django Templates + HTMX | 2.0.4 |
 | CSS | Tailwind CSS (standalone CLI) | 3.4.17 |
-| Charts | Chart.js (CDN) | 4.x |
+| Charts | Chart.js (self-hosted) | 4.x |
 | PDF Export | ReportLab (platypus engine) | 4.4.9 |
 | Background Jobs | Django-Q2 (ORM broker) | 1.9.0 |
 | Static Files | WhiteNoise | 6.9.0 |
@@ -119,13 +119,13 @@ Seven Django apps, all relationally cross-linked:
 
 | Module | Models | Purpose |
 |--------|--------|---------|
-| **Dashboard** | ChoiceOption, EmailSettings, Notification | Homepage, global search, timeline, calendar, notifications, settings |
-| **Stakeholders** | Stakeholder, Relationship, ContactLog | CRM with firm/employee hierarchy, trust/risk ratings, network graph |
-| **Assets** | RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty | Properties, investments, loans with multi-stakeholder ownership |
+| **Dashboard** | ChoiceOption, EmailSettings, BackupSettings, Notification, SampleDataStatus | Homepage, global search, timeline, calendar, notifications, backup config, settings hub |
+| **Stakeholders** | Stakeholder, StakeholderTab, Relationship, ContactLog | CRM with firm/employee hierarchy, trust/risk ratings, network graph, dynamic tabs |
+| **Assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty, InsurancePolicy, PolicyHolder, Vehicle, VehicleOwner, Aircraft, AircraftOwner | Unified asset page with dynamic tabs; properties, investments, loans, insurance, vehicles, aircraft with multi-stakeholder ownership |
 | **Legal** | LegalMatter, Evidence | Case tracking with hearings, settlements, evidence, linked entities |
-| **Tasks** | Task, FollowUp | Deadlines, priorities, bidirectional direction, follow-up reminders |
+| **Tasks** | Task, FollowUp, SubTask | Deadlines, priorities, bidirectional direction, follow-up reminders, subtask checklists, recurring tasks, kanban board, meetings |
 | **Cash Flow** | CashFlowEntry | Income/expense tracking with charts, projections, liquidity alerts |
-| **Notes** | Note, Attachment | Searchable notes with file uploads, linked to any entity |
+| **Notes** | Note, Attachment, Link, Tag, Folder | Searchable notes with file uploads, tags, folders, 3 view modes (cards/list/timeline) |
 
 ---
 
@@ -291,9 +291,77 @@ Inline HTMX add/delete on the stakeholder detail page. Each log records date, co
 
 **Statuses:** Active, Paid Off, Defaulted, In Dispute
 
-**Fields:** Original amount, current balance, interest rate, monthly payment, next payment date, maturity date, collateral description.
+**Fields:** Original amount, current balance, interest rate, monthly payment, next payment date, maturity date, collateral description. Hard money flag with default interest rate.
+
+**Related Assets:** Loans can be linked to properties, investments, vehicles, and aircraft via FK fields. Asset detail pages have HTMX inline loan link/unlink.
 
 **Multi-Stakeholder Parties:** Loans support multiple parties via `LoanParty` (stakeholder, percentage, role: Lender, Borrower, Co-borrower, Guarantor). Color-coded orange percentage badges.
+
+### Insurance Policies
+
+**URLs:**
+
+| Action | URL |
+|--------|-----|
+| List | `/assets/policies/` |
+| Create | `/assets/policies/create/` |
+| Detail | `/assets/policies/<id>/` |
+| Edit | `/assets/policies/<id>/edit/` |
+| Delete | `/assets/policies/<id>/delete/` |
+| PDF export | `/assets/policies/<id>/pdf/` |
+| CSV export | `/assets/policies/export/` |
+
+**Statuses:** Active, Expired, Cancelled, Pending
+
+**Policy Types** (DB-backed): Homeowners, Auto, Umbrella, Title, Flood, Earthquake, Liability, Life
+
+**Relationships:** Carrier and agent FKs to stakeholders; covered properties, vehicles, and aircraft M2M fields. `PolicyHolder` through model for named insured parties.
+
+### Vehicles
+
+**URLs:**
+
+| Action | URL |
+|--------|-----|
+| List | `/assets/vehicles/` |
+| Create | `/assets/vehicles/create/` |
+| Detail | `/assets/vehicles/<id>/` |
+| Edit | `/assets/vehicles/<id>/edit/` |
+| Delete | `/assets/vehicles/<id>/delete/` |
+| PDF export | `/assets/vehicles/<id>/pdf/` |
+| CSV export | `/assets/vehicles/export/` |
+
+**Statuses:** Active, Stored, Sold, In Dispute
+
+**Vehicle Types** (DB-backed): Sedan, SUV, Truck, Motorcycle, RV, Van, Boat, Other
+
+**Fields:** VIN, year, make, model, color, mileage, license plate, registration state, estimated value.
+
+### Aircraft
+
+**URLs:**
+
+| Action | URL |
+|--------|-----|
+| List | `/assets/aircraft/` |
+| Create | `/assets/aircraft/create/` |
+| Detail | `/assets/aircraft/<id>/` |
+| Edit | `/assets/aircraft/<id>/edit/` |
+| Delete | `/assets/aircraft/<id>/delete/` |
+| PDF export | `/assets/aircraft/<id>/pdf/` |
+| CSV export | `/assets/aircraft/export/` |
+
+**Statuses:** Active, Stored, Sold, In Dispute, In Maintenance
+
+**Aircraft Types** (DB-backed): Single Engine, Multi Engine, Turboprop, Jet, Helicopter, Glider
+
+**Fields:** Tail number, serial number, year, make, model, total hours, base airport, registration country, number of engines, estimated value.
+
+### Unified Asset Page
+
+**URL:** `/assets/`
+
+All asset types are accessible from a single page with dynamic DB-backed tabs. The built-in "All" tab shows all asset types in stacked sections. Custom tabs can filter by any combination of asset types. Gear icon in the tab bar links to tab settings at `/assets/tabs/`.
 
 ---
 
@@ -355,7 +423,7 @@ Inline HTMX add/delete on the stakeholder detail page. Each log records date, co
 
 **Priorities:** Critical, High, Medium, Low
 
-**Task Types:** One-Time, Reference
+**Task Types:** One-Time, Reference, Meeting
 
 ### Bidirectional Task Direction
 
@@ -385,6 +453,20 @@ Follow-ups track outreach attempts on tasks:
   - Gray "No reminder" — pending + reminder disabled
 - **Mark Responded:** HTMX button to record a response with timestamp
 - **Stale Detection:** `is_stale` property fires only when `reminder_enabled=True` and current time exceeds `outreach_date + follow_up_days`
+
+### Subtasks
+
+Tasks support a checklist of subtasks with HTMX inline add/toggle/delete. Progress bar on the detail page, `N/M` annotations on list and kanban views.
+
+### Recurring Tasks
+
+Tasks can be marked as recurring with a recurrence rule (daily, weekly, biweekly, monthly, quarterly, yearly). Completing a recurring task automatically creates the next occurrence.
+
+### Kanban Board
+
+**URL:** `/tasks/?view=kanban`
+
+Drag-and-drop kanban board with SortableJS. Columns: Not Started, In Progress, Waiting, Complete. Cards show priority badges and subtask progress.
 
 ### Task Create Form
 
@@ -466,18 +548,33 @@ The notes list uses a card-based layout showing:
 
 DB-backed via `ChoiceOption`: Call (green), Email (blue), Meeting (purple), Research (cyan), Legal Update (amber), General (gray).
 
+### Tags & Folders
+
+Notes can be organized with color-coded tags (M2M) and folders (FK). Tag and folder management at `/notes/tags/` and `/notes/folders/`. Folder tab bar on the list page for quick filtering.
+
+### View Modes
+
+The notes list supports 3 view modes (toggled via buttons):
+
+| Mode | Description |
+|------|-------------|
+| **Cards** | Card grid with type badges, content previews, entity chips |
+| **List** | Compact table view |
+| **Timeline** | Grouped by date with chronological layout |
+
 ### Relationships
 
 Each note supports M2M links to:
 - Participants (stakeholders present)
 - Related stakeholders
 - Related legal matters
-- Related properties
+- Related properties, investments, loans
+- Related insurance policies, vehicles, aircraft
 - Related tasks
 
-### Attachments
+### Attachments & Links
 
-File uploads via HTMX inline add/delete. Files stored in `media/attachments/`. Each attachment has an optional description.
+File uploads via HTMX inline add/delete. Files stored in `media/attachments/`. External URL links with title and description.
 
 ---
 
@@ -547,15 +644,18 @@ The restore command:
 3. Replaces the `media/` directory
 4. Runs `migrate` to apply any schema differences
 
-### Automated Daily Backups
+### Automated Backups
 
-When `python manage.py setup_schedules` is run (automatically on Docker startup), a daily backup schedule is registered with django-q2:
+**Configuration URL:** `/settings/backups/`
 
-- **Schedule:** Daily at midnight
-- **Retention:** Keeps the 7 most recent backups, prunes older ones
-- **Function:** `dashboard.backup_task.run_backup`
+Backup schedule is configurable via the web UI (`BackupSettings` singleton):
 
-The background worker (`qcluster`) must be running for automated backups to execute.
+- **Frequency:** Daily, Hourly, or Weekly
+- **Time:** Configurable hour and minute
+- **Retention:** Configurable number of backups to keep (default: 7)
+- **Enable/Disable:** Toggle automated backups on or off
+
+Saving settings immediately updates the live django-q2 `Schedule` record (no restart needed). The background worker (`qcluster`) must be running for automated backups to execute.
 
 ### Backup Storage
 
@@ -625,7 +725,7 @@ python manage.py setup_schedules
 | Check Overdue Tasks | `tasks.notifications.check_overdue_tasks` | Daily |
 | Check Upcoming Reminders | `tasks.notifications.check_upcoming_reminders` | Hourly |
 | Check Stale Follow-ups | `tasks.notifications.check_stale_followups` | Daily |
-| Daily Backup | `dashboard.backup_task.run_backup` | Daily |
+| Automated Backup | `dashboard.backup_task.run_backup` | Configurable via Settings UI |
 
 ### Starting the Worker
 
@@ -686,7 +786,7 @@ The master `notifications_enabled` switch controls whether scheduled tasks send 
 
 **URL:** `/settings/choices/`
 
-Four categories of dropdown options are stored in the database via the `ChoiceOption` model, replacing hardcoded `choices=` on model fields:
+Seven categories of dropdown options are stored in the database via the `ChoiceOption` model, replacing hardcoded `choices=` on model fields:
 
 | Category | Used By |
 |----------|---------|
@@ -694,6 +794,9 @@ Four categories of dropdown options are stored in the database via the `ChoiceOp
 | Contact Method | `ContactLog.method`, `FollowUp.method` |
 | Legal Matter Type | `LegalMatter.matter_type` |
 | Note Type | `Note.note_type` |
+| Policy Type | `InsurancePolicy.policy_type` |
+| Vehicle Type | `Vehicle.vehicle_type` |
+| Aircraft Type | `Aircraft.aircraft_type` |
 
 ### Settings UI Features
 
@@ -743,6 +846,9 @@ Every list page has a CSV export button (purple). Available at:
 /assets/real-estate/export/
 /assets/investments/export/
 /assets/loans/export/
+/assets/policies/export/
+/assets/vehicles/export/
+/assets/aircraft/export/
 ```
 
 Bulk export (selected rows only) available via the bulk action bar on each list page.
@@ -759,6 +865,9 @@ Every detail page has a PDF export button (purple). Uses ReportLab's platypus en
 /assets/real-estate/<id>/pdf/
 /assets/investments/<id>/pdf/
 /assets/loans/<id>/pdf/
+/assets/policies/<id>/pdf/
+/assets/vehicles/<id>/pdf/
+/assets/aircraft/<id>/pdf/
 ```
 
 PDF sections include key-value info tables, related entity tables, and text blocks. Generic utility at `config/pdf_export.py`.
@@ -930,7 +1039,7 @@ python manage.py createsuperuser
 # Local only
 python manage.py runserver
 
-# LAN / ngrok access
+# LAN access
 python manage.py runserver 0.0.0.0:8000
 ```
 
@@ -970,14 +1079,14 @@ python manage.py qcluster
 | `python manage.py runserver` | Start development server |
 | `python manage.py migrate` | Apply database migrations |
 | `python manage.py createsuperuser` | Create admin user |
-| `python manage.py load_sample_data` | Load comprehensive demo dataset (16 stakeholders, 5 properties, 5 investments, 4 loans, 5 legal matters, 21 tasks, 21 cash flow entries, 9 notes) |
+| `python manage.py load_sample_data` | Load comprehensive demo dataset (16 stakeholders, 5 properties, 5 investments, 4 loans, 4 insurance policies, 4 vehicles, 3 aircraft, 5 legal matters, 21 tasks, 21 cash flow entries, 9 notes) |
 | `python manage.py setup_schedules` | Register django-q2 schedules (3 notification tasks + daily backup) |
 | `python manage.py qcluster` | Start background task worker |
 | `python manage.py backup` | Create timestamped backup archive |
 | `python manage.py backup --keep N` | Create backup and prune, keeping only N most recent |
 | `python manage.py backup --dir PATH` | Create backup in a custom directory |
 | `python manage.py restore <path>` | Restore database and media from backup archive |
-| `python manage.py test` | Run all tests (300 tests) |
+| `python manage.py test` | Run all tests (708 tests) |
 | `python manage.py test <app>.tests.<Class>` | Run specific test class |
 | `python manage.py makemigrations` | Generate new migrations after model changes |
 | `python manage.py collectstatic` | Gather static files for production |
@@ -988,7 +1097,7 @@ python manage.py qcluster
 ## Running Tests
 
 ```bash
-# Run all 300 tests
+# Run all tests
 python manage.py test
 
 # Run tests for a specific app
@@ -1009,23 +1118,7 @@ docker compose exec web python manage.py test
 
 ### Test Coverage
 
-| Area | Tests |
-|------|-------|
-| Dashboard views & context | 12 |
-| Global search | 6 |
-| Activity timeline | 6 |
-| Calendar & events | 9 |
-| Net worth & deadlines | 5 |
-| Notifications | 5 |
-| Choice system (model, utils, views, template) | 19 |
-| SQLite pragmas | 5 |
-| Backup & restore | 9 |
-| Stakeholders (CRUD, tabs, firm hierarchy) | 30+ |
-| Assets (properties, investments, loans, ownership) | 30+ |
-| Legal matters & evidence | 20+ |
-| Tasks (direction, follow-ups, reminders) | 40+ |
-| Cash flow (entries, charts, alerts) | 20+ |
-| Notes (cards, attachments, search) | 20+ |
+708 tests covering all apps: dashboard (search, timeline, calendar, notifications, choices, backup/restore, backup config, SQLite pragmas), stakeholders (CRUD, tabs, firm hierarchy, graph), assets (properties, investments, loans, insurance policies, vehicles, aircraft, ownership through models, inline notes, loan/policy link-unlink), legal (CRUD, evidence), tasks (direction, follow-ups, subtasks, recurring, kanban), cash flow (entries, charts, alerts), and notes (CRUD, tags, folders, views, attachments).
 
 ---
 
@@ -1036,17 +1129,16 @@ control-center/
 ├── config/                    # Django project config
 │   ├── settings.py            # Main settings (env var config)
 │   ├── urls.py                # Root URL configuration
-│   ├── wsgi.py                # WSGI entry point
+│   ├── wsgi.py / asgi.py      # WSGI/ASGI entry points
 │   ├── forms.py               # TailwindFormMixin
 │   ├── export.py              # Generic CSV export utility
 │   └── pdf_export.py          # Generic PDF export utility (ReportLab)
 ├── dashboard/                 # Dashboard app
 │   ├── apps.py                # SQLite pragma signal handler
-│   ├── models.py              # EmailSettings, Notification, ChoiceOption
-│   ├── views.py               # Dashboard, search, timeline, calendar, settings
+│   ├── models.py              # ChoiceOption, EmailSettings, BackupSettings, Notification, SampleDataStatus
+│   ├── views.py               # Dashboard, search, timeline, calendar, settings, backup UI
 │   ├── choices.py             # get_choices(), get_choice_label(), cache
-│   ├── choice_seed_data.py    # Seed data for ChoiceOption
-│   ├── email.py               # SMTP helpers (get_smtp_connection, etc.)
+│   ├── email.py               # SMTP helpers
 │   ├── backup_task.py         # Django-Q2 callable for automated backups
 │   ├── management/commands/
 │   │   ├── backup.py          # Backup management command
@@ -1054,16 +1146,17 @@ control-center/
 │   │   ├── setup_schedules.py # Register django-q2 schedules
 │   │   └── load_sample_data.py # Demo data loader
 │   ├── templatetags/
-│   │   └── choice_labels.py   # |choice_label template filter
+│   │   ├── choice_labels.py   # |choice_label template filter
+│   │   └── markdown_filter.py # |render_markdown template filter
 │   └── tests.py
 ├── stakeholders/              # Stakeholder CRM app
-│   ├── models.py              # Stakeholder, Relationship, ContactLog
+│   ├── models.py              # Stakeholder, StakeholderTab, Relationship, ContactLog
 │   ├── views.py               # CRUD + graph + tabs + inline contact logs
 │   ├── forms.py
 │   └── tests.py
 ├── assets/                    # Asset tracking app
-│   ├── models.py              # RealEstate, Investment, Loan + through models
-│   ├── views.py               # CRUD + inline ownership management
+│   ├── models.py              # RealEstate, Investment, Loan, InsurancePolicy, Vehicle, Aircraft + through models + AssetTab
+│   ├── views.py               # CRUD + unified page + inline ownership/loan/policy link
 │   ├── forms.py
 │   └── tests.py
 ├── legal/                     # Legal matter app
@@ -1072,8 +1165,8 @@ control-center/
 │   ├── forms.py
 │   └── tests.py
 ├── tasks/                     # Task management app
-│   ├── models.py              # Task, FollowUp
-│   ├── views.py               # CRUD + toggle + inline follow-ups
+│   ├── models.py              # Task, FollowUp, SubTask
+│   ├── views.py               # CRUD + kanban + toggle + inline follow-ups/subtasks
 │   ├── notifications.py       # Scheduled notification functions
 │   ├── forms.py
 │   └── tests.py
@@ -1084,16 +1177,18 @@ control-center/
 │   ├── forms.py
 │   └── tests.py
 ├── notes/                     # Notes app
-│   ├── models.py              # Note, Attachment
-│   ├── views.py               # CRUD + inline attachments + quick capture
+│   ├── models.py              # Note, Attachment, Link, Tag, Folder
+│   ├── views.py               # CRUD + 3 view modes + inline attachments + quick capture
 │   ├── forms.py
+│   ├── templatetags/tag_colors.py  # Tag/folder color CSS mapping
 │   └── tests.py
 ├── templates/                 # Global templates
 │   ├── base.html              # Main layout (sidebar, nav, modals)
-│   └── */                     # Per-app template directories
+│   └── partials/              # Shared partials (delete confirm, pagination, etc.)
 ├── static/
-│   ├── css/input.css           # Tailwind source
-│   └── js/bulk-actions.js      # Bulk operation JavaScript
+│   ├── css/input.css          # Tailwind source
+│   ├── js/                    # bulk-actions, kanban, dismiss-alerts, htmx
+│   └── vendor/                # Self-hosted Chart.js, Cytoscape, EasyMDE, FullCalendar, SortableJS
 ├── Dockerfile
 ├── docker-compose.yml
 ├── entrypoint.sh
@@ -1108,4 +1203,4 @@ control-center/
 
 ## License
 
-Private project.
+MIT
