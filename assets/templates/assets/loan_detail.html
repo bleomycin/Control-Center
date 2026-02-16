@@ -11,7 +11,7 @@
             <span class="text-gray-600">/</span>
             <span class="text-gray-200">{{ loan.name }}</span>
         </nav>
-        <h1 class="text-2xl font-bold text-white mt-2">{{ loan.name }}</h1>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ loan.name }}{% if loan.is_hard_money %} <span class="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-orange-900/50 text-orange-300 align-middle">Hard Money</span>{% endif %}</h1>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
         <a href="{% url 'assets:loan_export_pdf' loan.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
@@ -33,6 +33,12 @@
         <p class="text-xs text-gray-400 uppercase tracking-wide">Interest Rate</p>
         <p class="text-xl font-bold text-gray-200 mt-1">{{ loan.interest_rate|default:"N/A" }}{% if loan.interest_rate %}%{% endif %}</p>
     </div>
+    {% if loan.default_interest_rate %}
+    <div class="bg-gray-800 rounded-lg border border-orange-700/50 p-4">
+        <p class="text-xs text-orange-400 uppercase tracking-wide">Default Rate</p>
+        <p class="text-xl font-bold text-orange-300 mt-1">{{ loan.default_interest_rate }}%</p>
+    </div>
+    {% endif %}
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
         <p class="text-sm font-medium text-gray-200 mt-1">{{ loan.get_status_display }}</p>
@@ -49,6 +55,8 @@
             {% if loan.borrower_description %}<div class="flex justify-between"><dt class="text-gray-400">Borrower</dt><dd class="text-gray-200">{{ loan.borrower_description }}</dd></div>{% endif %}
             {% if loan.related_property %}<div class="flex justify-between"><dt class="text-gray-400">Property</dt><dd><a href="{{ loan.related_property.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.related_property.name }}</a></dd></div>{% endif %}
             {% if loan.related_investment %}<div class="flex justify-between"><dt class="text-gray-400">Investment</dt><dd><a href="{{ loan.related_investment.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.related_investment.name }}</a></dd></div>{% endif %}
+            {% if loan.related_vehicle %}<div class="flex justify-between"><dt class="text-gray-400">Vehicle</dt><dd><a href="{{ loan.related_vehicle.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.related_vehicle.name }}</a></dd></div>{% endif %}
+            {% if loan.related_aircraft %}<div class="flex justify-between"><dt class="text-gray-400">Aircraft</dt><dd><a href="{{ loan.related_aircraft.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.related_aircraft.name }}</a></dd></div>{% endif %}
         </dl>
     </div>
     {% if loan.collateral %}

@@ -172,6 +172,14 @@ class Loan(models.Model):
         Investment, on_delete=models.SET_NULL, null=True, blank=True,
         related_name="loans", verbose_name="Investment",
     )
+    related_vehicle = models.ForeignKey(
+        "Vehicle", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="loans", verbose_name="Vehicle",
+    )
+    related_aircraft = models.ForeignKey(
+        "Aircraft", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="loans", verbose_name="Aircraft",
+    )
     stakeholders = models.ManyToManyField(
         "stakeholders.Stakeholder",
         through="LoanParty",
@@ -182,6 +190,12 @@ class Loan(models.Model):
     original_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     current_balance = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     interest_rate = models.DecimalField(max_digits=6, decimal_places=3, null=True, blank=True)
+    default_interest_rate = models.DecimalField(
+        "Default interest rate (%)", max_digits=6, decimal_places=3,
+        null=True, blank=True,
+        help_text="Rate applied when loan is in default",
+    )
+    is_hard_money = models.BooleanField("Hard money loan", default=False)
     monthly_payment = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     next_payment_date = models.DateField(null=True, blank=True)
     maturity_date = models.DateField(null=True, blank=True)

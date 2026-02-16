@@ -10,7 +10,7 @@ module.exports = {
     './cashflow/templates/**/*.html',
     './notes/templates/**/*.html',
     './notes/templatetags/**/*.py',
-    './blaine/forms.py',
+    './config/forms.py',
   ],
   theme: {
     extend: {

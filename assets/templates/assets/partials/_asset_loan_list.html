@@ -1,0 +1,27 @@
+{% load humanize %}
+<div class="divide-y divide-gray-700">
+    {% for loan in loans %}
+    <div class="flex items-center justify-between px-4 py-3 group">
+        <a href="{{ loan.get_absolute_url }}" class="flex-1">
+            <span class="text-sm text-blue-400 hover:text-blue-300">{{ loan.name }}</span>
+            {% if loan.is_hard_money %}<span class="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-orange-900/50 text-orange-300">HM</span>{% endif %}
+            {% for party in loan.parties.all %}
+                <span class="text-xs text-gray-400 ml-1">({{ party.stakeholder.name }}{% if party.role %} — {{ party.role }}{% endif %})</span>
+            {% endfor %}
+        </a>
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-medium text-orange-400">${{ loan.current_balance|floatformat:0|intcomma|default:"—" }}</span>
+            <span class="text-xs text-gray-400">{{ loan.interest_rate|default:"" }}{% if loan.interest_rate %}%{% endif %}</span>
+            <button hx-post="{% url unlink_url_name asset_pk loan.pk %}"
+                    hx-target="#loan-list"
+                    hx-swap="innerHTML"
+                    hx-confirm="Unlink this loan?"
+                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                &times;
+            </button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No loans linked</p>
+    {% endfor %}
+</div>

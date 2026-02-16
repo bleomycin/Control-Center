@@ -1,5 +1,5 @@
 from django import forms
-from blaine.forms import TailwindFormMixin
+from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from assets.models import (AircraftOwner, InsurancePolicy, InvestmentParticipant,
                            LoanParty, PolicyHolder, PropertyOwnership, VehicleOwner)
