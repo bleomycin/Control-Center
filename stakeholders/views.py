@@ -196,7 +196,10 @@ class StakeholderDetailView(DetailView):
 
         # All related entities (no limit for tabs view)
         ctx["all_tasks"] = obj.tasks.all()
-        ctx["all_notes"] = obj.notes.all()
+        from notes.models import Note
+        ctx["all_notes"] = Note.objects.filter(
+            Q(participants=obj) | Q(related_stakeholders=obj)
+        ).distinct()
         ctx["all_legal_matters"] = obj.legal_matters.all()
 
         # Properties, investments, loans, vehicles, aircraft via through models
