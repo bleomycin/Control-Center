@@ -813,3 +813,100 @@ class StakeholderVehicleAircraftPolicyInlineTests(TestCase):
         resp = self.client.get(reverse("stakeholders:detail", args=[self.stakeholder.pk]))
         self.assertContains(resp, "Test Policy")
         self.assertContains(resp, "Insurance")
+
+
+class StakeholderRelationshipInlineTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Alice", entity_type="contact")
+        cls.other = Stakeholder.objects.create(name="Bob", entity_type="contact")
+
+    def test_relationship_add_get(self):
+        resp = self.client.get(reverse("stakeholders:relationship_add", args=[self.stakeholder.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "stakeholders/partials/_sh_relationship_form.html")
+
+    def test_relationship_add_post(self):
+        resp = self.client.post(
+            reverse("stakeholders:relationship_add", args=[self.stakeholder.pk]),
+            {"to_stakeholder": self.other.pk, "relationship_type": "Partner"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(Relationship.objects.filter(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+        ).exists())
+
+    def test_relationship_delete(self):
+        rel = Relationship.objects.create(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner",
+        )
+        resp = self.client.post(reverse("stakeholders:relationship_delete", args=[rel.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Relationship.objects.filter(pk=rel.pk).exists())
+
+    def test_relationship_edit_get(self):
+        rel = Relationship.objects.create(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner",
+        )
+        resp = self.client.get(reverse("stakeholders:relationship_edit", args=[rel.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "stakeholders/partials/_sh_relationship_form.html")
+        self.assertContains(resp, "Save Changes")
+
+    def test_relationship_edit_post(self):
+        rel = Relationship.objects.create(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner", description="Old desc",
+        )
+        resp = self.client.post(
+            reverse("stakeholders:relationship_edit", args=[rel.pk]),
+            {"to_stakeholder": self.other.pk, "relationship_type": "Advisor", "description": "Updated"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "stakeholders/partials/_sh_relationship_list.html")
+        rel.refresh_from_db()
+        self.assertEqual(rel.relationship_type, "Advisor")
+        self.assertEqual(rel.description, "Updated")
+
+    def test_relationship_edit_with_viewer(self):
+        """Editing from the to_stakeholder's page returns that stakeholder's list."""
+        rel = Relationship.objects.create(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner",
+        )
+        url = reverse("stakeholders:relationship_edit", args=[rel.pk]) + f"?viewer={self.other.pk}"
+        resp = self.client.post(url, {
+            "to_stakeholder": self.other.pk, "relationship_type": "Colleague", "description": "",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "stakeholders/partials/_sh_relationship_list.html")
+
+    def test_relationship_delete_with_viewer(self):
+        """Deleting from the to_stakeholder's page returns that stakeholder's list."""
+        rel = Relationship.objects.create(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner",
+        )
+        url = reverse("stakeholders:relationship_delete", args=[rel.pk]) + f"?viewer={self.other.pk}"
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Relationship.objects.filter(pk=rel.pk).exists())
+
+    def test_relationship_duplicate_blocked(self):
+        Relationship.objects.create(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner",
+        )
+        resp = self.client.post(
+            reverse("stakeholders:relationship_add", args=[self.stakeholder.pk]),
+            {"to_stakeholder": self.other.pk, "relationship_type": "Partner"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        # Should re-render the form (not the list) due to validation error
+        self.assertTemplateUsed(resp, "stakeholders/partials/_sh_relationship_form.html")
+        self.assertEqual(Relationship.objects.filter(
+            from_stakeholder=self.stakeholder, to_stakeholder=self.other,
+            relationship_type="Partner",
+        ).count(), 1)

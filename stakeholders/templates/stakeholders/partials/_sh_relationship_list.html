@@ -1,0 +1,51 @@
+<div class="divide-y divide-gray-700">
+    {% for rel in relationships_from %}
+    <div class="px-4 py-3">
+        <div class="flex items-center justify-between">
+            <div>
+                <a href="{{ rel.to_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ rel.to_stakeholder.name }}</a>
+                <span class="text-xs text-gray-400 ml-2">{{ rel.relationship_type }}</span>
+                <span class="text-xs text-gray-500 ml-1">&rarr;</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button hx-get="{% url 'stakeholders:relationship_edit' rel.pk %}?viewer={{ stakeholder.pk }}"
+                        hx-target="#sh-relationship-form-container"
+                        hx-swap="innerHTML"
+                        class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+                <button hx-post="{% url 'stakeholders:relationship_delete' rel.pk %}?viewer={{ stakeholder.pk }}"
+                        hx-target="#sh-relationship-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this relationship?"
+                        class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+            </div>
+        </div>
+        {% if rel.description %}<p class="text-xs text-gray-500 mt-1">{{ rel.description }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% for rel in relationships_to %}
+    <div class="px-4 py-3">
+        <div class="flex items-center justify-between">
+            <div>
+                <a href="{{ rel.from_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ rel.from_stakeholder.name }}</a>
+                <span class="text-xs text-gray-400 ml-2">{{ rel.relationship_type }}</span>
+                <span class="text-xs text-gray-500 ml-1">&larr;</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button hx-get="{% url 'stakeholders:relationship_edit' rel.pk %}?viewer={{ stakeholder.pk }}"
+                        hx-target="#sh-relationship-form-container"
+                        hx-swap="innerHTML"
+                        class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+                <button hx-post="{% url 'stakeholders:relationship_delete' rel.pk %}?viewer={{ stakeholder.pk }}"
+                        hx-target="#sh-relationship-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this relationship?"
+                        class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+            </div>
+        </div>
+        {% if rel.description %}<p class="text-xs text-gray-500 mt-1">{{ rel.description }}</p>{% endif %}
+    </div>
+    {% endfor %}
+    {% if not relationships_from and not relationships_to %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No stakeholder relationships</p>
+    {% endif %}
+</div>
