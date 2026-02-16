@@ -342,6 +342,11 @@
     </div>
 
     <div class="tab-content hidden" id="tab-notes">
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Notes linked to this stakeholder</span>
+            <a href="{% url 'notes:create' %}?stakeholder={{ stakeholder.pk }}"
+               class="text-xs text-blue-400 hover:text-blue-300">+ Add Note</a>
+        </div>
         <div class="divide-y divide-gray-700">
             {% for note in all_notes %}
             <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
