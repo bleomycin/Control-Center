@@ -8,6 +8,7 @@
     <td class="px-4 py-3">
         <a href="{{ ac.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ ac.name }}</a>
         {% if ac.tail_number %}<p class="text-xs text-gray-400">{{ ac.tail_number }}</p>{% endif %}
+        {% if ac.loan_count %}<p class="text-xs text-orange-400">{{ ac.loan_count }} loan{{ ac.loan_count|pluralize }} · ${{ ac.loan_balance|floatformat:0|intcomma }}</p>{% endif %}
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ ac.aircraft_type|choice_label:"aircraft_type" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ ac.estimated_value|floatformat:0|intcomma|default:"-" }}</td>

@@ -1,0 +1,64 @@
+{% if message %}
+<div class="mb-4 p-3 rounded-md text-sm border {% if msg_type == 'success' %}bg-green-900/30 text-green-300 border-green-800{% elif msg_type == 'error' %}bg-red-900/30 text-red-300 border-red-800{% else %}bg-blue-900/30 text-blue-300 border-blue-800{% endif %}">
+    {{ message }}
+</div>
+{% endif %}
+
+{% if backups %}
+<div class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h3 class="text-sm font-medium text-gray-300">Available Backups ({{ backups|length }})</h3>
+    </div>
+    <ul class="divide-y divide-gray-700">
+        {% for b in backups %}
+        <li class="px-4 py-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-white truncate">{{ b.name }}</p>
+                <p class="text-xs text-gray-400">{{ b.date|date:"M d, Y g:i A" }} &middot; {{ b.size }}</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+                <a href="{% url 'dashboard:backup_download' b.name %}"
+                   class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </svg>
+                    Download
+                </a>
+                <button hx-post="{% url 'dashboard:backup_restore' b.name %}"
+                        hx-target="#backup-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Restore from {{ b.name }}? This will replace the current database and all media files."
+                        hx-indicator="#restore-spinner-{{ forloop.counter }}"
+                        class="px-3 py-1.5 bg-amber-900/50 hover:bg-amber-900 text-amber-300 text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </svg>
+                    Restore
+                    <svg id="restore-spinner-{{ forloop.counter }}" class="htmx-indicator w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                </button>
+                <button hx-post="{% url 'dashboard:backup_delete' b.name %}"
+                        hx-target="#backup-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Delete {{ b.name }}? This cannot be undone."
+                        class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                    Delete
+                </button>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% else %}
+<div class="bg-gray-800 border border-gray-700 rounded-lg p-8 text-center">
+    <svg class="w-12 h-12 text-gray-600 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+    </svg>
+    <p class="text-gray-400 text-sm">No backups yet. Click "Create Backup" to get started.</p>
+</div>
+{% endif %}

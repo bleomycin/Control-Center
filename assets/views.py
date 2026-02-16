@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Count, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -96,7 +97,9 @@ def asset_list(request):
     }
 
     if "properties" in current_asset_types:
-        qs = RealEstate.objects.all()
+        qs = RealEstate.objects.annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         if q:
             qs = qs.filter(name__icontains=q)
         statuses = [s for s in request.GET.getlist("status") if s]
@@ -116,7 +119,9 @@ def asset_list(request):
         ctx["property_status_choices"] = RealEstate.STATUS_CHOICES
 
     if "investments" in current_asset_types:
-        qs = Investment.objects.all()
+        qs = Investment.objects.annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         if q:
             qs = qs.filter(name__icontains=q)
         if len(current_asset_types) == 1:
@@ -166,7 +171,9 @@ def asset_list(request):
         ctx["policy_status_choices"] = InsurancePolicy.STATUS_CHOICES
 
     if "vehicles" in current_asset_types:
-        qs = Vehicle.objects.all()
+        qs = Vehicle.objects.annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         if q:
             qs = qs.filter(name__icontains=q)
         statuses = [s for s in request.GET.getlist("status") if s]
@@ -186,7 +193,9 @@ def asset_list(request):
         ctx["vehicle_status_choices"] = Vehicle.STATUS_CHOICES
 
     if "aircraft" in current_asset_types:
-        qs = Aircraft.objects.all()
+        qs = Aircraft.objects.annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         if q:
             qs = qs.filter(name__icontains=q)
         statuses = [s for s in request.GET.getlist("status") if s]
@@ -298,7 +307,7 @@ def inline_update_loan_status(request, pk):
 
 
 def export_realestate_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = RealEstate.objects.all()
     fields = [
         ("name", "Name"),
@@ -312,7 +321,7 @@ def export_realestate_csv(request):
 
 
 def export_investment_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = Investment.objects.all()
     fields = [
         ("name", "Name"),
@@ -324,12 +333,14 @@ def export_investment_csv(request):
 
 
 def export_loan_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = Loan.objects.all()
     fields = [
         ("name", "Name"),
+        ("is_hard_money", "Hard Money"),
         ("current_balance", "Balance"),
         ("interest_rate", "Rate"),
+        ("default_interest_rate", "Default Rate"),
         ("monthly_payment", "Monthly Payment"),
         ("next_payment_date", "Next Payment"),
         ("status", "Status"),
@@ -338,7 +349,7 @@ def export_loan_csv(request):
 
 
 def export_pdf_realestate_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     p = get_object_or_404(RealEstate, pk=pk)
     sections = [
         {"heading": "Property Information", "type": "info", "rows": [
@@ -366,7 +377,7 @@ def export_pdf_realestate_detail(request, pk):
 
 
 def export_pdf_investment_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     inv = get_object_or_404(Investment, pk=pk)
     sections = [
         {"heading": "Investment Information", "type": "info", "rows": [
@@ -385,17 +396,24 @@ def export_pdf_investment_detail(request, pk):
 
 
 def export_pdf_loan_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     loan = get_object_or_404(Loan, pk=pk)
+    info_rows = [
+        ("Original Amount", f"${loan.original_amount:,.0f}" if loan.original_amount else "N/A"),
+        ("Current Balance", f"${loan.current_balance:,.0f}" if loan.current_balance else "N/A"),
+        ("Monthly Payment", f"${loan.monthly_payment:,.2f}" if loan.monthly_payment else "N/A"),
+        ("Interest Rate", f"{loan.interest_rate}%" if loan.interest_rate else "N/A"),
+    ]
+    if loan.default_interest_rate:
+        info_rows.append(("Default Interest Rate", f"{loan.default_interest_rate}%"))
+    if loan.is_hard_money:
+        info_rows.append(("Loan Type", "Hard Money"))
+    info_rows.extend([
+        ("Next Payment", loan.next_payment_date.strftime("%b %d, %Y") if loan.next_payment_date else "N/A"),
+        ("Maturity Date", loan.maturity_date.strftime("%b %d, %Y") if loan.maturity_date else "N/A"),
+    ])
     sections = [
-        {"heading": "Loan Information", "type": "info", "rows": [
-            ("Original Amount", f"${loan.original_amount:,.0f}" if loan.original_amount else "N/A"),
-            ("Current Balance", f"${loan.current_balance:,.0f}" if loan.current_balance else "N/A"),
-            ("Monthly Payment", f"${loan.monthly_payment:,.2f}" if loan.monthly_payment else "N/A"),
-            ("Interest Rate", f"{loan.interest_rate}%" if loan.interest_rate else "N/A"),
-            ("Next Payment", loan.next_payment_date.strftime("%b %d, %Y") if loan.next_payment_date else "N/A"),
-            ("Maturity Date", loan.maturity_date.strftime("%b %d, %Y") if loan.maturity_date else "N/A"),
-        ]},
+        {"heading": "Loan Information", "type": "info", "rows": info_rows},
     ]
     parties = loan.parties.select_related("stakeholder").all()
     if parties:
@@ -403,6 +421,17 @@ def export_pdf_loan_detail(request, pk):
         sections[0]["rows"].append(("Parties", party_str))
     if loan.borrower_description:
         sections[0]["rows"].append(("Borrower", loan.borrower_description))
+    related = []
+    if loan.related_property:
+        related.append(f"Property: {loan.related_property.name}")
+    if loan.related_investment:
+        related.append(f"Investment: {loan.related_investment.name}")
+    if loan.related_vehicle:
+        related.append(f"Vehicle: {loan.related_vehicle.name}")
+    if loan.related_aircraft:
+        related.append(f"Aircraft: {loan.related_aircraft.name}")
+    if related:
+        sections[0]["rows"].append(("Related Assets", ", ".join(related)))
     if loan.collateral:
         sections.append({"heading": "Collateral", "type": "text", "content": loan.collateral})
     if loan.notes_text:
@@ -425,7 +454,9 @@ class RealEstateListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -534,7 +565,9 @@ class InvestmentListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -631,6 +664,8 @@ class LoanListView(ListView):
         statuses = [s for s in self.request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
+        if self.request.GET.get("hard_money"):
+            qs = qs.filter(is_hard_money=True)
         date_from = self.request.GET.get("date_from")
         if date_from:
             qs = qs.filter(next_payment_date__gte=date_from)
@@ -659,6 +694,7 @@ class LoanListView(ListView):
         ctx["selected_statuses"] = self.request.GET.getlist("status")
         ctx["current_sort"] = self.request.GET.get("sort", "")
         ctx["current_dir"] = self.request.GET.get("dir", "")
+        ctx["hard_money_filter"] = bool(self.request.GET.get("hard_money"))
         return ctx
 
 
@@ -673,6 +709,10 @@ class LoanCreateView(CreateView):
             initial["related_property"] = self.request.GET["property"]
         if self.request.GET.get("investment"):
             initial["related_investment"] = self.request.GET["investment"]
+        if self.request.GET.get("vehicle"):
+            initial["related_vehicle"] = self.request.GET["vehicle"]
+        if self.request.GET.get("aircraft"):
+            initial["related_aircraft"] = self.request.GET["aircraft"]
         return initial
 
     def form_valid(self, form):
@@ -728,7 +768,7 @@ def bulk_delete_realestate(request):
 
 
 def bulk_export_realestate_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = RealEstate.objects.filter(pk__in=pks) if pks else RealEstate.objects.none()
     fields = [
@@ -758,7 +798,7 @@ def bulk_delete_investment(request):
 
 
 def bulk_export_investment_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = Investment.objects.filter(pk__in=pks) if pks else Investment.objects.none()
     fields = [
@@ -786,13 +826,15 @@ def bulk_delete_loan(request):
 
 
 def bulk_export_loan_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = Loan.objects.filter(pk__in=pks) if pks else Loan.objects.none()
     fields = [
         ("name", "Name"),
+        ("is_hard_money", "Hard Money"),
         ("current_balance", "Balance"),
         ("interest_rate", "Rate"),
+        ("default_interest_rate", "Default Rate"),
         ("monthly_payment", "Monthly Payment"),
         ("next_payment_date", "Next Payment"),
         ("status", "Status"),
@@ -991,7 +1033,7 @@ def inline_update_policy_status(request, pk):
 
 
 def export_policy_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     from dashboard.choices import get_choice_label
     qs = InsurancePolicy.objects.select_related("carrier").all()
     for p in qs:
@@ -1012,7 +1054,7 @@ def export_policy_csv(request):
 
 
 def bulk_export_policy_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     from dashboard.choices import get_choice_label
     pks = request.GET.getlist("selected")
     qs = InsurancePolicy.objects.filter(pk__in=pks) if pks else InsurancePolicy.objects.none()
@@ -1033,7 +1075,7 @@ def bulk_export_policy_csv(request):
 
 
 def export_pdf_policy_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     from dashboard.choices import get_choice_label
     p = get_object_or_404(InsurancePolicy.objects.select_related("carrier", "agent"), pk=pk)
     sections = [
@@ -1125,7 +1167,9 @@ class VehicleListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -1175,6 +1219,7 @@ class VehicleDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
         ctx["insurance_policies"] = self.object.insurance_policies.all()
         ctx["notes"] = self.object.notes.all()[:5]
         return ctx
@@ -1219,7 +1264,7 @@ def inline_update_vehicle_status(request, pk):
 
 
 def export_vehicle_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     from dashboard.choices import get_choice_label
     qs = Vehicle.objects.all()
     for v in qs:
@@ -1238,7 +1283,7 @@ def export_vehicle_csv(request):
 
 
 def bulk_export_vehicle_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     from dashboard.choices import get_choice_label
     pks = request.GET.getlist("selected")
     qs = Vehicle.objects.filter(pk__in=pks) if pks else Vehicle.objects.none()
@@ -1258,7 +1303,7 @@ def bulk_export_vehicle_csv(request):
 
 
 def export_pdf_vehicle_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     from dashboard.choices import get_choice_label
     v = get_object_or_404(Vehicle, pk=pk)
     sections = [
@@ -1337,7 +1382,9 @@ class AircraftListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -1387,6 +1434,7 @@ class AircraftDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
         ctx["insurance_policies"] = self.object.insurance_policies.all()
         ctx["notes"] = self.object.notes.all()[:5]
         return ctx
@@ -1431,7 +1479,7 @@ def inline_update_aircraft_status(request, pk):
 
 
 def export_aircraft_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     from dashboard.choices import get_choice_label
     qs = Aircraft.objects.all()
     for a in qs:
@@ -1451,7 +1499,7 @@ def export_aircraft_csv(request):
 
 
 def bulk_export_aircraft_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     from dashboard.choices import get_choice_label
     pks = request.GET.getlist("selected")
     qs = Aircraft.objects.filter(pk__in=pks) if pks else Aircraft.objects.none()
@@ -1472,7 +1520,7 @@ def bulk_export_aircraft_csv(request):
 
 
 def export_pdf_aircraft_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     from dashboard.choices import get_choice_label
     ac = get_object_or_404(Aircraft, pk=pk)
     sections = [
@@ -1680,3 +1728,131 @@ def aircraft_policy_unlink(request, pk, policy_pk):
         policy.covered_aircraft.remove(ac)
     return render(request, "assets/partials/_asset_policy_list.html",
                   _policy_list_ctx(ac, "covered_aircraft", "assets:aircraft_policy_unlink", "aircraft"))
+
+
+# --- Asset ↔ Loan linking ---
+
+def _loan_list_ctx(asset, fk_field, unlink_url_name):
+    """Build context for the shared _asset_loan_list.html partial."""
+    loans = asset.loans.prefetch_related("parties__stakeholder").all()
+    return {
+        "loans": loans,
+        "unlink_url_name": unlink_url_name,
+        "asset_pk": asset.pk,
+    }
+
+
+def property_loan_link(request, pk):
+    from .forms import AssetLoanLinkForm
+    prop = get_object_or_404(RealEstate, pk=pk)
+    if request.method == "POST":
+        form = AssetLoanLinkForm(request.POST)
+        if form.is_valid():
+            loan = form.cleaned_data["loan"]
+            loan.related_property = prop
+            loan.save()
+            return render(request, "assets/partials/_asset_loan_list.html",
+                          _loan_list_ctx(prop, "related_property", "assets:property_loan_unlink"))
+    else:
+        form = AssetLoanLinkForm()
+    return render(request, "assets/partials/_asset_loan_form.html", {
+        "form": form,
+        "link_url": reverse("assets:property_loan_link", args=[prop.pk]),
+    })
+
+
+def property_loan_unlink(request, pk, loan_pk):
+    prop = get_object_or_404(RealEstate, pk=pk)
+    loan = get_object_or_404(Loan, pk=loan_pk)
+    if request.method == "POST" and loan.related_property_id == prop.pk:
+        loan.related_property = None
+        loan.save()
+    return render(request, "assets/partials/_asset_loan_list.html",
+                  _loan_list_ctx(prop, "related_property", "assets:property_loan_unlink"))
+
+
+def investment_loan_link(request, pk):
+    from .forms import AssetLoanLinkForm
+    inv = get_object_or_404(Investment, pk=pk)
+    if request.method == "POST":
+        form = AssetLoanLinkForm(request.POST)
+        if form.is_valid():
+            loan = form.cleaned_data["loan"]
+            loan.related_investment = inv
+            loan.save()
+            return render(request, "assets/partials/_asset_loan_list.html",
+                          _loan_list_ctx(inv, "related_investment", "assets:investment_loan_unlink"))
+    else:
+        form = AssetLoanLinkForm()
+    return render(request, "assets/partials/_asset_loan_form.html", {
+        "form": form,
+        "link_url": reverse("assets:investment_loan_link", args=[inv.pk]),
+    })
+
+
+def investment_loan_unlink(request, pk, loan_pk):
+    inv = get_object_or_404(Investment, pk=pk)
+    loan = get_object_or_404(Loan, pk=loan_pk)
+    if request.method == "POST" and loan.related_investment_id == inv.pk:
+        loan.related_investment = None
+        loan.save()
+    return render(request, "assets/partials/_asset_loan_list.html",
+                  _loan_list_ctx(inv, "related_investment", "assets:investment_loan_unlink"))
+
+
+def vehicle_loan_link(request, pk):
+    from .forms import AssetLoanLinkForm
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    if request.method == "POST":
+        form = AssetLoanLinkForm(request.POST)
+        if form.is_valid():
+            loan = form.cleaned_data["loan"]
+            loan.related_vehicle = vehicle
+            loan.save()
+            return render(request, "assets/partials/_asset_loan_list.html",
+                          _loan_list_ctx(vehicle, "related_vehicle", "assets:vehicle_loan_unlink"))
+    else:
+        form = AssetLoanLinkForm()
+    return render(request, "assets/partials/_asset_loan_form.html", {
+        "form": form,
+        "link_url": reverse("assets:vehicle_loan_link", args=[vehicle.pk]),
+    })
+
+
+def vehicle_loan_unlink(request, pk, loan_pk):
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    loan = get_object_or_404(Loan, pk=loan_pk)
+    if request.method == "POST" and loan.related_vehicle_id == vehicle.pk:
+        loan.related_vehicle = None
+        loan.save()
+    return render(request, "assets/partials/_asset_loan_list.html",
+                  _loan_list_ctx(vehicle, "related_vehicle", "assets:vehicle_loan_unlink"))
+
+
+def aircraft_loan_link(request, pk):
+    from .forms import AssetLoanLinkForm
+    ac = get_object_or_404(Aircraft, pk=pk)
+    if request.method == "POST":
+        form = AssetLoanLinkForm(request.POST)
+        if form.is_valid():
+            loan = form.cleaned_data["loan"]
+            loan.related_aircraft = ac
+            loan.save()
+            return render(request, "assets/partials/_asset_loan_list.html",
+                          _loan_list_ctx(ac, "related_aircraft", "assets:aircraft_loan_unlink"))
+    else:
+        form = AssetLoanLinkForm()
+    return render(request, "assets/partials/_asset_loan_form.html", {
+        "form": form,
+        "link_url": reverse("assets:aircraft_loan_link", args=[ac.pk]),
+    })
+
+
+def aircraft_loan_unlink(request, pk, loan_pk):
+    ac = get_object_or_404(Aircraft, pk=pk)
+    loan = get_object_or_404(Loan, pk=loan_pk)
+    if request.method == "POST" and loan.related_aircraft_id == ac.pk:
+        loan.related_aircraft = None
+        loan.save()
+    return render(request, "assets/partials/_asset_loan_list.html",
+                  _loan_list_ctx(ac, "related_aircraft", "assets:aircraft_loan_unlink"))

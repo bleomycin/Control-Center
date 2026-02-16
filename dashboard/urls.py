@@ -22,4 +22,11 @@ urlpatterns = [
     path("settings/choices/edit/<int:pk>/", views.choice_edit, name="choice_edit"),
     path("settings/choices/toggle/<int:pk>/", views.choice_toggle, name="choice_toggle"),
     path("settings/choices/move/<int:pk>/<str:direction>/", views.choice_move, name="choice_move"),
+    path("settings/backups/", views.backup_settings, name="backup_settings"),
+    path("settings/backups/config/", views.backup_config_update, name="backup_config_update"),
+    path("settings/backups/create/", views.backup_create, name="backup_create"),
+    path("settings/backups/download/<str:filename>/", views.backup_download, name="backup_download"),
+    path("settings/backups/delete/<str:filename>/", views.backup_delete, name="backup_delete"),
+    path("settings/backups/restore/<str:filename>/", views.backup_restore, name="backup_restore"),
+    path("settings/backups/restore/", views.backup_restore, name="backup_restore_upload"),
 ]

@@ -673,3 +673,259 @@ def sample_data_remove(request):
     return render(request, "dashboard/partials/_sample_data_card.html", {
         "sample_status": status,
     })
+
+
+# ---------------------------------------------------------------------------
+# Backup & Restore
+# ---------------------------------------------------------------------------
+
+def _get_backup_list():
+    """Return list of backup dicts sorted newest-first."""
+    from dashboard.management.commands.backup import get_backup_dir
+    backup_dir = get_backup_dir()
+    if not backup_dir.exists():
+        return []
+    archives = sorted(
+        backup_dir.glob('controlcenter-backup-*.tar.gz'),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    results = []
+    for a in archives:
+        stat = a.stat()
+        size_mb = stat.st_size / (1024 * 1024)
+        results.append({
+            'name': a.name,
+            'size': f'{size_mb:.1f} MB' if size_mb >= 1 else f'{stat.st_size / 1024:.0f} KB',
+            'date': dt.fromtimestamp(stat.st_mtime),
+        })
+    return results
+
+
+def backup_settings(request):
+    from dashboard.forms import BackupSettingsForm
+    from dashboard.models import BackupSettings
+
+    config = BackupSettings.load()
+    form = BackupSettingsForm(instance=config)
+    backups = _get_backup_list()
+    return render(request, "dashboard/backup_settings.html", {
+        "backups": backups, "config_form": form, "config": config,
+    })
+
+
+@require_POST
+def backup_config_update(request):
+    """Save backup configuration and sync the live Schedule record."""
+    from dashboard.forms import BackupSettingsForm
+    from dashboard.models import BackupSettings
+
+    config = BackupSettings.load()
+    form = BackupSettingsForm(request.POST, instance=config)
+    if form.is_valid():
+        form.save()
+        # Sync the live django-q2 schedule immediately
+        _sync_backup_schedule(config)
+        message = "Backup configuration saved."
+        msg_type = "success"
+    else:
+        message = "Please correct the errors below."
+        msg_type = "error"
+    return render(request, "dashboard/partials/_backup_config.html", {
+        "config_form": form, "config": config,
+        "message": message, "msg_type": msg_type,
+    })
+
+
+def _sync_backup_schedule(config):
+    """Update or remove the django-q2 Schedule record based on BackupSettings."""
+    from datetime import timedelta
+    from django_q.models import Schedule
+    from django.utils import timezone as tz
+
+    schedule_name = "Automated Backup"
+
+    if not config.enabled:
+        Schedule.objects.filter(name=schedule_name).delete()
+        return
+
+    freq_map = {"D": Schedule.DAILY, "H": Schedule.HOURLY, "W": Schedule.WEEKLY}
+    schedule_type = freq_map[config.frequency]
+
+    local_tz = tz.get_current_timezone()
+    now = tz.localtime(tz.now(), local_tz)
+    next_run = now.replace(
+        hour=config.time_hour, minute=config.time_minute,
+        second=0, microsecond=0,
+    )
+    if next_run <= now:
+        if config.frequency == "H":
+            next_run += timedelta(hours=1)
+        elif config.frequency == "W":
+            next_run += timedelta(weeks=1)
+        else:
+            next_run += timedelta(days=1)
+
+    Schedule.objects.update_or_create(
+        name=schedule_name,
+        defaults={
+            "func": "dashboard.backup_task.run_backup",
+            "schedule_type": schedule_type,
+            "next_run": next_run,
+        },
+    )
+
+
+@require_POST
+def backup_create(request):
+    from dashboard.management.commands.backup import create_backup
+    try:
+        archive_path = create_backup()
+        message = f"Backup created: {archive_path.name}"
+        msg_type = "success"
+    except Exception as e:
+        message = f"Backup failed: {e}"
+        msg_type = "error"
+    backups = _get_backup_list()
+    return render(request, "dashboard/partials/_backup_list.html", {
+        "backups": backups, "message": message, "msg_type": msg_type,
+    })
+
+
+def backup_download(request, filename):
+    from django.http import FileResponse
+    from dashboard.management.commands.backup import get_backup_dir
+    import re
+
+    if not re.match(r'^controlcenter-backup-[\d]{8}-[\d]{6}\.tar\.gz$', filename):
+        from django.http import Http404
+        raise Http404
+    backup_dir = get_backup_dir()
+    file_path = backup_dir / filename
+    if not file_path.exists() or not file_path.resolve().parent == backup_dir.resolve():
+        from django.http import Http404
+        raise Http404
+    return FileResponse(open(file_path, 'rb'), as_attachment=True, filename=filename)
+
+
+@require_POST
+def backup_delete(request, filename):
+    from dashboard.management.commands.backup import get_backup_dir
+    import re
+
+    if not re.match(r'^controlcenter-backup-[\d]{8}-[\d]{6}\.tar\.gz$', filename):
+        from django.http import Http404
+        raise Http404
+    backup_dir = get_backup_dir()
+    file_path = backup_dir / filename
+    if file_path.exists() and file_path.resolve().parent == backup_dir.resolve():
+        file_path.unlink()
+    backups = _get_backup_list()
+    return render(request, "dashboard/partials/_backup_list.html", {
+        "backups": backups, "message": f"Deleted {filename}", "msg_type": "success",
+    })
+
+
+@require_POST
+def backup_restore(request, filename=None):
+    """Restore from an existing backup on disk or an uploaded file."""
+    from dashboard.management.commands.backup import get_backup_dir
+    import re
+    import shutil
+    import tarfile
+    import tempfile
+    from pathlib import Path
+    from django.conf import settings as django_settings
+    from django.core.management import call_command
+
+    # Determine source: uploaded file or existing backup
+    uploaded = request.FILES.get('archive')
+    if uploaded:
+        # Save upload to temp file, then validate & restore
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.tar.gz') as tmp:
+            for chunk in uploaded.chunks():
+                tmp.write(chunk)
+            archive_path = Path(tmp.name)
+    elif filename:
+        if not re.match(r'^controlcenter-backup-[\d]{8}-[\d]{6}\.tar\.gz$', filename):
+            from django.http import Http404
+            raise Http404
+        backup_dir = get_backup_dir()
+        archive_path = backup_dir / filename
+        if not archive_path.exists() or not archive_path.resolve().parent == backup_dir.resolve():
+            from django.http import Http404
+            raise Http404
+    else:
+        backups = _get_backup_list()
+        return render(request, "dashboard/partials/_backup_list.html", {
+            "backups": backups, "message": "No backup specified.", "msg_type": "error",
+        })
+
+    # Validate
+    try:
+        if not tarfile.is_tarfile(str(archive_path)):
+            raise ValueError("Not a valid tar.gz archive")
+        with tarfile.open(archive_path, 'r:gz') as tar:
+            members = tar.getnames()
+            if 'db.sqlite3' not in members:
+                raise ValueError("Archive missing db.sqlite3")
+            if not any(m.startswith('media') for m in members):
+                raise ValueError("Archive missing media/ directory")
+    except Exception as e:
+        if uploaded:
+            archive_path.unlink(missing_ok=True)
+        backups = _get_backup_list()
+        return render(request, "dashboard/partials/_backup_list.html", {
+            "backups": backups, "message": f"Invalid archive: {e}", "msg_type": "error",
+        })
+
+    # Restore
+    try:
+        db_path = Path(django_settings.DATABASES['default']['NAME'])
+        media_root = Path(django_settings.MEDIA_ROOT)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            with tarfile.open(archive_path, 'r:gz') as tar:
+                tar.extractall(path=tmp_path)
+
+            # Replace database
+            src_db = tmp_path / 'db.sqlite3'
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(src_db), str(db_path))
+
+            # Replace media directory contents (clear then copy;
+            # can't rmtree a Docker bind mount)
+            src_media = tmp_path / 'media'
+            if src_media.exists():
+                if media_root.exists():
+                    for item in media_root.iterdir():
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                else:
+                    media_root.mkdir(parents=True)
+                for item in src_media.iterdir():
+                    dst = media_root / item.name
+                    if item.is_dir():
+                        shutil.copytree(str(item), str(dst))
+                    else:
+                        shutil.copy2(str(item), str(dst))
+
+        # Run migrations
+        call_command('migrate', verbosity=0)
+        source_name = uploaded.name if uploaded else filename
+        message = f"Restored from {source_name}. Restart the Docker container to refresh background tasks."
+        msg_type = "success"
+    except Exception as e:
+        message = f"Restore failed: {e}"
+        msg_type = "error"
+    finally:
+        if uploaded:
+            archive_path.unlink(missing_ok=True)
+
+    backups = _get_backup_list()
+    return render(request, "dashboard/partials/_backup_list.html", {
+        "backups": backups, "message": message, "msg_type": msg_type,
+    })

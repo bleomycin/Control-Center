@@ -16,7 +16,7 @@ from stakeholders.models import ContactLog, Stakeholder
 from tasks.models import FollowUp, Task
 
 from .choices import get_choice_label, get_choices, invalidate_choice_cache
-from .models import ChoiceOption, Notification, SampleDataStatus
+from .models import BackupSettings, ChoiceOption, Notification, SampleDataStatus
 from .views import _parse_date, get_activity_timeline
 
 
@@ -811,3 +811,239 @@ class SampleDataToggleTests(TestCase):
     def test_load_returns_partial(self):
         resp = self.client.post(reverse("dashboard:sample_data_load"))
         self.assertContains(resp, "Loaded")
+
+
+class BackupViewTests(TestCase):
+    """Test the backup/restore web UI views."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp_dir = tempfile.mkdtemp()
+        self.backup_dir = Path(self.tmp_dir) / 'backups'
+        self.backup_dir.mkdir()
+        # Patch get_backup_dir at source (views import it lazily)
+        from unittest.mock import patch
+        self.patcher = patch(
+            'dashboard.management.commands.backup.get_backup_dir',
+            return_value=self.backup_dir,
+        )
+        self.mock_get_dir = self.patcher.start()
+
+    def tearDown(self):
+        import shutil
+        self.patcher.stop()
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def _create_fake_backup(self, name=None):
+        """Create a valid backup archive in the temp dir."""
+        import sqlite3
+        import tarfile
+        import tempfile
+        from datetime import datetime
+        name = name or f'controlcenter-backup-{datetime.now().strftime("%Y%m%d-%H%M%S")}.tar.gz'
+        archive_path = self.backup_dir / name
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            db_path = tmp_path / 'db.sqlite3'
+            conn = sqlite3.connect(str(db_path))
+            conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+            conn.commit()
+            conn.close()
+            media_dir = tmp_path / 'media'
+            media_dir.mkdir()
+            with tarfile.open(archive_path, 'w:gz') as tar:
+                tar.add(str(db_path), arcname='db.sqlite3')
+                tar.add(str(media_dir), arcname='media')
+        return archive_path
+
+    def test_backup_settings_page_loads(self):
+        resp = self.client.get(reverse("dashboard:backup_settings"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Backup")
+        self.assertContains(resp, "No backups yet")
+
+    def test_backup_settings_lists_existing(self):
+        self._create_fake_backup('controlcenter-backup-20250101-120000.tar.gz')
+        resp = self.client.get(reverse("dashboard:backup_settings"))
+        self.assertContains(resp, "controlcenter-backup-20250101-120000.tar.gz")
+
+    def test_backup_create(self):
+        from unittest.mock import patch
+        with patch(
+            'dashboard.management.commands.backup.create_backup',
+            side_effect=lambda **kw: self._create_fake_backup(),
+        ):
+            resp = self.client.post(reverse("dashboard:backup_create"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Backup created")
+
+    def test_backup_download(self):
+        self._create_fake_backup('controlcenter-backup-20250101-120000.tar.gz')
+        resp = self.client.get(
+            reverse("dashboard:backup_download", args=['controlcenter-backup-20250101-120000.tar.gz'])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp['Content-Disposition'],
+                         'attachment; filename="controlcenter-backup-20250101-120000.tar.gz"')
+
+    def test_backup_download_invalid_name_404(self):
+        resp = self.client.get(
+            reverse("dashboard:backup_download", args=['not-a-valid-backup.tar.gz'])
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_backup_delete(self):
+        self._create_fake_backup('controlcenter-backup-20250101-120000.tar.gz')
+        resp = self.client.post(
+            reverse("dashboard:backup_delete", args=['controlcenter-backup-20250101-120000.tar.gz'])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Deleted")
+        self.assertFalse((self.backup_dir / 'controlcenter-backup-20250101-120000.tar.gz').exists())
+
+    def test_backup_restore_from_file(self):
+        from unittest.mock import patch
+        self._create_fake_backup('controlcenter-backup-20250101-120000.tar.gz')
+        # Patch DB path and media root to temp locations
+        test_db = Path(self.tmp_dir) / 'restore_test.sqlite3'
+        test_media = Path(self.tmp_dir) / 'restore_media'
+        import sqlite3
+        conn = sqlite3.connect(str(test_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(test_db)}},
+        ), patch('django.conf.settings.MEDIA_ROOT', str(test_media)):
+            resp = self.client.post(
+                reverse("dashboard:backup_restore", args=['controlcenter-backup-20250101-120000.tar.gz'])
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Restored")
+
+    def test_backup_upload_restore(self):
+        from unittest.mock import patch
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        archive = self._create_fake_backup('controlcenter-backup-20250101-120000.tar.gz')
+        with open(archive, 'rb') as f:
+            content = f.read()
+        uploaded = SimpleUploadedFile('backup.tar.gz', content, content_type='application/gzip')
+        test_db = Path(self.tmp_dir) / 'upload_test.sqlite3'
+        test_media = Path(self.tmp_dir) / 'upload_media'
+        import sqlite3
+        conn = sqlite3.connect(str(test_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(test_db)}},
+        ), patch('django.conf.settings.MEDIA_ROOT', str(test_media)):
+            resp = self.client.post(
+                reverse("dashboard:backup_restore_upload"),
+                {'archive': uploaded},
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Restored")
+
+    def test_settings_hub_has_backup_card(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertContains(resp, "Backup")
+        self.assertContains(resp, reverse("dashboard:backup_settings"))
+
+
+class BackupSettingsModelTests(TestCase):
+    def test_singleton_load(self):
+        config = BackupSettings.load()
+        self.assertEqual(config.pk, 1)
+        config2 = BackupSettings.load()
+        self.assertEqual(config2.pk, 1)
+        self.assertEqual(BackupSettings.objects.count(), 1)
+
+    def test_default_values(self):
+        config = BackupSettings.load()
+        self.assertTrue(config.enabled)
+        self.assertEqual(config.frequency, "D")
+        self.assertEqual(config.time_hour, 0)
+        self.assertEqual(config.time_minute, 0)
+        self.assertEqual(config.retention_count, 7)
+
+    def test_str(self):
+        config = BackupSettings.load()
+        self.assertEqual(str(config), "Backup Settings")
+
+
+class BackupConfigViewTests(TestCase):
+    def test_backup_settings_page_shows_config_form(self):
+        from unittest.mock import patch
+        with patch(
+            'dashboard.management.commands.backup.get_backup_dir',
+            return_value=Path('/tmp/test-backups'),
+        ):
+            resp = self.client.get(reverse("dashboard:backup_settings"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Automated Backup Schedule")
+        self.assertIn("config_form", resp.context)
+
+    def test_config_post_saves_settings(self):
+        config = BackupSettings.load()
+        self.assertEqual(config.frequency, "D")
+        resp = self.client.post(reverse("dashboard:backup_config_update"), {
+            "enabled": True,
+            "frequency": "H",
+            "time_hour": 2,
+            "time_minute": 30,
+            "retention_count": 14,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Backup configuration saved")
+        config.refresh_from_db()
+        self.assertEqual(config.frequency, "H")
+        self.assertEqual(config.time_hour, 2)
+        self.assertEqual(config.time_minute, 30)
+        self.assertEqual(config.retention_count, 14)
+
+    def test_config_post_creates_schedule(self):
+        from django_q.models import Schedule
+        self.client.post(reverse("dashboard:backup_config_update"), {
+            "enabled": True,
+            "frequency": "D",
+            "time_hour": 3,
+            "time_minute": 0,
+            "retention_count": 7,
+        })
+        self.assertTrue(Schedule.objects.filter(name="Automated Backup").exists())
+        sched = Schedule.objects.get(name="Automated Backup")
+        self.assertEqual(sched.schedule_type, Schedule.DAILY)
+
+    def test_config_disabled_removes_schedule(self):
+        from django_q.models import Schedule
+        # First enable to create the schedule
+        self.client.post(reverse("dashboard:backup_config_update"), {
+            "enabled": True,
+            "frequency": "D",
+            "time_hour": 0,
+            "time_minute": 0,
+            "retention_count": 7,
+        })
+        self.assertTrue(Schedule.objects.filter(name="Automated Backup").exists())
+        # Now disable
+        self.client.post(reverse("dashboard:backup_config_update"), {
+            "frequency": "D",
+            "time_hour": 0,
+            "time_minute": 0,
+            "retention_count": 7,
+        })
+        self.assertFalse(Schedule.objects.filter(name="Automated Backup").exists())
+
+    def test_config_invalid_hour_rejected(self):
+        resp = self.client.post(reverse("dashboard:backup_config_update"), {
+            "enabled": True,
+            "frequency": "D",
+            "time_hour": 25,
+            "time_minute": 0,
+            "retention_count": 7,
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "correct the errors")

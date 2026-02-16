@@ -156,7 +156,7 @@ class Command(BaseCommand):
             ("1200 Oak Avenue", "1200 Oak Ave, Austin, TX 78701", "Travis County, TX", "Single Family",
              Decimal("385000.00"), today - timedelta(days=730), "owned",
              "Rental property. Currently undergoing bathroom renovation. Tenant issues with Ray Holston.",
-             []),  # Sole ownership (Legacy - implied, no partners listed)
+             []),  # Sole ownership (implied, no partners listed)
             ("450 Elm Street", "450 Elm St, Austin, TX 78702", "Travis County, TX", "Duplex",
              Decimal("520000.00"), today - timedelta(days=1095), "owned",
              "Co-owned 50/50 with Tom Driscoll. Both units rented. Needs roof inspection.",
@@ -223,39 +223,45 @@ class Command(BaseCommand):
         self.stdout.write("Creating loans...")
         from assets.models import LoanParty
         loans = {}
-        # Format: (name, borrower_desc, orig, bal, rate, pmt, npd, mat, collat, status, notes, [(stakeholder_name, ownership%, role)])
+        # Format: (name, borrower_desc, orig, bal, rate, default_rate, is_hard_money, pmt, npd, mat, collat, status, notes, property_name, [(stakeholder_name, ownership%, role)])
         loan_data = [
-            ("First National - Oak Ave Mortgage", "Legacy (personal)",
-             Decimal("320000.00"), Decimal("285400.00"), Decimal("4.750"),
+            ("First National - Oak Ave Mortgage", "Owner (personal)",
+             Decimal("320000.00"), Decimal("285400.00"), Decimal("4.750"), None, False,
              Decimal("2100.00"), today + timedelta(days=22), today + timedelta(days=365 * 25),
              "1200 Oak Avenue property", "active",
              "30-year fixed. Good rate locked in 2023.",
+             "1200 Oak Avenue",
              [("Janet Cobb", None, "Lender")]),
-            ("First National - Elm St Mortgage", "Legacy & Tom Driscoll (50/50)",
-             Decimal("410000.00"), Decimal("372000.00"), Decimal("5.125"),
+            ("First National - Elm St Mortgage", "Owner & Tom Driscoll (50/50)",
+             Decimal("410000.00"), Decimal("372000.00"), Decimal("5.125"), None, False,
              Decimal("2800.00"), today + timedelta(days=15), today + timedelta(days=365 * 27),
              "450 Elm Street duplex", "active",
              "Joint mortgage with Tom. Both personally guaranteeing.",
+             "450 Elm Street",
              [("Janet Cobb", None, "Lender"), ("Tom Driscoll", Decimal("50.00"), "Co-borrower")]),
-            ("Huang Bridge Loan - Magnolia", "Legacy & Nina Patel",
-             Decimal("200000.00"), Decimal("200000.00"), Decimal("9.500"),
+            ("Huang Bridge Loan - Magnolia", "Owner & Nina Patel",
+             Decimal("200000.00"), Decimal("200000.00"), Decimal("9.500"), Decimal("24.000"), True,
              Decimal("1583.33"), today + timedelta(days=8), today + timedelta(days=180),
              "3300 Magnolia Blvd purchase", "active",
-             "6-month bridge loan for acquisition. Need to refinance into permanent financing ASAP.",
+             "6-month hard money bridge loan for acquisition. Need to refinance into permanent financing ASAP. Default rate 24%.",
+             "3300 Magnolia Blvd",
              [("Victor Huang", None, "Lender"), ("Nina Patel", Decimal("50.00"), "Co-borrower")]),
-            ("Vehicle Loan - F-150", "Legacy (personal)",
-             Decimal("45000.00"), Decimal("28700.00"), Decimal("3.900"),
+            ("Vehicle Loan - F-150", "Owner (personal)",
+             Decimal("45000.00"), Decimal("28700.00"), Decimal("3.900"), None, False,
              Decimal("750.00"), today + timedelta(days=18), today + timedelta(days=365 * 3),
              "2023 Ford F-150", "active",
              "Auto loan through credit union. On track.",
-             []),  # No specific lender stakeholder tracked
+             None,
+             []),  # No specific lender stakeholder tracked; vehicle linked after creation
         ]
-        for name, borrower, orig, bal, rate, pmt, npd, mat, collat, status, notes, parties in loan_data:
+        for name, borrower, orig, bal, rate, default_rate, is_hm, pmt, npd, mat, collat, status, notes, prop_name, parties in loan_data:
             ln = Loan.objects.create(
                 name=name, borrower_description=borrower, original_amount=orig,
-                current_balance=bal, interest_rate=rate, monthly_payment=pmt,
+                current_balance=bal, interest_rate=rate, default_interest_rate=default_rate,
+                is_hard_money=is_hm, monthly_payment=pmt,
                 next_payment_date=npd, maturity_date=mat, collateral=collat,
                 status=status, notes_text=notes,
+                related_property=properties.get(prop_name) if prop_name else None,
             )
             loans[name] = ln
             # Add party records
@@ -351,6 +357,13 @@ class Command(BaseCommand):
                     vehicle=v, stakeholder=stakeholders[owner_name],
                     ownership_percentage=percentage, role=role,
                 )
+
+        # Link Vehicle Loan to F-150
+        f150_loan = loans.get("Vehicle Loan - F-150")
+        f150_vehicle = vehicles.get("2023 Ford F-150 Lariat")
+        if f150_loan and f150_vehicle:
+            f150_loan.related_vehicle = f150_vehicle
+            f150_loan.save()
 
         # Link auto policy to all vehicles
         auto_policy = insurance_policies.get("Auto Policy - Fleet")

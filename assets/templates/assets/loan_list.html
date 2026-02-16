@@ -34,6 +34,14 @@
         {% endfor %}
     </div>
     <div class="flex flex-wrap gap-2 items-center">
+        <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+            <input type="checkbox" name="hard_money" value="1" {% if hard_money_filter %}checked{% endif %}
+                   hx-get="{% url 'assets:loan_list' %}" hx-trigger="change" hx-target="#table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   class="rounded border-gray-600 bg-gray-700 text-orange-500 focus:ring-orange-500 focus:ring-offset-0">
+            Hard Money Only
+        </label>
+    </div>
+    <div class="flex flex-wrap gap-2 items-center">
         <span class="text-xs text-gray-400">Next Due:</span>
         <input type="date" name="date_from" value="{{ date_from }}"
                hx-get="{% url 'assets:loan_list' %}" hx-trigger="change" hx-target="#table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"

@@ -1,0 +1,65 @@
+{% if message %}
+<div class="mb-4 p-3 rounded-md text-sm border {% if msg_type == 'success' %}bg-green-900/30 text-green-300 border-green-800{% elif msg_type == 'error' %}bg-red-900/30 text-red-300 border-red-800{% else %}bg-blue-900/30 text-blue-300 border-blue-800{% endif %}">
+    {{ message }}
+</div>
+{% endif %}
+
+<form hx-post="{% url 'dashboard:backup_config_update' %}"
+      hx-target="#backup-config"
+      hx-swap="innerHTML">
+    {% csrf_token %}
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Enabled -->
+        <div class="sm:col-span-2">
+            <label class="flex items-center gap-3 cursor-pointer">
+                {{ config_form.enabled }}
+                <span class="text-sm text-gray-300">Enable automated backups</span>
+            </label>
+        </div>
+
+        <!-- Frequency -->
+        <div>
+            <label for="{{ config_form.frequency.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Frequency</label>
+            {{ config_form.frequency }}
+            {% if config_form.frequency.errors %}
+            <p class="text-red-400 text-xs mt-1">{{ config_form.frequency.errors.0 }}</p>
+            {% endif %}
+        </div>
+
+        <!-- Retention -->
+        <div>
+            <label for="{{ config_form.retention_count.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Backups to keep</label>
+            {{ config_form.retention_count }}
+            {% if config_form.retention_count.errors %}
+            <p class="text-red-400 text-xs mt-1">{{ config_form.retention_count.errors.0 }}</p>
+            {% endif %}
+        </div>
+
+        <!-- Time Hour -->
+        <div>
+            <label for="{{ config_form.time_hour.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Hour (0-23)</label>
+            {{ config_form.time_hour }}
+            {% if config_form.time_hour.errors %}
+            <p class="text-red-400 text-xs mt-1">{{ config_form.time_hour.errors.0 }}</p>
+            {% endif %}
+        </div>
+
+        <!-- Time Minute -->
+        <div>
+            <label for="{{ config_form.time_minute.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Minute (0-59)</label>
+            {{ config_form.time_minute }}
+            {% if config_form.time_minute.errors %}
+            <p class="text-red-400 text-xs mt-1">{{ config_form.time_minute.errors.0 }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="mt-4 flex items-center gap-3">
+        <button type="submit"
+                class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
+            Save Configuration
+        </button>
+        <span class="text-xs text-gray-500">Changes take effect immediately.</span>
+    </div>
+</form>

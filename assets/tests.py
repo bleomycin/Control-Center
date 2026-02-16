@@ -128,6 +128,166 @@ class LoanModelTests(TestCase):
         self.loan.refresh_from_db()
         self.assertEqual(self.loan.interest_rate, Decimal("4.500"))
 
+    def test_hard_money_defaults(self):
+        loan = Loan.objects.create(name="Regular Loan")
+        self.assertFalse(loan.is_hard_money)
+        self.assertIsNone(loan.default_interest_rate)
+
+    def test_hard_money_fields(self):
+        loan = Loan.objects.create(
+            name="Hard Money Loan",
+            is_hard_money=True,
+            interest_rate=Decimal("9.500"),
+            default_interest_rate=Decimal("24.000"),
+        )
+        loan.refresh_from_db()
+        self.assertTrue(loan.is_hard_money)
+        self.assertEqual(loan.default_interest_rate, Decimal("24.000"))
+
+
+class HardMoneyLoanViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.hard_money_loan = Loan.objects.create(
+            name="HM Bridge Loan",
+            is_hard_money=True,
+            interest_rate=Decimal("9.500"),
+            default_interest_rate=Decimal("24.000"),
+            original_amount=Decimal("200000.00"),
+            current_balance=Decimal("200000.00"),
+            status="active",
+        )
+        cls.regular_loan = Loan.objects.create(
+            name="Regular Mortgage",
+            interest_rate=Decimal("4.500"),
+            original_amount=Decimal("300000.00"),
+            status="active",
+        )
+
+    def test_detail_shows_hard_money_badge(self):
+        resp = self.client.get(reverse("assets:loan_detail", args=[self.hard_money_loan.pk]))
+        self.assertContains(resp, "Hard Money")
+        self.assertContains(resp, "Default Rate")
+        self.assertContains(resp, "24.000%")
+
+    def test_detail_no_badge_for_regular(self):
+        resp = self.client.get(reverse("assets:loan_detail", args=[self.regular_loan.pk]))
+        self.assertNotContains(resp, "Hard Money")
+        self.assertNotContains(resp, "Default Rate")
+
+    def test_list_shows_hm_badge(self):
+        resp = self.client.get(reverse("assets:loan_list"))
+        self.assertContains(resp, "HM")
+
+    def test_list_hard_money_filter(self):
+        resp = self.client.get(reverse("assets:loan_list"), {"hard_money": "1"})
+        self.assertContains(resp, "HM Bridge Loan")
+        self.assertNotContains(resp, "Regular Mortgage")
+
+    def test_csv_includes_hard_money_columns(self):
+        resp = self.client.get(reverse("assets:loan_export_csv"))
+        content = resp.content.decode()
+        self.assertIn("Hard Money", content)
+        self.assertIn("Default Rate", content)
+        self.assertIn("True", content)
+
+    def test_pdf_includes_hard_money_info(self):
+        resp = self.client.get(reverse("assets:loan_export_pdf", args=[self.hard_money_loan.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_create_hard_money_loan(self):
+        resp = self.client.post(reverse("assets:loan_create"), {
+            "name": "New HM Loan",
+            "status": "active",
+            "is_hard_money": "on",
+            "default_interest_rate": "18.000",
+            "interest_rate": "12.000",
+        })
+        self.assertEqual(resp.status_code, 302)
+        loan = Loan.objects.get(name="New HM Loan")
+        self.assertTrue(loan.is_hard_money)
+        self.assertEqual(loan.default_interest_rate, Decimal("18.000"))
+
+
+class LoanRelatedAssetTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Linked Prop", address="1 Main")
+        cls.inv = Investment.objects.create(name="Linked Inv")
+        cls.vehicle = Vehicle.objects.create(name="Linked Vehicle", status="active")
+        cls.aircraft = Aircraft.objects.create(name="Linked Aircraft", status="active")
+        cls.loan_prop = Loan.objects.create(
+            name="Prop Loan", related_property=cls.prop,
+            current_balance=Decimal("100000.00"), status="active",
+        )
+        cls.loan_vehicle = Loan.objects.create(
+            name="Vehicle Loan", related_vehicle=cls.vehicle,
+            current_balance=Decimal("25000.00"), status="active",
+        )
+
+    def test_loan_detail_shows_vehicle_link(self):
+        resp = self.client.get(reverse("assets:loan_detail", args=[self.loan_vehicle.pk]))
+        self.assertContains(resp, "Vehicle")
+        self.assertContains(resp, "Linked Vehicle")
+
+    def test_loan_form_includes_vehicle_aircraft_fields(self):
+        resp = self.client.get(reverse("assets:loan_create"))
+        self.assertContains(resp, "Vehicle")
+        self.assertContains(resp, "Aircraft")
+
+    def test_loan_create_with_vehicle(self):
+        resp = self.client.post(reverse("assets:loan_create"), {
+            "name": "New Vehicle Loan",
+            "status": "active",
+            "related_vehicle": self.vehicle.pk,
+        })
+        self.assertEqual(resp.status_code, 302)
+        loan = Loan.objects.get(name="New Vehicle Loan")
+        self.assertEqual(loan.related_vehicle, self.vehicle)
+
+    def test_loan_create_prefills_vehicle(self):
+        resp = self.client.get(
+            reverse("assets:loan_create") + f"?vehicle={self.vehicle.pk}")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_property_row_shows_loan_subtitle(self):
+        resp = self.client.get(reverse("assets:realestate_list"))
+        self.assertContains(resp, "1 loan")
+        self.assertContains(resp, "$100,000")
+
+    def test_vehicle_row_shows_loan_subtitle(self):
+        resp = self.client.get(reverse("assets:vehicle_list"))
+        self.assertContains(resp, "1 loan")
+        self.assertContains(resp, "$25,000")
+
+    def test_asset_list_property_shows_loan_subtitle(self):
+        resp = self.client.get(reverse("assets:asset_list") + "?tab=all")
+        self.assertContains(resp, "1 loan")
+
+    def test_no_loan_subtitle_when_no_loans(self):
+        resp = self.client.get(reverse("assets:investment_list"))
+        self.assertNotContains(resp, "text-orange-400")
+
+    def test_vehicle_detail_shows_loan_section(self):
+        resp = self.client.get(reverse("assets:vehicle_detail", args=[self.vehicle.pk]))
+        self.assertContains(resp, "Vehicle Loan")
+        self.assertContains(resp, "$25,000")
+        self.assertContains(resp, "Link Existing")
+
+    def test_vehicle_detail_add_loan_link(self):
+        resp = self.client.get(reverse("assets:vehicle_detail", args=[self.vehicle.pk]))
+        self.assertContains(resp, f"?vehicle={self.vehicle.pk}")
+
+    def test_aircraft_detail_shows_empty_loan_section(self):
+        resp = self.client.get(reverse("assets:aircraft_detail", args=[self.aircraft.pk]))
+        self.assertContains(resp, "No loans linked")
+        self.assertContains(resp, "Link Existing")
+
+    def test_csv_includes_related_assets(self):
+        resp = self.client.get(reverse("assets:loan_export_csv"))
+        content = resp.content.decode()
+        self.assertIn("Prop Loan", content)
+
 
 class AssetViewTests(TestCase):
     @classmethod
@@ -295,7 +455,7 @@ class LoanAssetLinkTests(TestCase):
 class AssetCreateWithInitialOwnerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.stakeholder = Stakeholder.objects.create(name="Legacy", entity_type="contact")
+        cls.stakeholder = Stakeholder.objects.create(name="Test Owner", entity_type="contact")
 
     def test_property_create_with_initial_owner(self):
         resp = self.client.post(reverse("assets:realestate_create"), {
@@ -1359,6 +1519,116 @@ class AssetPolicyLinkTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         form = resp.context["form"]
         self.assertEqual(form.initial.get("covered_properties"), [str(self.prop.pk)])
+
+
+class AssetLoanLinkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Loan Link Prop", address="1 St", status="owned")
+        cls.inv = Investment.objects.create(name="Loan Link Inv")
+        cls.vehicle = Vehicle.objects.create(name="Loan Link Car", status="active")
+        cls.aircraft = Aircraft.objects.create(name="Loan Link Plane", status="active")
+        cls.loan = Loan.objects.create(name="Linkable Loan")
+
+    def setUp(self):
+        # Reset loan FKs between tests
+        Loan.objects.filter(pk=self.loan.pk).update(
+            related_property=None, related_investment=None,
+            related_vehicle=None, related_aircraft=None,
+        )
+
+    def test_property_loan_link_get(self):
+        resp = self.client.get(reverse("assets:property_loan_link", args=[self.prop.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_asset_loan_form.html")
+
+    def test_property_loan_link_post(self):
+        resp = self.client.post(
+            reverse("assets:property_loan_link", args=[self.prop.pk]),
+            {"loan": self.loan.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertEqual(self.loan.related_property_id, self.prop.pk)
+
+    def test_property_loan_unlink(self):
+        self.loan.related_property = self.prop
+        self.loan.save()
+        resp = self.client.post(
+            reverse("assets:property_loan_unlink", args=[self.prop.pk, self.loan.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertIsNone(self.loan.related_property)
+        self.assertTrue(Loan.objects.filter(pk=self.loan.pk).exists())
+
+    def test_investment_loan_link_post(self):
+        resp = self.client.post(
+            reverse("assets:investment_loan_link", args=[self.inv.pk]),
+            {"loan": self.loan.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertEqual(self.loan.related_investment_id, self.inv.pk)
+
+    def test_investment_loan_unlink(self):
+        self.loan.related_investment = self.inv
+        self.loan.save()
+        resp = self.client.post(
+            reverse("assets:investment_loan_unlink", args=[self.inv.pk, self.loan.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertIsNone(self.loan.related_investment)
+
+    def test_vehicle_loan_link_post(self):
+        resp = self.client.post(
+            reverse("assets:vehicle_loan_link", args=[self.vehicle.pk]),
+            {"loan": self.loan.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertEqual(self.loan.related_vehicle_id, self.vehicle.pk)
+
+    def test_vehicle_loan_unlink(self):
+        self.loan.related_vehicle = self.vehicle
+        self.loan.save()
+        resp = self.client.post(
+            reverse("assets:vehicle_loan_unlink", args=[self.vehicle.pk, self.loan.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertIsNone(self.loan.related_vehicle)
+
+    def test_aircraft_loan_link_post(self):
+        resp = self.client.post(
+            reverse("assets:aircraft_loan_link", args=[self.aircraft.pk]),
+            {"loan": self.loan.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertEqual(self.loan.related_aircraft_id, self.aircraft.pk)
+
+    def test_aircraft_loan_unlink(self):
+        self.loan.related_aircraft = self.aircraft
+        self.loan.save()
+        resp = self.client.post(
+            reverse("assets:aircraft_loan_unlink", args=[self.aircraft.pk, self.loan.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.loan.refresh_from_db()
+        self.assertIsNone(self.loan.related_aircraft)
+
+    def test_unlink_wrong_asset_no_effect(self):
+        """Unlinking a loan that belongs to a different asset should not clear the FK."""
+        other_prop = RealEstate.objects.create(name="Other Prop", address="2 St", status="owned")
+        self.loan.related_property = other_prop
+        self.loan.save()
+        self.client.post(
+            reverse("assets:property_loan_unlink", args=[self.prop.pk, self.loan.pk]),
+        )
+        self.loan.refresh_from_db()
+        self.assertEqual(self.loan.related_property_id, other_prop.pk)
 
 
 class InlineNotesTests(TestCase):

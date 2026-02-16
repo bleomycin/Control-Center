@@ -6,6 +6,7 @@
     </td>
     <td class="px-4 py-3">
         <a href="{{ loan.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ loan.name }}</a>
+        {% if loan.is_hard_money %}<span class="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-orange-900/50 text-orange-300">HM</span>{% endif %}
         {% if loan.lender %}<p class="text-xs text-gray-400">{{ loan.lender }}</p>{% endif %}
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">${{ loan.current_balance|floatformat:0|intcomma|default:"-" }}</td>

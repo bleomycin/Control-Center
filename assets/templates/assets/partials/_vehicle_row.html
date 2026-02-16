@@ -8,6 +8,7 @@
     <td class="px-4 py-3">
         <a href="{{ vehicle.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ vehicle.name }}</a>
         {% if vehicle.year or vehicle.make %}<p class="text-xs text-gray-400">{{ vehicle.year|default:"" }} {{ vehicle.make }} {{ vehicle.model_name }}</p>{% endif %}
+        {% if vehicle.loan_count %}<p class="text-xs text-orange-400">{{ vehicle.loan_count }} loan{{ vehicle.loan_count|pluralize }} · ${{ vehicle.loan_balance|floatformat:0|intcomma }}</p>{% endif %}
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ vehicle.vehicle_type|choice_label:"vehicle_type" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ vehicle.estimated_value|floatformat:0|intcomma|default:"-" }}</td>

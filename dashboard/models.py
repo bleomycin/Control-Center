@@ -58,10 +58,10 @@ class EmailSettings(models.Model):
     username = models.CharField("Username", max_length=255, blank=True, default="")
     password = models.CharField("Password", max_length=255, blank=True, default="")
     from_email = models.EmailField(
-        "From email", default="noreply@legacy.local"
+        "From email", default="noreply@controlcenter.local"
     )
     admin_email = models.EmailField(
-        "Admin email (recipient)", default="admin@legacy.local"
+        "Admin email (recipient)", default="admin@controlcenter.local"
     )
     notifications_enabled = models.BooleanField(
         "Enable email notifications", default=False
@@ -83,6 +83,39 @@ class EmailSettings(models.Model):
     def is_configured(self):
         """True when minimum SMTP fields are populated."""
         return bool(self.smtp_host and self.from_email and self.admin_email)
+
+
+class BackupSettings(models.Model):
+    """Singleton model for automated backup configuration. Always use pk=1."""
+
+    FREQUENCY_CHOICES = [
+        ("D", "Daily"),
+        ("H", "Hourly"),
+        ("W", "Weekly"),
+    ]
+
+    enabled = models.BooleanField("Enable automated backups", default=True)
+    frequency = models.CharField(
+        max_length=1, choices=FREQUENCY_CHOICES, default="D"
+    )
+    time_hour = models.PositiveSmallIntegerField("Hour (0-23)", default=0)
+    time_minute = models.PositiveSmallIntegerField("Minute (0-59)", default=0)
+    retention_count = models.PositiveSmallIntegerField(
+        "Backups to keep", default=7
+    )
+
+    class Meta:
+        verbose_name = "Backup Settings"
+        verbose_name_plural = "Backup Settings"
+
+    def __str__(self):
+        return "Backup Settings"
+
+    @classmethod
+    def load(cls):
+        """Return the singleton instance, creating it if needed."""
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
 
 
 class SampleDataStatus(models.Model):

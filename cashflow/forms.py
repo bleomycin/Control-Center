@@ -1,5 +1,5 @@
 from django import forms
-from legacy.forms import TailwindFormMixin
+from config.forms import TailwindFormMixin
 from .models import CashFlowEntry
 
 

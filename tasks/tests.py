@@ -338,8 +338,8 @@ class NotificationTests(TestCase):
 
         EmailSettings.objects.update_or_create(pk=1, defaults={
             "smtp_host": "localhost",
-            "from_email": "test@legacy.local",
-            "admin_email": "admin@legacy.local",
+            "from_email": "test@controlcenter.local",
+            "admin_email": "admin@controlcenter.local",
             "notifications_enabled": True,
         })
         # Use in-memory email backend so tests don't need a real SMTP server

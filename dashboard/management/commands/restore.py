@@ -52,12 +52,23 @@ class Command(BaseCommand):
             shutil.copy2(str(src_db), str(db_path))
             self.stdout.write(f'  Database restored ({db_path.stat().st_size:,} bytes)')
 
-            # Replace media directory
+            # Replace media directory contents (clear then copy)
             src_media = tmp_path / 'media'
             if src_media.exists():
                 if media_root.exists():
-                    shutil.rmtree(media_root)
-                shutil.copytree(str(src_media), str(media_root))
+                    for item in media_root.iterdir():
+                        if item.is_dir():
+                            shutil.rmtree(item)
+                        else:
+                            item.unlink()
+                else:
+                    media_root.mkdir(parents=True)
+                for item in src_media.iterdir():
+                    dst = media_root / item.name
+                    if item.is_dir():
+                        shutil.copytree(str(item), str(dst))
+                    else:
+                        shutil.copy2(str(item), str(dst))
                 file_count = sum(1 for _ in media_root.rglob('*') if _.is_file())
                 self.stdout.write(f'  Media restored ({file_count} files)')
 

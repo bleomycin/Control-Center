@@ -96,6 +96,24 @@
 
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Loans</p>
+        <div class="flex items-center gap-3">
+            <button hx-get="{% url 'assets:aircraft_loan_link' aircraft.pk %}"
+                    hx-target="#loan-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+            <a href="{% url 'assets:loan_create' %}?aircraft={{ aircraft.pk }}"
+               class="text-xs text-blue-400 hover:text-blue-300">+ New Loan</a>
+        </div>
+    </div>
+    <div id="loan-form-container"></div>
+    <div id="loan-list">
+        {% include "assets/partials/_asset_loan_list.html" with loans=loans unlink_url_name="assets:aircraft_loan_unlink" asset_pk=aircraft.pk %}
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <p class="text-xs text-gray-400 uppercase tracking-wide">Insurance Policies</p>
         <div class="flex items-center gap-3">
             <button hx-get="{% url 'assets:aircraft_policy_link' aircraft.pk %}"

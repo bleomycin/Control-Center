@@ -672,8 +672,8 @@ DB-backed SMTP configuration (singleton `EmailSettings` model):
 | Use SSL | No |
 | Username | *(blank)* |
 | Password | *(blank)* |
-| From Email | `noreply@legacy.local` |
-| Admin Email (recipient) | `admin@legacy.local` |
+| From Email | `noreply@controlcenter.local` |
+| Admin Email (recipient) | `admin@controlcenter.local` |
 | Enable Notifications | No |
 
 A **Test Email** button (HTMX) sends a test message to verify the configuration works.
@@ -761,7 +761,7 @@ Every detail page has a PDF export button (purple). Uses ReportLab's platypus en
 /assets/loans/<id>/pdf/
 ```
 
-PDF sections include key-value info tables, related entity tables, and text blocks. Generic utility at `legacy/pdf_export.py`.
+PDF sections include key-value info tables, related entity tables, and text blocks. Generic utility at `config/pdf_export.py`.
 
 ---
 
@@ -1033,7 +1033,7 @@ docker compose exec web python manage.py test
 
 ```
 control-center/
-├── legacy/                    # Django project config
+├── config/                    # Django project config
 │   ├── settings.py            # Main settings (env var config)
 │   ├── urls.py                # Root URL configuration
 │   ├── wsgi.py                # WSGI entry point
