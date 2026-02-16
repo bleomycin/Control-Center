@@ -4,7 +4,7 @@ from django.db import migrations
 
 
 def update_email_defaults(apps, schema_editor):
-    """Update email defaults from legacy.local to controlcenter.local."""
+    """Update email defaults to controlcenter.local."""
     EmailSettings = apps.get_model("dashboard", "EmailSettings")
     for obj in EmailSettings.objects.all():
         changed = False
