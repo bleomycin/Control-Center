@@ -10,8 +10,8 @@ from django.views.decorators.http import require_POST
 from dashboard.choices import get_choice_label, get_choices
 from .forms import (ContactLogForm, EmployeeAssignForm, StakeholderAircraftForm,
                      StakeholderForm, StakeholderInvestmentForm, StakeholderLoanForm,
-                     StakeholderPolicyForm, StakeholderPropertyForm, StakeholderTabForm,
-                     StakeholderVehicleForm)
+                     StakeholderPolicyForm, StakeholderPropertyForm, StakeholderRelationshipForm,
+                     StakeholderTabForm, StakeholderVehicleForm)
 from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
 
 
@@ -736,6 +736,64 @@ def policyholder_delete(request, pk):
                    "policies_as_carrier": InsurancePolicy.objects.filter(carrier=stakeholder),
                    "policies_as_agent": InsurancePolicy.objects.filter(agent=stakeholder),
                    "stakeholder": stakeholder})
+
+
+# --- Inline relationship management ---
+
+def _relationship_context(stakeholder):
+    return {
+        "relationships_from": stakeholder.relationships_from.select_related("to_stakeholder").all(),
+        "relationships_to": stakeholder.relationships_to.select_related("from_stakeholder").all(),
+        "stakeholder": stakeholder,
+    }
+
+
+def relationship_add(request, pk):
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderRelationshipForm(request.POST)
+        form.instance.from_stakeholder = stakeholder
+        if form.is_valid():
+            form.save()
+            return render(request, "stakeholders/partials/_sh_relationship_list.html",
+                          _relationship_context(stakeholder))
+    else:
+        form = StakeholderRelationshipForm()
+    return render(request, "stakeholders/partials/_sh_relationship_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def _get_relationship_stakeholder(request, rel):
+    """Return the stakeholder whose detail page we're viewing."""
+    viewer_pk = request.GET.get("viewer") or request.POST.get("viewer")
+    if viewer_pk:
+        return get_object_or_404(Stakeholder, pk=viewer_pk)
+    return rel.from_stakeholder
+
+
+def relationship_edit(request, pk):
+    rel = get_object_or_404(Relationship, pk=pk)
+    stakeholder = _get_relationship_stakeholder(request, rel)
+    if request.method == "POST":
+        form = StakeholderRelationshipForm(request.POST, instance=rel)
+        form.instance.from_stakeholder = rel.from_stakeholder
+        if form.is_valid():
+            form.save()
+            return render(request, "stakeholders/partials/_sh_relationship_list.html",
+                          _relationship_context(stakeholder))
+    else:
+        form = StakeholderRelationshipForm(instance=rel)
+    return render(request, "stakeholders/partials/_sh_relationship_form.html",
+                  {"form": form, "stakeholder": stakeholder, "editing": rel})
+
+
+def relationship_delete(request, pk):
+    rel = get_object_or_404(Relationship, pk=pk)
+    stakeholder = _get_relationship_stakeholder(request, rel)
+    if request.method == "POST":
+        rel.delete()
+    return render(request, "stakeholders/partials/_sh_relationship_list.html",
+                  _relationship_context(stakeholder))
 
 
 # --- Inline employee management (firm detail) ---
