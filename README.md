@@ -26,6 +26,7 @@ A self-hosted personal management system built with Django. Designed as a single
 - [Calendar](#calendar)
 - [Database Configuration](#database-configuration)
 - [Docker Deployment](#docker-deployment)
+- [Upgrading](#upgrading)
 - [Local Development](#local-development)
 - [Management Commands](#management-commands)
 - [Running Tests](#running-tests)
@@ -1021,6 +1022,124 @@ docker compose down && rm -rf persist/
 
 ---
 
+## Upgrading
+
+### How Data Persistence Works
+
+All production data lives outside the Docker image in bind-mounted host directories:
+
+| Host Path | Container Path | Contents |
+|-----------|----------------|----------|
+| `./persist/data/` | `/app/data/` | SQLite database (`db.sqlite3`) |
+| `./persist/media/` | `/app/media/` | Uploaded files (evidence, attachments) |
+| `./persist/backups/` | `/app/backups/` | Backup archives |
+
+Rebuilding the container replaces the application code but **never touches these directories**. Your data survives every upgrade.
+
+### Standard Upgrade (Docker)
+
+```bash
+# 1. Create a backup before upgrading (recommended)
+docker compose exec web python manage.py backup
+
+# 2. Pull the latest code
+git pull
+
+# 3. Rebuild and restart
+docker compose up --build -d
+```
+
+That's it. The entrypoint automatically handles:
+- `migrate` — applies any new database schema changes
+- `collectstatic` — updates CSS, JavaScript, and vendor assets
+- `setup_schedules` — syncs background job schedules
+
+The container restarts with new code while your database, uploads, and backups remain untouched in `./persist/`.
+
+### Verifying an Upgrade
+
+```bash
+# Check the container is running
+docker compose ps
+
+# Check startup logs for migration output
+docker compose logs --tail 30
+
+# Verify your data is intact
+docker compose exec web python manage.py shell -c "
+from stakeholders.models import Stakeholder
+from tasks.models import Task
+from notes.models import Note
+print(f'Stakeholders: {Stakeholder.objects.count()}')
+print(f'Tasks: {Task.objects.count()}')
+print(f'Notes: {Note.objects.count()}')
+"
+
+# Run the test suite against the running instance
+docker compose exec web python manage.py test
+```
+
+### Rolling Back a Bad Upgrade
+
+If an upgrade causes problems, restore from the backup you created in step 1:
+
+```bash
+# Restore the pre-upgrade backup
+docker compose exec web python manage.py restore /app/backups/controlcenter-backup-YYYYMMDD-HHMMSS.tar.gz
+
+# Or check out the previous code version and rebuild
+git log --oneline -5                  # find the previous commit
+git checkout <previous-commit-hash>
+docker compose up --build -d
+```
+
+### Upgrading with Local Development (no Docker)
+
+```bash
+# 1. Back up your database
+source venv/bin/activate
+python manage.py backup
+
+# 2. Pull the latest code
+git pull
+
+# 3. Install any new dependencies
+pip install -r requirements.txt
+
+# 4. Apply database migrations
+python manage.py migrate
+
+# 5. Rebuild Tailwind CSS (if templates changed)
+make tailwind-build
+
+# 6. Restart the server
+python manage.py runserver
+```
+
+### Preparing for Production Data
+
+Before adding real data, disable sample data loading so it doesn't run on every container restart:
+
+```bash
+# In your .env file, set:
+LOAD_SAMPLE_DATA=false
+```
+
+> **Note:** Leaving `LOAD_SAMPLE_DATA=true` will not create duplicates — the loader is idempotent and skips if data is already present. But disabling it avoids unnecessary checks on startup and keeps your instance clean once you remove sample data from **Settings > Sample Data**.
+
+### What Can Change During an Upgrade
+
+| Change Type | Handled Automatically | Example |
+|-------------|----------------------|---------|
+| New database columns/tables | Yes — `migrate` | Adding a new field to a model |
+| Modified templates/CSS | Yes — `collectstatic` | UI changes, new pages |
+| New background job schedules | Yes — `setup_schedules` | New notification types |
+| New Python dependencies | Yes — `docker compose up --build` | Adding a pip package |
+| Removed database columns | Yes — `migrate` | Dropping an unused field |
+| Changed `.env` variables | Manual — edit `.env`, then rebuild | New config options |
+
+---
+
 ## Local Development
 
 ### Initial Setup
@@ -1086,7 +1205,7 @@ python manage.py qcluster
 | `python manage.py backup --keep N` | Create backup and prune, keeping only N most recent |
 | `python manage.py backup --dir PATH` | Create backup in a custom directory |
 | `python manage.py restore <path>` | Restore database and media from backup archive |
-| `python manage.py test` | Run all tests (708 tests) |
+| `python manage.py test` | Run all tests (716 tests) |
 | `python manage.py test <app>.tests.<Class>` | Run specific test class |
 | `python manage.py makemigrations` | Generate new migrations after model changes |
 | `python manage.py collectstatic` | Gather static files for production |
@@ -1118,7 +1237,7 @@ docker compose exec web python manage.py test
 
 ### Test Coverage
 
-708 tests covering all apps: dashboard (search, timeline, calendar, notifications, choices, backup/restore, backup config, SQLite pragmas), stakeholders (CRUD, tabs, firm hierarchy, graph), assets (properties, investments, loans, insurance policies, vehicles, aircraft, ownership through models, inline notes, loan/policy link-unlink), legal (CRUD, evidence), tasks (direction, follow-ups, subtasks, recurring, kanban), cash flow (entries, charts, alerts), and notes (CRUD, tags, folders, views, attachments).
+716 tests covering all apps: dashboard (search, timeline, calendar, notifications, choices, backup/restore, backup config, SQLite pragmas), stakeholders (CRUD, tabs, firm hierarchy, graph), assets (properties, investments, loans, insurance policies, vehicles, aircraft, ownership through models, inline notes, loan/policy link-unlink), legal (CRUD, evidence), tasks (direction, follow-ups, subtasks, recurring, kanban), cash flow (entries, charts, alerts), and notes (CRUD, tags, folders, views, attachments).
 
 ---
 
