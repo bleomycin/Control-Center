@@ -21,6 +21,7 @@ urlpatterns = [
     path("followup/<int:pk>/respond/", views.followup_respond, name="followup_respond"),
     path("<int:pk>/subtasks/add/", views.subtask_add, name="subtask_add"),
     path("subtask/<int:pk>/toggle/", views.subtask_toggle, name="subtask_toggle"),
+    path("subtask/<int:pk>/edit/", views.subtask_edit, name="subtask_edit"),
     path("subtask/<int:pk>/delete/", views.subtask_delete, name="subtask_delete"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),

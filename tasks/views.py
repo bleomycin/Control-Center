@@ -552,6 +552,21 @@ def subtask_toggle(request, pk):
     return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(st.task))
 
 
+def subtask_edit(request, pk):
+    st = get_object_or_404(SubTask, pk=pk)
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        if title:
+            st.title = title
+            st.save()
+        return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(st.task))
+    # GET with ?cancel: re-render the full list (dismiss edit form)
+    if request.GET.get("cancel"):
+        return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(st.task))
+    # GET: return inline edit form for this single subtask
+    return render(request, "tasks/partials/_subtask_edit_form.html", {"st": st})
+
+
 @require_POST
 def subtask_delete(request, pk):
     st = get_object_or_404(SubTask, pk=pk)
