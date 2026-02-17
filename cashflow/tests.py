@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from assets.models import Loan
+from assets.models import Investment, Loan, RealEstate
 from stakeholders.models import Stakeholder
 
 from .alerts import get_liquidity_alerts
@@ -235,3 +235,191 @@ class LiquidityAlertTests(TestCase):
         alerts = get_liquidity_alerts()
         shortfall = [a for a in alerts if a["title"] == "Projected Shortfall"]
         self.assertEqual(len(shortfall), 1)
+
+
+class CashFlowDetailViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.entry = CashFlowEntry.objects.create(
+            description="Detail Entry", amount=Decimal("1500"),
+            entry_type="inflow", category="rental_income",
+            date=timezone.localdate(),
+        )
+
+    def test_detail_page(self):
+        resp = self.client.get(reverse("cashflow:detail", args=[self.entry.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Detail Entry")
+        self.assertContains(resp, "1,500")
+
+    def test_detail_pdf(self):
+        resp = self.client.get(reverse("cashflow:export_pdf", args=[self.entry.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_detail_with_related_entities(self):
+        s = Stakeholder.objects.create(name="Test SH")
+        self.entry.related_stakeholder = s
+        self.entry.save()
+        resp = self.client.get(reverse("cashflow:detail", args=[self.entry.pk]))
+        self.assertContains(resp, "Test SH")
+
+
+class RecurringEntryTests(TestCase):
+    def test_create_next_monthly(self):
+        entry = CashFlowEntry.objects.create(
+            description="Monthly Rent", amount=Decimal("2000"),
+            entry_type="inflow", date=timezone.localdate().replace(day=15),
+            is_recurring=True, recurrence_rule="monthly",
+        )
+        next_entry = entry.create_next_recurrence()
+        self.assertIsNotNone(next_entry)
+        self.assertEqual(next_entry.description, "Monthly Rent")
+        self.assertEqual(next_entry.amount, Decimal("2000"))
+        self.assertTrue(next_entry.is_recurring)
+        # Next month
+        expected_month = entry.date.month % 12 + 1
+        self.assertEqual(next_entry.date.month, expected_month)
+
+    def test_create_next_weekly(self):
+        entry = CashFlowEntry.objects.create(
+            description="Weekly", amount=Decimal("100"),
+            entry_type="outflow", date=timezone.localdate(),
+            is_recurring=True, recurrence_rule="weekly",
+        )
+        next_entry = entry.create_next_recurrence()
+        self.assertEqual(next_entry.date, entry.date + timedelta(weeks=1))
+
+    def test_no_recurrence_if_not_recurring(self):
+        entry = CashFlowEntry.objects.create(
+            description="One-time", amount=Decimal("500"),
+            entry_type="inflow", date=timezone.localdate(),
+            is_recurring=False,
+        )
+        self.assertIsNone(entry.create_next_recurrence())
+
+    def test_recurring_badge_in_list(self):
+        CashFlowEntry.objects.create(
+            description="RecurTest", amount=Decimal("100"),
+            entry_type="inflow", date=timezone.localdate(),
+            is_recurring=True, recurrence_rule="monthly",
+        )
+        resp = self.client.get(reverse("cashflow:list"))
+        self.assertContains(resp, "Monthly")
+
+
+class CashFlowFilterTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Filter SH")
+        cls.entry1 = CashFlowEntry.objects.create(
+            description="Cat Entry", amount=Decimal("500"),
+            entry_type="inflow", category="rental_income",
+            date=timezone.localdate(),
+        )
+        cls.entry2 = CashFlowEntry.objects.create(
+            description="SH Entry", amount=Decimal("300"),
+            entry_type="outflow", date=timezone.localdate(),
+            related_stakeholder=cls.stakeholder,
+        )
+
+    def test_category_filter(self):
+        resp = self.client.get(reverse("cashflow:list"), {"category": "rental_income"})
+        self.assertContains(resp, "Cat Entry")
+        self.assertNotContains(resp, "SH Entry")
+
+    def test_stakeholder_filter(self):
+        resp = self.client.get(reverse("cashflow:list"), {"stakeholder": str(self.stakeholder.pk)})
+        self.assertContains(resp, "SH Entry")
+        self.assertNotContains(resp, "Cat Entry")
+
+    def test_category_dropdown_in_context(self):
+        resp = self.client.get(reverse("cashflow:list"))
+        self.assertIn("category_choices", resp.context)
+        self.assertIn("stakeholder_choices", resp.context)
+
+
+class InlineCashFlowTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Test Property", status="active")
+        cls.loan = Loan.objects.create(name="Test Loan", status="active")
+        cls.inv = Investment.objects.create(name="Test Inv")
+        cls.sh = Stakeholder.objects.create(name="Test SH")
+
+    def test_property_cashflow_add_form(self):
+        resp = self.client.get(reverse("cashflow:property_cashflow_add", args=[self.prop.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Add Entry")
+
+    def test_property_cashflow_add_post(self):
+        resp = self.client.post(reverse("cashflow:property_cashflow_add", args=[self.prop.pk]), {
+            "description": "Rent Payment",
+            "amount": "2000",
+            "entry_type": "inflow",
+            "date": str(timezone.localdate()),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(CashFlowEntry.objects.filter(
+            related_property=self.prop, description="Rent Payment").exists())
+
+    def test_property_cashflow_delete(self):
+        entry = CashFlowEntry.objects.create(
+            description="Del Me", amount=Decimal("100"),
+            entry_type="outflow", date=timezone.localdate(),
+            related_property=self.prop,
+        )
+        self.client.post(reverse("cashflow:property_cashflow_delete", args=[entry.pk]))
+        self.assertFalse(CashFlowEntry.objects.filter(pk=entry.pk).exists())
+
+    def test_loan_cashflow_add_post(self):
+        resp = self.client.post(reverse("cashflow:loan_cashflow_add", args=[self.loan.pk]), {
+            "description": "Loan Payment",
+            "amount": "1000",
+            "entry_type": "outflow",
+            "date": str(timezone.localdate()),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(CashFlowEntry.objects.filter(
+            related_loan=self.loan, description="Loan Payment").exists())
+
+    def test_investment_cashflow_add_post(self):
+        resp = self.client.post(reverse("cashflow:investment_cashflow_add", args=[self.inv.pk]), {
+            "description": "Dividend",
+            "amount": "500",
+            "entry_type": "inflow",
+            "date": str(timezone.localdate()),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(CashFlowEntry.objects.filter(
+            related_investment=self.inv, description="Dividend").exists())
+
+    def test_stakeholder_cashflow_add_post(self):
+        resp = self.client.post(reverse("cashflow:stakeholder_cashflow_add", args=[self.sh.pk]), {
+            "description": "Consulting Fee",
+            "amount": "750",
+            "entry_type": "outflow",
+            "date": str(timezone.localdate()),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(CashFlowEntry.objects.filter(
+            related_stakeholder=self.sh, description="Consulting Fee").exists())
+
+    def test_inline_list_shows_totals(self):
+        CashFlowEntry.objects.create(
+            description="In", amount=Decimal("1000"),
+            entry_type="inflow", date=timezone.localdate(),
+            related_property=self.prop,
+        )
+        CashFlowEntry.objects.create(
+            description="Out", amount=Decimal("400"),
+            entry_type="outflow", date=timezone.localdate(),
+            related_property=self.prop,
+        )
+        resp = self.client.post(reverse("cashflow:property_cashflow_add", args=[self.prop.pk]), {
+            "description": "Another", "amount": "200", "entry_type": "inflow",
+            "date": str(timezone.localdate()),
+        })
+        self.assertContains(resp, "In:")
+        self.assertContains(resp, "Out:")
+        self.assertContains(resp, "Net:")

@@ -87,4 +87,19 @@
         {% endfor %}
     </div>
 </div>
+
+<!-- Cash Flow -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Cash Flow</h2>
+        <button hx-get="{% url 'cashflow:investment_cashflow_add' investment.pk %}"
+                hx-target="#investment-cashflow-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
+    </div>
+    <div id="investment-cashflow-form-container"></div>
+    <div id="inline-cashflow-list">
+        {% include "cashflow/partials/_inline_cashflow_list.html" %}
+    </div>
+</div>
 {% endblock %}

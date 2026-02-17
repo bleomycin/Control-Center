@@ -105,24 +105,17 @@
     </div>
 </div>
 
-{% if cash_flow_entries %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Cash Flow</h2>
+        <button hx-get="{% url 'cashflow:loan_cashflow_add' loan.pk %}"
+                hx-target="#loan-cashflow-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
     </div>
-    <div class="divide-y divide-gray-700">
-        {% for entry in cash_flow_entries %}
-        <div class="flex items-center justify-between px-4 py-3">
-            <div>
-                <span class="text-sm text-gray-200">{{ entry.description }}</span>
-                <span class="text-xs text-gray-400 ml-2">{{ entry.date|date:"M j" }}</span>
-            </div>
-            <span class="text-sm {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
-                {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}
-            </span>
-        </div>
-        {% endfor %}
+    <div id="loan-cashflow-form-container"></div>
+    <div id="inline-cashflow-list">
+        {% include "cashflow/partials/_inline_cashflow_list.html" %}
     </div>
 </div>
-{% endif %}
 {% endblock %}

@@ -1,0 +1,32 @@
+{% load humanize %}
+<!-- Totals row -->
+{% if cashflow_entries %}
+<div class="flex items-center gap-4 px-4 py-2 bg-gray-750 border-b border-gray-700 text-xs">
+    <span class="text-green-400">In: ${{ cashflow_inflows|floatformat:0|intcomma }}</span>
+    <span class="text-red-400">Out: ${{ cashflow_outflows|floatformat:0|intcomma }}</span>
+    <span class="{% if cashflow_net >= 0 %}text-green-400{% else %}text-red-400{% endif %}">Net: {% if cashflow_net >= 0 %}+{% endif %}${{ cashflow_net|floatformat:0|intcomma }}</span>
+</div>
+{% endif %}
+<div class="divide-y divide-gray-700">
+    {% for entry in cashflow_entries %}
+    <div class="group flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+        <div class="flex-1 min-w-0">
+            <a href="{% url 'cashflow:detail' entry.pk %}" class="text-sm text-gray-200 hover:text-white">{{ entry.description }}</a>
+            <span class="text-xs text-gray-400 ml-2">{{ entry.date|date:"M j" }}</span>
+            {% if entry.category %}<span class="text-xs text-gray-500 ml-1">({{ entry.category }})</span>{% endif %}
+            {% if entry.is_recurring %}<span class="text-xs text-blue-400 ml-1">recurring</span>{% endif %}
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="text-sm font-medium {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %} whitespace-nowrap">
+                {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}
+            </span>
+            <button hx-post="{% url delete_url_name entry.pk %}"
+                    hx-target="#inline-cashflow-list" hx-swap="innerHTML"
+                    hx-confirm="Delete this entry?"
+                    class="text-xs text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition-opacity">Del</button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-6 text-sm text-gray-500 text-center">No cash flow entries</p>
+    {% endfor %}
+</div>
