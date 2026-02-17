@@ -2,78 +2,124 @@
 {% load humanize %}
 {% block title %}Activity Timeline - Control Center{% endblock %}
 {% block content %}
-<div class="mb-6">
+<div class="mb-4 sm:mb-6">
     <h1 class="text-2xl font-bold text-white">Activity Timeline</h1>
     <p class="text-sm text-gray-400 mt-1">All activity across modules in chronological order</p>
 </div>
 
 <!-- Filter Bar -->
+{% with type_count=selected_types|length %}
 <form id="filter-form" hx-get="{% url 'dashboard:timeline' %}" hx-target="#timeline-content" hx-swap="innerHTML" hx-push-url="true"
-      class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+      onsubmit="return true;">
     <input type="hidden" name="filtered" value="1">
-    <!-- Type checkboxes -->
-    <div class="flex flex-wrap items-center gap-3 mb-3">
-        <span class="text-xs font-medium text-gray-400 uppercase tracking-wide mr-1">Type</span>
-        <button type="button" onclick="selectAllTypes()" class="text-xs text-blue-400 hover:text-blue-300">All</button>
-        <span class="text-gray-600">|</span>
-        <button type="button" onclick="selectNoTypes()" class="text-xs text-blue-400 hover:text-blue-300 mr-1">None</button>
-        {% for t in all_types %}
-        <label class="flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" name="type" value="{{ t }}"
-                   {% if t in selected_types or not selected_types %}checked{% endif %}
-                   onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
-                   class="type-checkbox rounded border-gray-600 bg-gray-700 h-3.5 w-3.5
-                   {% if t == 'contact' %}text-blue-500 focus:ring-blue-500
-                   {% elif t == 'note' %}text-indigo-500 focus:ring-indigo-500
-                   {% elif t == 'task' %}text-yellow-500 focus:ring-yellow-500
-                   {% elif t == 'followup' %}text-amber-500 focus:ring-amber-500
-                   {% elif t == 'cashflow' %}text-green-500 focus:ring-green-500
-                   {% elif t == 'evidence' %}text-purple-500 focus:ring-purple-500
-                   {% endif %}">
-            <span class="text-xs text-gray-300 capitalize">{{ t }}</span>
-        </label>
-        {% endfor %}
+    <!-- Dropdowns row: 2-col grid on mobile, inline flex on desktop -->
+    <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 mb-2 sm:mb-3">
+        <select name="stakeholder"
+                onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
+            <option value="">All Stakeholders</option>
+            {% for s in stakeholders %}
+            <option value="{{ s.pk }}" {% if stakeholder_id == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" id="tl-filter-toggle-btn" onclick="toggleTimelineFilters()"
+                class="inline-flex items-center justify-center gap-1.5 px-2 py-2 sm:px-3 text-sm font-medium rounded-md transition-colors {% if selected_types and type_count != all_types|length or date_from or date_to %}bg-blue-600/20 border border-blue-500 text-blue-300{% else %}bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600{% endif %}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            Filters
+            {% if selected_types and type_count != all_types|length or date_from or date_to %}
+            <span class="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-500 text-white rounded-full" id="tl-filter-count">&bull;</span>
+            {% endif %}
+        </button>
     </div>
-    <script>
-    function selectAllTypes() {
-        document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = true; });
-        document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
-    }
-    function selectNoTypes() {
-        document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = false; });
-        document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
-    }
-    </script>
-    <!-- Date range + stakeholder -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">From</label>
-            <input type="date" name="date_from" value="{{ date_from }}"
-                   onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
-                   class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
-        </div>
-        <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">To</label>
-            <input type="date" name="date_to" value="{{ date_to }}"
-                   onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
-                   class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
-        </div>
-        <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
-            <select name="stakeholder"
-                    onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
-                    class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
-                <option value="">All stakeholders</option>
-                {% for s in stakeholders %}
-                <option value="{{ s.pk }}" {% if stakeholder_id == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
-                {% endfor %}
-            </select>
+
+    <!-- Collapsible filter panel -->
+    <div id="tl-filter-panel" class="{% if not date_from and not date_to %}{% if not selected_types or type_count == all_types|length %}hidden{% endif %}{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
+            <!-- Type checkboxes -->
+            <div>
+                <div class="flex items-center gap-2 mb-1 sm:mb-0">
+                    <span class="text-xs text-gray-400 font-medium uppercase tracking-wide">Type</span>
+                    <button type="button" onclick="selectAllTypes()" class="text-xs text-blue-400 hover:text-blue-300">All</button>
+                    <span class="text-gray-600">|</span>
+                    <button type="button" onclick="selectNoTypes()" class="text-xs text-blue-400 hover:text-blue-300">None</button>
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                    {% for t in all_types %}
+                    <label class="inline-flex items-center gap-1.5 text-xs text-gray-300 cursor-pointer">
+                        <input type="checkbox" name="type" value="{{ t }}"
+                               {% if t in selected_types or not selected_types %}checked{% endif %}
+                               onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                               class="type-checkbox rounded border-gray-600 bg-gray-700 h-3.5 w-3.5
+                               {% if t == 'contact' %}text-blue-500 focus:ring-blue-500
+                               {% elif t == 'note' %}text-indigo-500 focus:ring-indigo-500
+                               {% elif t == 'task' %}text-yellow-500 focus:ring-yellow-500
+                               {% elif t == 'followup' %}text-amber-500 focus:ring-amber-500
+                               {% elif t == 'cashflow' %}text-green-500 focus:ring-green-500
+                               {% elif t == 'evidence' %}text-purple-500 focus:ring-purple-500
+                               {% endif %}">
+                        <span class="capitalize">{{ t }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- Date range -->
+            <div class="w-full sm:w-auto">
+                <span class="text-xs text-gray-400 font-medium">Date:</span>
+                <div class="flex items-center gap-2 mt-1 sm:mt-0 sm:inline-flex">
+                    <input type="date" name="date_from" value="{{ date_from }}"
+                           onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                           class="flex-1 sm:flex-none rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                    <span class="text-xs text-gray-500">to</span>
+                    <input type="date" name="date_to" value="{{ date_to }}"
+                           onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                           class="flex-1 sm:flex-none rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                </div>
+            </div>
+            <button type="button" onclick="clearTimelineFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2 self-start sm:self-center">Clear</button>
         </div>
     </div>
 </form>
+{% endwith %}
 
 <!-- Content area (HTMX target) -->
 <div id="timeline-content">
     {% include "dashboard/partials/_timeline_content.html" %}
 </div>
+
+<script>
+function selectAllTypes() {
+    document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = true; });
+    document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
+}
+function selectNoTypes() {
+    document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = false; });
+    document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
+}
+function toggleTimelineFilters() {
+    var panel = document.getElementById('tl-filter-panel');
+    var btn = document.getElementById('tl-filter-toggle-btn');
+    panel.classList.toggle('hidden');
+    var isOpen = !panel.classList.contains('hidden');
+    if (isOpen) {
+        btn.classList.add('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.remove('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    } else if (!Array.from(document.querySelectorAll('#tl-filter-panel input[type=date]')).some(function(d) { return d.value; })) {
+        var allChecked = Array.from(document.querySelectorAll('.type-checkbox')).every(function(c) { return c.checked; });
+        if (allChecked || !document.querySelector('.type-checkbox:checked')) {
+            btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+            btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+        }
+    }
+}
+function clearTimelineFilters() {
+    document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = true; });
+    document.querySelectorAll('#tl-filter-panel input[type=date]').forEach(function(d) { d.value = ''; });
+    var badge = document.getElementById('tl-filter-count');
+    if (badge) badge.remove();
+    var btn = document.getElementById('tl-filter-toggle-btn');
+    btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+    btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
+}
+</script>
 {% endblock %}
