@@ -73,7 +73,8 @@
                     {% elif item.color == 'red' %}bg-red-900/50 text-red-300
                     {% elif item.color == 'purple' %}bg-purple-900/50 text-purple-300
                     {% else %}bg-gray-700 text-gray-300{% endif %}">{{ item.type }}</span>
-                <span class="text-xs text-gray-500">{{ item.date|date:"M j, Y g:i A" }}</span>
+                <span class="text-xs text-gray-500 hidden sm:inline">{{ item.date|date:"M j, Y g:i A" }}</span>
+                <span class="text-xs text-gray-500 sm:hidden">{{ item.date|date:"M j, g:i A" }}</span>
                 {% if item.type == "cashflow" %}
                 <span class="text-xs font-semibold {% if item.color == 'green' %}text-green-400{% else %}text-red-400{% endif %} ml-auto">{{ item.summary }}</span>
                 {% endif %}
