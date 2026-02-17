@@ -31,8 +31,9 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
 class EvidenceForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Evidence
-        fields = ["title", "description", "evidence_type", "date_obtained", "file"]
+        fields = ["title", "description", "evidence_type", "date_obtained", "file", "url"]
         widgets = {
             "date_obtained": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 2}),
+            "file": forms.FileInput(),
         }
