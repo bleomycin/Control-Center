@@ -77,32 +77,111 @@
     .cal-toggle:not(.active) span {
         opacity: 0.4;
     }
-    /* Mobile toolbar */
-    @media (max-width: 640px) {
+
+    /* === Mobile-specific styles === */
+    @media (max-width: 639px) {
+        /* Toolbar: horizontal row, compact */
         .fc .fc-toolbar {
-            flex-direction: column;
-            gap: 0.5rem;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 0.25rem;
+            justify-content: space-between;
         }
         .fc .fc-toolbar-title {
-            font-size: 1.1rem;
+            font-size: 1rem;
+            order: -1;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 0.25rem;
+        }
+        .fc .fc-toolbar-chunk {
+            display: flex;
+            align-items: center;
         }
         .fc .fc-button {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.4rem;
+        }
+
+        /* Month grid: dot-only events */
+        .fc-dayGridMonth-view .fc-daygrid-event {
+            padding: 0;
+            margin: 0 1px 1px 1px;
+            border-radius: 50%;
+            width: 7px;
+            height: 7px;
+            min-height: 7px;
+            display: inline-block;
+            overflow: hidden;
+        }
+        .fc-dayGridMonth-view .fc-daygrid-event .fc-event-main {
+            padding: 0;
+            overflow: hidden;
+        }
+        .fc-dayGridMonth-view .fc-event-title,
+        .fc-dayGridMonth-view .fc-event-time,
+        .fc-dayGridMonth-view .fc-daygrid-event .fc-event-main-frame {
+            display: none;
+        }
+        .fc-dayGridMonth-view .fc-daygrid-event-harness {
+            display: inline-block;
+            margin: 0;
+        }
+        .fc-dayGridMonth-view .fc-daygrid-day-events {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1px;
+            padding: 1px 2px;
+            min-height: auto !important;
+        }
+        /* More-events link */
+        .fc-dayGridMonth-view .fc-daygrid-more-link {
+            font-size: 0.6rem;
+            color: #9ca3af;
+            display: inline-block;
+            margin-left: 1px;
+        }
+        .fc-dayGridMonth-view .fc-daygrid-day-number {
             font-size: 0.75rem;
-            padding: 0.25rem 0.5rem;
+            padding: 2px 4px;
+        }
+        /* Compact day cells */
+        .fc-dayGridMonth-view .fc-daygrid-day {
+            min-height: 2.5rem;
+        }
+        /* Shorter day-of-week headers */
+        .fc-dayGridMonth-view .fc-col-header-cell-cushion {
+            font-size: 0.7rem;
+            padding: 4px 0;
+        }
+
+        /* List view: hide "all-day" time column */
+        .fc-listWeek-view .fc-list-event-time {
+            display: none;
+        }
+        .fc-listWeek-view .fc-list-event-graphic {
+            padding-left: 8px;
+        }
+        /* Compact list day headers */
+        .fc-listWeek-view .fc-list-day-text {
+            font-size: 0.8rem;
+        }
+        .fc-listWeek-view .fc-list-day-side-text {
+            font-size: 0.75rem;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mb-6">
+<div class="mb-4 sm:mb-6">
     <h1 class="text-2xl font-bold text-white">Calendar</h1>
     <p class="text-sm text-gray-400 mt-1">Tasks, payments, follow-ups, legal filings, and contact dates</p>
 </div>
 
-<!-- Toggle filters -->
-<div class="flex flex-wrap gap-2 mb-4" id="calendar-filters">
-    <button type="button" id="cal-toggle-all" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-gray-700 border-gray-500 text-gray-200">
+<!-- Desktop: full toggle row (unchanged) -->
+<div class="hidden sm:flex flex-wrap gap-2 mb-4" id="calendar-filters-desktop">
+    <button type="button" data-all="1" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-gray-700 border-gray-500 text-gray-200">
         All
     </button>
     <span class="border-l border-gray-600 mx-0.5"></span>
@@ -129,7 +208,46 @@
     </button>
 </div>
 
-<div id="calendar" class="bg-gray-800 rounded-lg border border-gray-700 p-4"></div>
+<!-- Mobile: compact All + Filters button -->
+<div class="sm:hidden flex items-center gap-2 mb-3" id="calendar-filters-mobile">
+    <button type="button" data-all="1" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-gray-700 border-gray-500 text-gray-200">
+        All
+    </button>
+    <button type="button" id="cal-filter-toggle-btn" onclick="toggleCalFilters()"
+            class="inline-flex items-center justify-center gap-1.5 flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors bg-gray-700 border border-gray-600 text-gray-300">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+        Filters
+    </button>
+</div>
+
+<!-- Mobile collapsible filter panel -->
+<div id="cal-filter-panel" class="sm:hidden hidden bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+    <div class="grid grid-cols-2 gap-2">
+        <button type="button" data-type="task" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-yellow-900/30 border-yellow-700 text-yellow-300">
+            <span class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> Tasks
+        </button>
+        <button type="button" data-type="meeting" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-blue-900/30 border-blue-700 text-blue-300">
+            <span class="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> Meetings
+        </button>
+        <button type="button" data-type="payment" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-red-900/30 border-red-700 text-red-300">
+            <span class="w-2 h-2 rounded-full bg-red-500 inline-block"></span> Payments
+        </button>
+        <button type="button" data-type="followup" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-amber-900/30 border-amber-700 text-amber-300">
+            <span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Follow-ups
+        </button>
+        <button type="button" data-type="legal" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-purple-900/30 border-purple-700 text-purple-300">
+            <span class="w-2 h-2 rounded-full bg-purple-500 inline-block"></span> Legal
+        </button>
+        <button type="button" data-type="hearing" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-violet-900/30 border-violet-700 text-violet-300">
+            <span class="w-2 h-2 rounded-full bg-violet-500 inline-block"></span> Hearings
+        </button>
+        <button type="button" data-type="contact" class="cal-toggle active inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors bg-cyan-900/30 border-cyan-700 text-cyan-300">
+            <span class="w-2 h-2 rounded-full bg-cyan-500 inline-block"></span> Contacts
+        </button>
+    </div>
+</div>
+
+<div id="calendar" class="bg-gray-800 rounded-lg border border-gray-700 p-2 sm:p-4"></div>
 {% endblock %}
 
 {% block extra_js %}
@@ -158,6 +276,13 @@
                     info.el.style.display = 'none';
                 }
             },
+            dayMaxEvents: isMobile ? 3 : false,
+            dateClick: function(info) {
+                // Mobile: tap a day in month view to jump to list view for that date
+                if (isMobile && calendar.view.type === 'dayGridMonth') {
+                    calendar.changeView('listWeek', info.dateStr);
+                }
+            },
             height: 'auto',
             firstDay: 0,
         });
@@ -173,34 +298,60 @@
             });
         }
 
-        function updateAllButton() {
+        function updateAllButtons() {
             var toggles = document.querySelectorAll('.cal-toggle[data-type]');
             var allActive = Array.from(toggles).every(function(b) { return b.classList.contains('active'); });
-            document.getElementById('cal-toggle-all').classList.toggle('active', allActive);
+            document.querySelectorAll('.cal-toggle[data-all]').forEach(function(btn) {
+                btn.classList.toggle('active', allActive);
+            });
+            // Update mobile filter button badge
+            var anyOff = !allActive;
+            var filterBtn = document.getElementById('cal-filter-toggle-btn');
+            if (filterBtn) {
+                if (anyOff) {
+                    filterBtn.classList.add('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+                    filterBtn.classList.remove('bg-gray-700', 'border-gray-600', 'text-gray-300');
+                } else {
+                    filterBtn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+                    filterBtn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300');
+                }
+            }
         }
 
-        // Individual type toggles
+        // Sync toggle state between mobile and desktop versions of same type button
+        function syncToggle(type, active) {
+            document.querySelectorAll('.cal-toggle[data-type="' + type + '"]').forEach(function(btn) {
+                btn.classList.toggle('active', active);
+            });
+            applyTypeVisibility(type, active);
+            updateAllButtons();
+        }
+
+        // Individual type toggles (both mobile and desktop)
         document.querySelectorAll('.cal-toggle[data-type]').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var type = this.dataset.type;
-                this.classList.toggle('active');
-                applyTypeVisibility(type, this.classList.contains('active'));
-                updateAllButton();
+                var willBeActive = !this.classList.contains('active');
+                syncToggle(type, willBeActive);
             });
         });
 
-        // All toggle
-        document.getElementById('cal-toggle-all').addEventListener('click', function() {
-            var toggles = document.querySelectorAll('.cal-toggle[data-type]');
-            var anyOff = Array.from(toggles).some(function(b) { return !b.classList.contains('active'); });
-            var setActive = anyOff; // if any are off, turn all on; otherwise turn all off
-            toggles.forEach(function(btn) {
-                var type = btn.dataset.type;
-                if (setActive) { btn.classList.add('active'); } else { btn.classList.remove('active'); }
-                applyTypeVisibility(type, setActive);
+        // All toggles (both mobile and desktop)
+        document.querySelectorAll('.cal-toggle[data-all]').forEach(function(allBtn) {
+            allBtn.addEventListener('click', function() {
+                var toggles = document.querySelectorAll('.cal-toggle[data-type]');
+                var anyOff = Array.from(toggles).some(function(b) { return !b.classList.contains('active'); });
+                var setActive = anyOff;
+                var types = new Set();
+                toggles.forEach(function(btn) { types.add(btn.dataset.type); });
+                types.forEach(function(type) { syncToggle(type, setActive); });
             });
-            this.classList.toggle('active', setActive);
         });
     });
+
+    function toggleCalFilters() {
+        var panel = document.getElementById('cal-filter-panel');
+        panel.classList.toggle('hidden');
+    }
 </script>
 {% endblock %}
