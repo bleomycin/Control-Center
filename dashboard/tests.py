@@ -314,6 +314,17 @@ class TimelineViewTests(TestCase):
         names = [s.name for s in resp.context["stakeholders"]]
         self.assertIn("Timeline Stakeholder", names)
 
+    def test_no_types_selected_shows_nothing(self):
+        """When the form is submitted with no types checked, show empty results."""
+        resp = self.client.get(reverse("dashboard:timeline"), {"filtered": "1"})
+        self.assertEqual(resp.context["total_count"], 0)
+        self.assertContains(resp, "No activity found")
+
+    def test_initial_load_shows_all(self):
+        """Initial page load (no 'filtered' param) shows all types."""
+        resp = self.client.get(reverse("dashboard:timeline"))
+        self.assertTrue(resp.context["total_count"] > 0)
+
 
 class CalendarTests(TestCase):
     def test_calendar_view(self):
