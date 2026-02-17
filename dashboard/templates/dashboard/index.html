@@ -10,9 +10,6 @@
 <!-- Liquidity Alerts (dismissable) -->
 {% include "partials/_alerts.html" %}
 
-<!-- Summary Row (4 cards) -->
-{% include "dashboard/partials/_net_worth.html" %}
-
 <!-- Upcoming Meetings -->
 {% include "dashboard/partials/_upcoming_meetings.html" %}
 
@@ -24,7 +21,7 @@
 </div>
 
 <!-- Secondary Row: Stale Follow-ups | Recent Activity -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     {% include "dashboard/partials/_stale_followups.html" %}
     {% include "dashboard/partials/_recent_activity.html" %}
 </div>
@@ -34,6 +31,9 @@
 
 <!-- Asset Risk Alerts -->
 {% include "dashboard/partials/_asset_risk.html" %}
+
+<!-- Financial Summary (collapsible) -->
+{% include "dashboard/partials/_net_worth.html" %}
 
 <script src="{% static 'js/dismiss-alerts.js' %}"></script>
 {% endblock %}
