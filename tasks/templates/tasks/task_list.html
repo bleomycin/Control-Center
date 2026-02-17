@@ -220,6 +220,21 @@ function applyMobileSort(val) {
     htmx.ajax('GET', '{% url "tasks:list" %}', { target: '#task-content', swap: 'innerHTML', source: form });
 }
 
+function toggleInlineSubtasks(taskPk) {
+    var panel = document.getElementById('subtask-expand-' + taskPk);
+    if (!panel) return;
+    if (panel.classList.contains('hidden') && panel.innerHTML.trim() === '') {
+        htmx.ajax('GET', '{% url "tasks:list" %}'.replace(/\/$/, '') + '/' + taskPk + '/inline-subtasks/', {
+            target: panel,
+            swap: 'innerHTML',
+        }).then(function() { panel.classList.remove('hidden'); });
+    } else if (panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+    } else {
+        panel.classList.add('hidden');
+    }
+}
+
 function switchView(mode) {
     // Update hidden input
     document.querySelector('input[name="view"]').value = mode;

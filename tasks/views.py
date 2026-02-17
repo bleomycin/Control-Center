@@ -532,6 +532,21 @@ def _subtask_list_context(task):
     }
 
 
+def _inline_subtask_context(task):
+    subtasks = task.subtasks.all()
+    return {
+        "subtasks": subtasks,
+        "task": task,
+        "subtask_count": subtasks.count(),
+        "subtask_done": subtasks.filter(is_completed=True).count(),
+    }
+
+
+def inline_subtasks(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    return render(request, "tasks/partials/_inline_subtask_panel.html", _inline_subtask_context(task))
+
+
 def subtask_add(request, pk):
     task = get_object_or_404(Task, pk=pk)
     if request.method == "POST":
@@ -549,6 +564,9 @@ def subtask_toggle(request, pk):
     st = get_object_or_404(SubTask, pk=pk)
     st.is_completed = not st.is_completed
     st.save()
+    inline_task_pk = request.GET.get("inline")
+    if inline_task_pk:
+        return render(request, "tasks/partials/_inline_subtask_panel.html", _inline_subtask_context(st.task))
     return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(st.task))
 
 
