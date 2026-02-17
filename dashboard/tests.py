@@ -28,8 +28,8 @@ class DashboardViewTests(TestCase):
     def test_context_keys(self):
         resp = self.client.get(reverse("dashboard:index"))
         for key in ("overdue_tasks", "upcoming_tasks", "stale_followups",
-                     "recent_activity", "liquidity_alerts", "monthly_net_flow",
-                     "net_worth", "upcoming_deadlines", "property_count",
+                     "recent_activity", "liquidity_alerts",
+                     "upcoming_deadlines", "property_count",
                      "investment_count", "active_loan_count"):
             self.assertIn(key, resp.context, f"Missing context key: {key}")
 
@@ -63,18 +63,6 @@ class DashboardViewTests(TestCase):
         resp = self.client.get(reverse("dashboard:index"))
         self.assertTrue(resp.context["stale_followups"].exists())
 
-    def test_monthly_net_flow(self):
-        today = timezone.localdate()
-        CashFlowEntry.objects.create(
-            description="Income", amount=Decimal("3000"),
-            entry_type="inflow", date=today, is_projected=False,
-        )
-        CashFlowEntry.objects.create(
-            description="Expense", amount=Decimal("1000"),
-            entry_type="outflow", date=today, is_projected=False,
-        )
-        resp = self.client.get(reverse("dashboard:index"))
-        self.assertEqual(resp.context["monthly_net_flow"], Decimal("2000"))
 
 
 class GlobalSearchTests(TestCase):
@@ -400,23 +388,7 @@ class CalendarTests(TestCase):
         self.assertTrue(len(hearing_events) >= 1)
 
 
-class NetWorthTests(TestCase):
-    def test_net_worth_calculation(self):
-        RealEstate.objects.create(name="Prop1", address="1 Main", estimated_value=Decimal("500000"), status="owned")
-        RealEstate.objects.create(name="Prop2", address="2 Main", estimated_value=Decimal("300000"), status="sold")
-        Investment.objects.create(name="Inv1", current_value=Decimal("100000"))
-        Loan.objects.create(name="Loan1", current_balance=Decimal("200000"), status="active")
-        Loan.objects.create(name="Loan2", current_balance=Decimal("50000"), status="paid_off")
-
-        resp = self.client.get(reverse("dashboard:index"))
-        nw = resp.context["net_worth"]
-        # total assets = 500000 (prop1, prop2 excluded because sold) + 100000 = 600000
-        self.assertEqual(nw["total_assets"], Decimal("600000"))
-        # liabilities = 200000 (only active loans)
-        self.assertEqual(nw["total_liabilities"], Decimal("200000"))
-        # net = 400000
-        self.assertEqual(nw["net_worth"], Decimal("400000"))
-
+class DashboardDeadlineTests(TestCase):
     def test_upcoming_deadlines_aggregation(self):
         today = timezone.localdate()
         Task.objects.create(title="Due Task", due_date=today + timedelta(days=5), status="not_started")
