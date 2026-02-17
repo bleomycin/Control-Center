@@ -97,6 +97,30 @@ class EvidenceModelTests(TestCase):
         ev = Evidence.objects.create(legal_matter=self.matter, title="No File")
         self.assertFalse(ev.file)
 
+    def test_url_field_optional(self):
+        ev = Evidence.objects.create(legal_matter=self.matter, title="No URL")
+        self.assertEqual(ev.url, "")
+
+    def test_create_with_url_only(self):
+        ev = Evidence.objects.create(
+            legal_matter=self.matter,
+            title="Link Only",
+            url="https://docs.google.com/document/d/abc123",
+        )
+        self.assertEqual(ev.url, "https://docs.google.com/document/d/abc123")
+        self.assertFalse(ev.file)
+
+    def test_create_with_file_and_url(self):
+        ev = Evidence.objects.create(
+            legal_matter=self.matter,
+            title="Both",
+            url="https://example.com/doc",
+        )
+        ev.file = "evidence/test.pdf"
+        ev.save()
+        self.assertTrue(ev.file)
+        self.assertEqual(ev.url, "https://example.com/doc")
+
 
 class LegalViewTests(TestCase):
     @classmethod
@@ -167,6 +191,56 @@ class LegalViewTests(TestCase):
         resp = self.client.post(reverse("legal:evidence_delete", args=[ev.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Evidence.objects.filter(pk=ev.pk).exists())
+
+    def test_evidence_add_with_url(self):
+        resp = self.client.post(
+            reverse("legal:evidence_add", args=[self.matter.pk]),
+            {"title": "URL Evidence", "url": "https://drive.google.com/file/d/xyz"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        ev = Evidence.objects.get(title="URL Evidence")
+        self.assertEqual(ev.url, "https://drive.google.com/file/d/xyz")
+
+    def test_evidence_edit_get(self):
+        ev = Evidence.objects.create(
+            legal_matter=self.matter, title="Original", evidence_type="doc",
+        )
+        resp = self.client.get(reverse("legal:evidence_edit", args=[ev.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Save Changes")
+        self.assertContains(resp, "Original")
+
+    def test_evidence_edit_post(self):
+        ev = Evidence.objects.create(
+            legal_matter=self.matter, title="Old Title", evidence_type="doc",
+        )
+        resp = self.client.post(
+            reverse("legal:evidence_edit", args=[ev.pk]),
+            {"title": "New Title", "evidence_type": "photo",
+             "url": "https://example.com/updated"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        ev.refresh_from_db()
+        self.assertEqual(ev.title, "New Title")
+        self.assertEqual(ev.evidence_type, "photo")
+        self.assertEqual(ev.url, "https://example.com/updated")
+
+    def test_evidence_edit_shows_edit_button(self):
+        ev = Evidence.objects.create(
+            legal_matter=self.matter, title="Editable",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, reverse("legal:evidence_edit", args=[ev.pk]))
+
+    def test_evidence_url_in_list(self):
+        Evidence.objects.create(
+            legal_matter=self.matter,
+            title="Linked Doc",
+            url="https://example.com/doc",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "View link")
+        self.assertContains(resp, "https://example.com/doc")
 
     def test_csv_includes_new_fields(self):
         LegalMatter.objects.create(

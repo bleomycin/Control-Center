@@ -58,6 +58,7 @@ class Evidence(models.Model):
     evidence_type = models.CharField(max_length=100, blank=True)
     date_obtained = models.DateField(null=True, blank=True)
     file = models.FileField(upload_to="evidence/", blank=True)
+    url = models.URLField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

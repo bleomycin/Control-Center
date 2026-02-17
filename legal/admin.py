@@ -5,7 +5,7 @@ from .models import LegalMatter, Evidence
 class EvidenceInline(admin.TabularInline):
     model = Evidence
     extra = 0
-    fields = ["title", "evidence_type", "date_obtained", "file", "description"]
+    fields = ["title", "evidence_type", "date_obtained", "file", "url", "description"]
 
 
 @admin.register(LegalMatter)
@@ -19,6 +19,6 @@ class LegalMatterAdmin(admin.ModelAdmin):
 
 @admin.register(Evidence)
 class EvidenceAdmin(admin.ModelAdmin):
-    list_display = ["title", "legal_matter", "evidence_type", "date_obtained"]
+    list_display = ["title", "legal_matter", "evidence_type", "date_obtained", "url"]
     list_filter = ["evidence_type"]
     search_fields = ["title", "description"]
