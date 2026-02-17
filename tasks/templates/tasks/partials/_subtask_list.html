@@ -5,11 +5,14 @@
                 class="w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center {% if st.is_completed %}bg-green-600 border-green-600{% else %}border-gray-500 hover:border-green-400{% endif %}">
             {% if st.is_completed %}<svg class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>{% endif %}
         </button>
-        <span hx-get="{% url 'tasks:subtask_edit' st.pk %}" hx-target="#subtask-row-{{ st.pk }}" hx-swap="outerHTML"
-              class="flex-1 text-sm cursor-pointer {% if st.is_completed %}text-gray-500 line-through{% else %}text-gray-200 hover:text-blue-300{% endif %}">{{ st.title }}</span>
+        <span class="flex-1 text-sm {% if st.is_completed %}text-gray-500 line-through{% else %}text-gray-200{% endif %}">{{ st.title }}</span>
+        <button hx-get="{% url 'tasks:subtask_edit' st.pk %}" hx-target="#subtask-row-{{ st.pk }}" hx-swap="outerHTML"
+                class="text-gray-500 hover:text-blue-400 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" title="Edit">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+        </button>
         <button hx-post="{% url 'tasks:subtask_delete' st.pk %}" hx-target="#subtask-list" hx-swap="innerHTML"
-                class="text-red-400 hover:text-red-300 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                class="text-red-400 hover:text-red-300 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" title="Delete">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
     </div>
     {% endfor %}
