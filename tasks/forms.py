@@ -60,10 +60,11 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Task
-        fields = ["title", "task_type", "due_date", "due_time", "priority"]
+        fields = ["title", "task_type", "due_date", "due_time", "priority", "description"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
+            "description": forms.Textarea(attrs={"rows": 2, "placeholder": "Location, link, or other details..."}),
         }
 
     def clean(self):

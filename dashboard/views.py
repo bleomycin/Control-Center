@@ -333,7 +333,16 @@ def activity_timeline(request):
             pass
 
     ALL_TYPES = ["contact", "note", "task", "followup", "cashflow", "evidence"]
-    active_types = set(selected_types) if selected_types else set(ALL_TYPES)
+    # If the filter form was submitted (has "filtered" param) but no types
+    # are checked, show nothing. On initial page load (no "filtered" param),
+    # default to showing all types.
+    is_filtered = "filtered" in request.GET
+    if selected_types:
+        active_types = set(selected_types)
+    elif is_filtered:
+        active_types = set()
+    else:
+        active_types = set(ALL_TYPES)
 
     # --- Build items (fetch generously, filter in Python) ---
     FETCH_LIMIT = 500

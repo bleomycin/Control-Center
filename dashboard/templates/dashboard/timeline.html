@@ -10,15 +10,19 @@
 <!-- Filter Bar -->
 <form id="filter-form" hx-get="{% url 'dashboard:timeline' %}" hx-target="#timeline-content" hx-swap="innerHTML" hx-push-url="true"
       class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+    <input type="hidden" name="filtered" value="1">
     <!-- Type checkboxes -->
     <div class="flex flex-wrap items-center gap-3 mb-3">
         <span class="text-xs font-medium text-gray-400 uppercase tracking-wide mr-1">Type</span>
+        <button type="button" onclick="selectAllTypes()" class="text-xs text-blue-400 hover:text-blue-300">All</button>
+        <span class="text-gray-600">|</span>
+        <button type="button" onclick="selectNoTypes()" class="text-xs text-blue-400 hover:text-blue-300 mr-1">None</button>
         {% for t in all_types %}
         <label class="flex items-center gap-1.5 cursor-pointer">
             <input type="checkbox" name="type" value="{{ t }}"
                    {% if t in selected_types or not selected_types %}checked{% endif %}
                    onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
-                   class="rounded border-gray-600 bg-gray-700 h-3.5 w-3.5
+                   class="type-checkbox rounded border-gray-600 bg-gray-700 h-3.5 w-3.5
                    {% if t == 'contact' %}text-blue-500 focus:ring-blue-500
                    {% elif t == 'note' %}text-indigo-500 focus:ring-indigo-500
                    {% elif t == 'task' %}text-yellow-500 focus:ring-yellow-500
@@ -30,6 +34,16 @@
         </label>
         {% endfor %}
     </div>
+    <script>
+    function selectAllTypes() {
+        document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = true; });
+        document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
+    }
+    function selectNoTypes() {
+        document.querySelectorAll('.type-checkbox').forEach(function(b) { b.checked = false; });
+        document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}));
+    }
+    </script>
     <!-- Date range + stakeholder -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
