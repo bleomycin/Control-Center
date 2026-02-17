@@ -120,6 +120,7 @@ Seven Django apps, all relationally linked:
 - **Button colours**: Detail pages: purple (PDF), blue (Edit), green (Complete), red (Delete). List pages: purple (export), blue (+ New).
 - **Dropdown menus**: Multi-type asset tabs use `[data-dropdown]` toggle pattern (`toggleDropdown()`/`closeAllDropdowns()` in `asset_list.html`); single-type tabs render flat buttons instead.
 - **Currency**: `django.contrib.humanize` `intcomma` filter everywhere
+- **Mobile responsive**: All list pages mobile-optimized. Pattern: view toggle in header (icon-only on mobile via `hidden sm:inline`), Export CSV hidden on mobile (`hidden sm:inline-block`), 2-col grid for dropdowns (`grid grid-cols-2 sm:flex`), collapsible Filters panel with badge count, table rows hide columns on mobile and show `sm:hidden` metadata line in title cell, tabs collapse to `<select>` dropdown on mobile (`sm:hidden` / `hidden sm:flex`)
 
 ### Editable Choices (DB-backed dropdowns)
 - `ChoiceOption` model in `dashboard/models.py` — 7 categories: `entity_type`, `contact_method`, `matter_type`, `note_type`, `policy_type`, `vehicle_type`, `aircraft_type`
