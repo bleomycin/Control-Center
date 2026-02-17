@@ -1,0 +1,112 @@
+{% load humanize %}
+<!-- Summary Stats -->
+{% if total_count > 0 %}
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mb-4">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <p class="text-xs text-gray-400">Total</p>
+        <p class="text-lg font-bold text-white">{{ total_count|intcomma }}</p>
+    </div>
+    {% if type_counts.contact %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <p class="text-xs text-blue-400">Contacts</p>
+        <p class="text-lg font-bold text-blue-300">{{ type_counts.contact }}</p>
+    </div>
+    {% endif %}
+    {% if type_counts.task %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <p class="text-xs text-yellow-400">Tasks</p>
+        <p class="text-lg font-bold text-yellow-300">{{ type_counts.task }}</p>
+    </div>
+    {% endif %}
+    {% if type_counts.note %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <p class="text-xs text-indigo-400">Notes</p>
+        <p class="text-lg font-bold text-indigo-300">{{ type_counts.note }}</p>
+    </div>
+    {% endif %}
+    {% if type_counts.followup %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <p class="text-xs text-amber-400">Follow-ups</p>
+        <p class="text-lg font-bold text-amber-300">{{ type_counts.followup }}</p>
+    </div>
+    {% endif %}
+    {% if cashflow_net %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 px-3 py-2">
+        <p class="text-xs text-gray-400">Net Cash Flow</p>
+        <p class="text-lg font-bold {% if cashflow_net > 0 %}text-green-400{% else %}text-red-400{% endif %}">
+            {% if cashflow_net > 0 %}+{% endif %}${{ cashflow_net|intcomma }}
+        </p>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Timeline -->
+<div class="max-w-3xl">
+{% for group in grouped_items %}
+    <!-- Date Group Header -->
+    <div class="flex items-center gap-3 mb-3 {% if not forloop.first %}mt-6{% endif %}">
+        <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">{{ group.label }}</h3>
+        <div class="flex-1 border-t border-gray-700"></div>
+    </div>
+    {% for item in group.items %}
+    <div class="relative pl-8 pb-6 {% if not forloop.last or not forloop.parentloop.last %}border-l-2 border-gray-700 ml-3{% else %}ml-3{% endif %}">
+        <!-- Dot -->
+        <div class="absolute -left-1.5 top-0 w-3 h-3 rounded-full
+            {% if item.color == 'blue' %}bg-blue-500
+            {% elif item.color == 'indigo' %}bg-indigo-500
+            {% elif item.color == 'yellow' %}bg-yellow-500
+            {% elif item.color == 'amber' %}bg-amber-500
+            {% elif item.color == 'green' %}bg-green-500
+            {% elif item.color == 'red' %}bg-red-500
+            {% elif item.color == 'purple' %}bg-purple-500
+            {% else %}bg-gray-500{% endif %}"></div>
+
+        <a href="{{ item.url }}" class="block hover:bg-gray-700/30 rounded-md p-2 -mt-1 transition-colors">
+            <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs px-2 py-0.5 rounded-full
+                    {% if item.color == 'blue' %}bg-blue-900/50 text-blue-300
+                    {% elif item.color == 'indigo' %}bg-indigo-900/50 text-indigo-300
+                    {% elif item.color == 'yellow' %}bg-yellow-900/50 text-yellow-300
+                    {% elif item.color == 'amber' %}bg-amber-900/50 text-amber-300
+                    {% elif item.color == 'green' %}bg-green-900/50 text-green-300
+                    {% elif item.color == 'red' %}bg-red-900/50 text-red-300
+                    {% elif item.color == 'purple' %}bg-purple-900/50 text-purple-300
+                    {% else %}bg-gray-700 text-gray-300{% endif %}">{{ item.type }}</span>
+                <span class="text-xs text-gray-500">{{ item.date|date:"M j, Y g:i A" }}</span>
+                {% if item.type == "cashflow" %}
+                <span class="text-xs font-semibold {% if item.color == 'green' %}text-green-400{% else %}text-red-400{% endif %} ml-auto">{{ item.summary }}</span>
+                {% endif %}
+            </div>
+            <p class="text-sm font-medium text-gray-200">{{ item.title }}</p>
+            {% if item.type != "cashflow" %}
+            <p class="text-xs text-gray-400 mt-0.5">{{ item.summary }}</p>
+            {% endif %}
+        </a>
+    </div>
+    {% endfor %}
+{% empty %}
+    <p class="text-gray-500 text-center py-12">No activity found{% if selected_types or date_from or date_to or stakeholder_id %} matching your filters{% endif %}</p>
+{% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if has_prev or has_next %}
+<div class="flex items-center justify-center gap-4 mt-6 mb-4">
+    {% if has_prev %}
+    <button hx-get="{% url 'dashboard:timeline' %}?page={{ prev_page }}{% for t in selected_types %}&type={{ t }}{% endfor %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if stakeholder_id %}&stakeholder={{ stakeholder_id }}{% endif %}"
+            hx-target="#timeline-content" hx-swap="innerHTML" hx-push-url="true"
+            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-md transition-colors">
+        Previous
+    </button>
+    {% endif %}
+    <span class="text-xs text-gray-400">Page {{ page }}</span>
+    {% if has_next %}
+    <button hx-get="{% url 'dashboard:timeline' %}?page={{ next_page }}{% for t in selected_types %}&type={{ t }}{% endfor %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if stakeholder_id %}&stakeholder={{ stakeholder_id }}{% endif %}"
+            hx-target="#timeline-content" hx-swap="innerHTML" hx-push-url="true"
+            class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded-md transition-colors">
+        Next
+    </button>
+    {% endif %}
+</div>
+{% endif %}
