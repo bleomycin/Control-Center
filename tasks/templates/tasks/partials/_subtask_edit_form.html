@@ -1,0 +1,9 @@
+<form hx-post="{% url 'tasks:subtask_edit' st.pk %}" hx-target="#subtask-list" hx-swap="innerHTML"
+      class="flex items-center gap-2 px-4 py-2 bg-gray-700/30">
+    {% csrf_token %}
+    <input type="text" name="title" value="{{ st.title }}" autofocus
+           class="flex-1 rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1 focus:border-blue-500 focus:ring-blue-500">
+    <button type="submit" class="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">Save</button>
+    <button type="button" hx-get="{% url 'tasks:subtask_edit' st.pk %}?cancel=1" hx-target="#subtask-list" hx-swap="innerHTML"
+            class="px-2 py-1 bg-gray-600 hover:bg-gray-500 text-gray-300 text-xs font-medium rounded-md transition-colors">Cancel</button>
+</form>
