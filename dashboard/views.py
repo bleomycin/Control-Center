@@ -303,8 +303,226 @@ def get_activity_timeline(limit=50):
 
 
 def activity_timeline(request):
-    items = get_activity_timeline(limit=100)
-    return render(request, "dashboard/timeline.html", {"timeline_items": items})
+    """Full timeline page with filtering, date grouping, pagination, and stats."""
+    from itertools import groupby
+
+    PAGE_SIZE = 50
+
+    # --- Parse filter params ---
+    selected_types = [t for t in request.GET.getlist("type") if t]
+    date_from_str = request.GET.get("date_from", "")
+    date_to_str = request.GET.get("date_to", "")
+    stakeholder_id = request.GET.get("stakeholder", "")
+    page = int(request.GET.get("page", "1") or 1)
+
+    date_from = None
+    date_to = None
+    if date_from_str:
+        try:
+            date_from = timezone.make_aware(
+                timezone.datetime.combine(date.fromisoformat(date_from_str), timezone.datetime.min.time())
+            )
+        except ValueError:
+            pass
+    if date_to_str:
+        try:
+            date_to = timezone.make_aware(
+                timezone.datetime.combine(date.fromisoformat(date_to_str), timezone.datetime.max.time())
+            )
+        except ValueError:
+            pass
+
+    ALL_TYPES = ["contact", "note", "task", "followup", "cashflow", "evidence"]
+    active_types = set(selected_types) if selected_types else set(ALL_TYPES)
+
+    # --- Build items (fetch generously, filter in Python) ---
+    FETCH_LIMIT = 500
+    items = []
+
+    stakeholder_obj = None
+    if stakeholder_id:
+        try:
+            stakeholder_obj = Stakeholder.objects.get(pk=int(stakeholder_id))
+        except (ValueError, Stakeholder.DoesNotExist):
+            pass
+
+    if "contact" in active_types:
+        qs = ContactLog.objects.select_related("stakeholder").order_by("-date")
+        if stakeholder_obj:
+            qs = qs.filter(stakeholder=stakeholder_obj)
+        for log in qs[:FETCH_LIMIT]:
+            items.append({
+                "date": log.date,
+                "type": "contact",
+                "color": "blue",
+                "icon": "phone",
+                "title": f"{get_choice_label('contact_method', log.method)} with {log.stakeholder.name if log.stakeholder else 'Unknown'}",
+                "summary": log.summary[:120],
+                "url": log.get_absolute_url(),
+                "amount": None,
+            })
+
+    if "note" in active_types:
+        qs = Note.objects.order_by("-date")
+        if stakeholder_obj:
+            qs = qs.filter(
+                Q(participants=stakeholder_obj) | Q(related_stakeholders=stakeholder_obj)
+            ).distinct()
+        for note in qs[:FETCH_LIMIT]:
+            items.append({
+                "date": note.date,
+                "type": "note",
+                "color": "indigo",
+                "icon": "pencil",
+                "title": note.title,
+                "summary": note.content[:120],
+                "url": note.get_absolute_url(),
+                "amount": None,
+            })
+
+    if "task" in active_types:
+        qs = Task.objects.order_by("-created_at")
+        if stakeholder_obj:
+            qs = qs.filter(related_stakeholders=stakeholder_obj)
+        for task in qs[:FETCH_LIMIT]:
+            summary = f"{task.get_status_display()} / {task.get_priority_display()}"
+            if task.is_meeting and task.due_time:
+                summary += f" — {task.due_time.strftime('%-I:%M %p')}"
+            items.append({
+                "date": task.created_at,
+                "type": "task",
+                "color": "yellow",
+                "icon": "clipboard",
+                "title": task.title,
+                "summary": summary,
+                "url": task.get_absolute_url(),
+                "amount": None,
+            })
+
+    if "followup" in active_types:
+        qs = FollowUp.objects.select_related("task", "stakeholder").order_by("-outreach_date")
+        if stakeholder_obj:
+            qs = qs.filter(stakeholder=stakeholder_obj)
+        for fu in qs[:FETCH_LIMIT]:
+            items.append({
+                "date": fu.outreach_date,
+                "type": "followup",
+                "color": "amber",
+                "icon": "arrow-path",
+                "title": f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}",
+                "summary": fu.notes_text[:120] if fu.notes_text else f"Re: {fu.task.title}",
+                "url": fu.get_absolute_url(),
+                "amount": None,
+            })
+
+    if "cashflow" in active_types:
+        qs = CashFlowEntry.objects.order_by("-date")
+        if stakeholder_obj:
+            qs = qs.filter(related_stakeholder=stakeholder_obj)
+        for entry in qs[:FETCH_LIMIT]:
+            color = "green" if entry.entry_type == "inflow" else "red"
+            items.append({
+                "date": timezone.make_aware(
+                    timezone.datetime.combine(entry.date, timezone.datetime.min.time())
+                ),
+                "type": "cashflow",
+                "color": color,
+                "icon": "currency-dollar",
+                "title": entry.description,
+                "summary": f"{'+'if entry.entry_type == 'inflow' else '-'}${entry.amount:,.0f}",
+                "url": entry.get_absolute_url(),
+                "amount": entry.amount if entry.entry_type == "inflow" else -entry.amount,
+            })
+
+    if "evidence" in active_types:
+        qs = Evidence.objects.select_related("legal_matter").order_by("-created_at")
+        if stakeholder_obj:
+            qs = qs.filter(legal_matter__related_stakeholders=stakeholder_obj)
+        for ev in qs[:FETCH_LIMIT]:
+            items.append({
+                "date": ev.created_at,
+                "type": "evidence",
+                "color": "purple",
+                "icon": "document",
+                "title": ev.title,
+                "summary": f"Added to {ev.legal_matter.title}",
+                "url": ev.get_absolute_url(),
+                "amount": None,
+            })
+
+    # --- Apply date range filter ---
+    if date_from:
+        items = [i for i in items if i["date"] >= date_from]
+    if date_to:
+        items = [i for i in items if i["date"] <= date_to]
+
+    # --- Sort and compute stats before pagination ---
+    items.sort(key=lambda x: x["date"], reverse=True)
+
+    total_count = len(items)
+    type_counts = {}
+    for t in ALL_TYPES:
+        type_counts[t] = sum(1 for i in items if i["type"] == t)
+    cashflow_inflows = sum(i["amount"] for i in items if i["type"] == "cashflow" and i["amount"] and i["amount"] > 0)
+    cashflow_outflows = sum(abs(i["amount"]) for i in items if i["type"] == "cashflow" and i["amount"] and i["amount"] < 0)
+    cashflow_net = cashflow_inflows - cashflow_outflows
+
+    # --- Paginate ---
+    start = (page - 1) * PAGE_SIZE
+    end = start + PAGE_SIZE
+    page_items = items[start:end]
+    has_next = end < total_count
+    has_prev = page > 1
+
+    # --- Group by date ---
+    today = timezone.localdate()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=today.weekday())
+
+    def date_group_key(item):
+        d = timezone.localdate(item["date"])
+        if d == today:
+            return "Today"
+        if d > today:
+            return "Upcoming"
+        if d == yesterday:
+            return "Yesterday"
+        if d >= week_start:
+            return "This Week"
+        if d.year == today.year and d.month == today.month:
+            return "This Month"
+        return d.strftime("%B %Y")
+
+    grouped_items = []
+    for group_label, group_iter in groupby(page_items, key=date_group_key):
+        grouped_items.append({"label": group_label, "items": list(group_iter)})
+
+    # --- Context ---
+    stakeholders = Stakeholder.objects.order_by("name")
+    context = {
+        "grouped_items": grouped_items,
+        "timeline_items": page_items,
+        "total_count": total_count,
+        "type_counts": type_counts,
+        "cashflow_inflows": cashflow_inflows,
+        "cashflow_outflows": cashflow_outflows,
+        "cashflow_net": cashflow_net,
+        "all_types": ALL_TYPES,
+        "selected_types": selected_types,
+        "date_from": date_from_str,
+        "date_to": date_to_str,
+        "stakeholder_id": stakeholder_id,
+        "stakeholders": stakeholders,
+        "page": page,
+        "has_next": has_next,
+        "has_prev": has_prev,
+        "next_page": page + 1,
+        "prev_page": page - 1,
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "dashboard/partials/_timeline_content.html", context)
+    return render(request, "dashboard/timeline.html", context)
 
 
 def calendar_view(request):

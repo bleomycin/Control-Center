@@ -173,6 +173,148 @@ class ActivityTimelineTests(TestCase):
         self.assertEqual(resp.status_code, 200)
 
 
+class TimelineViewTests(TestCase):
+    """Tests for the enhanced timeline page with filtering, stats, pagination."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Timeline Stakeholder")
+        cls.other = Stakeholder.objects.create(name="Other Person")
+        # Contact log
+        ContactLog.objects.create(
+            stakeholder=cls.stakeholder, date=timezone.now(), method="call", summary="Test call",
+        )
+        # Note linked to stakeholder
+        note = Note.objects.create(title="Stakeholder Note", content="Content", date=timezone.now())
+        note.related_stakeholders.add(cls.stakeholder)
+        # Task linked to stakeholder
+        task = Task.objects.create(title="Stakeholder Task")
+        task.related_stakeholders.add(cls.stakeholder)
+        # Cashflow
+        CashFlowEntry.objects.create(
+            description="Income", amount=Decimal("5000"),
+            entry_type="inflow", date=timezone.localdate(),
+        )
+        CashFlowEntry.objects.create(
+            description="Expense", amount=Decimal("2000"),
+            entry_type="outflow", date=timezone.localdate(),
+        )
+        # Unrelated contact
+        ContactLog.objects.create(
+            stakeholder=cls.other, date=timezone.now() - timedelta(days=60),
+            method="email", summary="Old email",
+        )
+
+    def test_page_loads(self):
+        resp = self.client.get(reverse("dashboard:timeline"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("grouped_items", resp.context)
+        self.assertIn("total_count", resp.context)
+        self.assertIn("type_counts", resp.context)
+
+    def test_filter_by_type(self):
+        resp = self.client.get(reverse("dashboard:timeline"), {"type": "contact"})
+        self.assertEqual(resp.status_code, 200)
+        for group in resp.context["grouped_items"]:
+            for item in group["items"]:
+                self.assertEqual(item["type"], "contact")
+
+    def test_filter_by_multiple_types(self):
+        resp = self.client.get(reverse("dashboard:timeline"), {"type": ["contact", "note"]})
+        for group in resp.context["grouped_items"]:
+            for item in group["items"]:
+                self.assertIn(item["type"], ("contact", "note"))
+
+    def test_filter_by_stakeholder(self):
+        resp = self.client.get(reverse("dashboard:timeline"), {"stakeholder": self.stakeholder.pk})
+        self.assertTrue(resp.context["total_count"] > 0)
+        # Old contact from 'other' person should not be here
+        all_titles = []
+        for group in resp.context["grouped_items"]:
+            for item in group["items"]:
+                all_titles.append(item["title"])
+        self.assertNotIn("Old email", " ".join(all_titles))
+
+    def test_filter_by_date_range(self):
+        today = timezone.localdate()
+        resp = self.client.get(reverse("dashboard:timeline"), {
+            "date_from": str(today - timedelta(days=1)),
+            "date_to": str(today),
+        })
+        # Should include today's items but not 60-day-old contact
+        for group in resp.context["grouped_items"]:
+            for item in group["items"]:
+                self.assertGreaterEqual(
+                    item["date"],
+                    timezone.make_aware(timezone.datetime.combine(today - timedelta(days=1), timezone.datetime.min.time())),
+                )
+
+    def test_summary_stats(self):
+        resp = self.client.get(reverse("dashboard:timeline"))
+        self.assertTrue(resp.context["total_count"] > 0)
+        self.assertEqual(resp.context["cashflow_inflows"], 5000)
+        self.assertEqual(resp.context["cashflow_outflows"], 2000)
+        self.assertEqual(resp.context["cashflow_net"], 3000)
+
+    def test_type_counts(self):
+        resp = self.client.get(reverse("dashboard:timeline"))
+        tc = resp.context["type_counts"]
+        self.assertGreaterEqual(tc["contact"], 2)
+        self.assertGreaterEqual(tc["note"], 1)
+        self.assertGreaterEqual(tc["task"], 1)
+        self.assertGreaterEqual(tc["cashflow"], 2)
+
+    def test_date_grouping(self):
+        resp = self.client.get(reverse("dashboard:timeline"))
+        groups = resp.context["grouped_items"]
+        self.assertTrue(len(groups) > 0)
+        # First group should be "Today" since we have today's items
+        self.assertEqual(groups[0]["label"], "Today")
+
+    def test_htmx_returns_partial(self):
+        resp = self.client.get(
+            reverse("dashboard:timeline"),
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "dashboard/partials/_timeline_content.html")
+
+    def test_pagination_has_next(self):
+        # Create enough items to exceed a page
+        s = Stakeholder.objects.create(name="Paginator")
+        for i in range(55):
+            ContactLog.objects.create(
+                stakeholder=s, date=timezone.now() - timedelta(hours=i),
+                method="call", summary=f"Bulk call {i}",
+            )
+        resp = self.client.get(reverse("dashboard:timeline"))
+        self.assertTrue(resp.context["has_next"])
+        self.assertFalse(resp.context["has_prev"])
+        self.assertEqual(resp.context["page"], 1)
+
+    def test_pagination_page_2(self):
+        s = Stakeholder.objects.create(name="Page2")
+        for i in range(55):
+            ContactLog.objects.create(
+                stakeholder=s, date=timezone.now() - timedelta(hours=i),
+                method="call", summary=f"P2 call {i}",
+            )
+        resp = self.client.get(reverse("dashboard:timeline"), {"page": "2"})
+        self.assertTrue(resp.context["has_prev"])
+        self.assertEqual(resp.context["page"], 2)
+
+    def test_empty_filter_result(self):
+        resp = self.client.get(reverse("dashboard:timeline"), {"type": "evidence"})
+        self.assertEqual(resp.context["total_count"], 0)
+        self.assertContains(resp, "No activity found")
+
+    def test_stakeholder_dropdown_in_context(self):
+        resp = self.client.get(reverse("dashboard:timeline"))
+        self.assertIn("stakeholders", resp.context)
+        names = [s.name for s in resp.context["stakeholders"]]
+        self.assertIn("Timeline Stakeholder", names)
+
+
 class CalendarTests(TestCase):
     def test_calendar_view(self):
         resp = self.client.get(reverse("dashboard:calendar"))
