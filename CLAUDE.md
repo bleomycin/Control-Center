@@ -172,7 +172,7 @@ Seven Django apps, all relationally linked:
 ### Task System
 - `Task.direction`: `personal`/`outbound`/`inbound` — NOT a DB-backed ChoiceOption
 - `Task.related_stakeholders` M2M (plain, no through model); `_grouped_stakeholder_choices()` builds `<optgroup>` widget
-- `SubTask`: HTMX add/toggle/delete; progress bar on detail, `N/M` annotations on list/kanban
+- `SubTask`: HTMX add/toggle/delete; progress bar on detail, `N/M` annotations on list/kanban; clickable counter on list expands inline toggle-only panel (`_inline_subtask_panel.html`) with OOB counter swap
 - Recurring: `is_recurring` + `recurrence_rule`; `create_next_recurrence()` called in all 4 completion paths
 - Meeting: `task_type="meeting"` + optional `due_time` TimeField; `QuickTaskForm` also supports meetings (type select + conditional time field)
 - Kanban: SortableJS drag-and-drop, `kanban_update` endpoint
@@ -185,7 +185,7 @@ Seven Django apps, all relationally linked:
 - Markdown: `render_markdown` template filter with `nl2br` + blank-line preprocessor; `prose-markdown` CSS in `input.css`
 
 ### Notifications & Email
-- `tasks/notifications.py` — 3 django-q2 scheduled functions: overdue tasks, upcoming reminders, stale follow-ups
+- `tasks/notifications.py` — 3 django-q2 scheduled functions: overdue tasks, upcoming reminders, stale follow-ups; overdue/reminder notifications include subtask progress (`checklist N/M`) when incomplete
 - `EmailSettings` singleton (pk=1) stores SMTP config; `dashboard/email.py` provides connection helpers
 - `Notification` model with levels (info/warning/critical); sidebar bell with HTMX badge polling (60s)
 

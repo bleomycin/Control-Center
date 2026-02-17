@@ -19,6 +19,7 @@ urlpatterns = [
     path("followup/<int:pk>/edit/", views.followup_edit, name="followup_edit"),
     path("followup/<int:pk>/delete/", views.followup_delete, name="followup_delete"),
     path("followup/<int:pk>/respond/", views.followup_respond, name="followup_respond"),
+    path("<int:pk>/inline-subtasks/", views.inline_subtasks, name="inline_subtasks"),
     path("<int:pk>/subtasks/add/", views.subtask_add, name="subtask_add"),
     path("subtask/<int:pk>/toggle/", views.subtask_toggle, name="subtask_toggle"),
     path("subtask/<int:pk>/edit/", views.subtask_edit, name="subtask_edit"),

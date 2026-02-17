@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.core.mail import send_mail
+from django.db.models import Count, Q
 from django.utils import timezone
 
 
@@ -36,7 +37,10 @@ def check_overdue_tasks():
         due_date__lt=today,
     ).exclude(
         status="complete",
-    ).prefetch_related("related_stakeholders")
+    ).prefetch_related("related_stakeholders").annotate(
+        _st_total=Count("subtasks", distinct=True),
+        _st_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
+    )
 
     if not overdue.exists():
         return "No overdue tasks."
@@ -49,7 +53,8 @@ def check_overdue_tasks():
         stakeholder = f" ({names})" if names else ""
         prefix = direction_prefix.get(task.direction, "")
         mtg = "[MEETING] " if task.is_meeting else ""
-        lines.append(f"  - {mtg}{prefix}{task.title}{stakeholder} — {days} day(s) overdue")
+        checklist = f" [checklist: {task._st_done}/{task._st_total}]" if task._st_total and task._st_done < task._st_total else ""
+        lines.append(f"  - {mtg}{prefix}{task.title}{stakeholder} — {days} day(s) overdue{checklist}")
 
     body = f"You have {overdue.count()} overdue task(s):\n\n" + "\n".join(lines)
 
@@ -65,8 +70,9 @@ def check_overdue_tasks():
     for task in overdue:
         prefix = direction_prefix.get(task.direction, "")
         mtg = "[MEETING] " if task.is_meeting else ""
+        checklist = f" — checklist {task._st_done}/{task._st_total}" if task._st_total and task._st_done < task._st_total else ""
         Notification.objects.create(
-            message=f"Overdue: {mtg}{prefix}{task.title} ({(today - task.due_date).days} days)",
+            message=f"Overdue: {mtg}{prefix}{task.title} ({(today - task.due_date).days} days){checklist}",
             level="warning",
             link=task.get_absolute_url(),
         )
@@ -88,7 +94,10 @@ def check_upcoming_reminders():
         reminder_date__lte=now + timedelta(hours=24),
     ).exclude(
         status="complete",
-    ).prefetch_related("related_stakeholders")
+    ).prefetch_related("related_stakeholders").annotate(
+        _st_total=Count("subtasks", distinct=True),
+        _st_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
+    )
 
     if not upcoming.exists():
         return "No upcoming reminders."
@@ -97,7 +106,8 @@ def check_upcoming_reminders():
     for task in upcoming:
         names = ", ".join(s.name for s in task.related_stakeholders.all())
         stakeholder = f" ({names})" if names else ""
-        lines.append(f"  - {task.title}{stakeholder} — reminder at {task.reminder_date:%Y-%m-%d %H:%M}")
+        checklist = f" [checklist: {task._st_done}/{task._st_total}]" if task._st_total and task._st_done < task._st_total else ""
+        lines.append(f"  - {task.title}{stakeholder} — reminder at {task.reminder_date:%Y-%m-%d %H:%M}{checklist}")
 
     body = f"Upcoming reminders ({upcoming.count()}):\n\n" + "\n".join(lines)
 
@@ -111,8 +121,9 @@ def check_upcoming_reminders():
 
     from dashboard.models import Notification
     for task in upcoming:
+        checklist = f" — checklist {task._st_done}/{task._st_total}" if task._st_total and task._st_done < task._st_total else ""
         Notification.objects.create(
-            message=f"Reminder: {task.title}",
+            message=f"Reminder: {task.title}{checklist}",
             level="info",
             link=task.get_absolute_url(),
         )
