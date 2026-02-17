@@ -74,6 +74,20 @@
         <input type="date" name="date_to" value="{{ date_to }}"
                hx-get="{% url 'cashflow:list' %}" hx-trigger="change" hx-target="#table-body" hx-swap="innerHTML show:none" hx-include="#filter-form" hx-indicator="#loading-spinner"
                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+        <select name="category" hx-get="{% url 'cashflow:list' %}" hx-trigger="change" hx-target="#table-body" hx-swap="innerHTML show:none" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+            <option value="">All Categories</option>
+            {% for val, label in category_choices %}
+            <option value="{{ val }}" {% if selected_category == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+        <select name="stakeholder" hx-get="{% url 'cashflow:list' %}" hx-trigger="change" hx-target="#table-body" hx-swap="innerHTML show:none" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+            <option value="">All Stakeholders</option>
+            {% for pk, name in stakeholder_choices %}
+            <option value="{{ pk }}" {% if selected_stakeholder == pk|stringformat:"d" %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+        </select>
     </div>
 </form>
 

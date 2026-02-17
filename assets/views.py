@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from django.contrib import messages
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
@@ -525,7 +527,16 @@ class RealEstateDetailView(DetailView):
         ctx["legal_matters"] = obj.legal_matters.all()[:5]
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
         ctx["notes"] = obj.notes.all()[:5]
-        ctx["cash_flow_entries"] = obj.cash_flow_entries.all()[:10]
+        cf_qs = obj.cash_flow_entries.all()
+        cf_totals = cf_qs.aggregate(
+            inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+            outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+        )
+        ctx["cashflow_entries"] = cf_qs.order_by("-date")
+        ctx["cashflow_inflows"] = cf_totals["inflows"]
+        ctx["cashflow_outflows"] = cf_totals["outflows"]
+        ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
+        ctx["delete_url_name"] = "cashflow:property_cashflow_delete"
         ctx["insurance_policies"] = obj.insurance_policies.all()
         return ctx
 
@@ -619,6 +630,16 @@ class InvestmentDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
         ctx["notes"] = self.object.notes.all()[:5]
+        cf_qs = self.object.cash_flow_entries.all()
+        cf_totals = cf_qs.aggregate(
+            inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+            outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+        )
+        ctx["cashflow_entries"] = cf_qs.order_by("-date")
+        ctx["cashflow_inflows"] = cf_totals["inflows"]
+        ctx["cashflow_outflows"] = cf_totals["outflows"]
+        ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
+        ctx["delete_url_name"] = "cashflow:investment_cashflow_delete"
         return ctx
 
 
@@ -727,7 +748,16 @@ class LoanDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["cash_flow_entries"] = self.object.cash_flow_entries.all()[:10]
+        cf_qs = self.object.cash_flow_entries.all()
+        cf_totals = cf_qs.aggregate(
+            inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+            outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+        )
+        ctx["cashflow_entries"] = cf_qs.order_by("-date")
+        ctx["cashflow_inflows"] = cf_totals["inflows"]
+        ctx["cashflow_outflows"] = cf_totals["outflows"]
+        ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
+        ctx["delete_url_name"] = "cashflow:loan_cashflow_delete"
         ctx["notes"] = self.object.notes.all()[:5]
         return ctx
 

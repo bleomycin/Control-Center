@@ -2,14 +2,15 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.db.models import Sum, Q
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.db.models.functions import TruncMonth
 from django.http import JsonResponse
 from django.urls import reverse_lazy
 from django.utils import timezone
-from django.views.generic import CreateView, DeleteView, ListView, UpdateView
+from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from .forms import CashFlowEntryForm
+from dashboard.choices import get_choices
+from .forms import CashFlowEntryForm, InlineCashFlowForm
 from .models import CashFlowEntry
 
 
@@ -66,6 +67,8 @@ def export_csv(request):
         ("category", "Category"),
         ("amount", "Amount"),
         ("is_projected", "Projected"),
+        ("is_recurring", "Recurring"),
+        ("recurrence_rule", "Recurrence"),
     ]
     return do_export(qs, fields, "cashflow")
 
@@ -95,6 +98,17 @@ class CashFlowListView(ListView):
         date_to = self.request.GET.get("date_to")
         if date_to:
             qs = qs.filter(date__lte=date_to)
+        category = self.request.GET.get("category", "").strip()
+        if category:
+            qs = qs.filter(category=category)
+        stakeholder = self.request.GET.get("stakeholder", "").strip()
+        if stakeholder:
+            qs = qs.filter(related_stakeholder_id=stakeholder)
+        asset = self.request.GET.get("asset", "").strip()
+        if asset:
+            qs = qs.filter(
+                Q(related_property_id=asset) | Q(related_loan_id=asset) | Q(related_investment_id=asset)
+            )
         ALLOWED_SORTS = {"description", "entry_type", "category", "date", "amount"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
@@ -117,6 +131,16 @@ class CashFlowListView(ListView):
         ctx["selected_types"] = self.request.GET.getlist("type")
         ctx["current_sort"] = self.request.GET.get("sort", "")
         ctx["current_dir"] = self.request.GET.get("dir", "")
+        ctx["selected_category"] = self.request.GET.get("category", "")
+        ctx["selected_stakeholder"] = self.request.GET.get("stakeholder", "")
+        ctx["selected_asset"] = self.request.GET.get("asset", "")
+
+        # Category choices for filter dropdown
+        ctx["category_choices"] = get_choices("cashflow_category")
+
+        # Stakeholder choices for filter dropdown
+        from stakeholders.models import Stakeholder
+        ctx["stakeholder_choices"] = Stakeholder.objects.values_list("pk", "name").order_by("name")
 
         # Running totals for currently filtered entries
         qs = self.get_queryset()
@@ -131,6 +155,12 @@ class CashFlowListView(ListView):
         from cashflow.alerts import get_liquidity_alerts
         ctx["liquidity_alerts"] = get_liquidity_alerts()
         return ctx
+
+
+class CashFlowDetailView(DetailView):
+    model = CashFlowEntry
+    template_name = "cashflow/cashflow_detail.html"
+    context_object_name = "entry"
 
 
 class CashFlowCreateView(CreateView):
@@ -165,6 +195,37 @@ class CashFlowDeleteView(DeleteView):
         return super().form_valid(form)
 
 
+def export_pdf_detail(request, pk):
+    from config.pdf_export import render_pdf
+    from dashboard.choices import get_choice_label
+    entry = get_object_or_404(CashFlowEntry, pk=pk)
+    sections = [
+        {"heading": "Entry Details", "type": "info", "rows": [
+            ("Description", entry.description),
+            ("Amount", f"${entry.amount:,.2f}"),
+            ("Type", entry.get_entry_type_display()),
+            ("Category", get_choice_label("cashflow_category", entry.category) if entry.category else "-"),
+            ("Date", entry.date.strftime("%B %d, %Y")),
+            ("Projected", "Yes" if entry.is_projected else "No"),
+            ("Recurring", f"Yes ({entry.get_recurrence_rule_display()})" if entry.is_recurring else "No"),
+        ]},
+    ]
+    links = []
+    if entry.related_stakeholder:
+        links.append(("Stakeholder", entry.related_stakeholder.name))
+    if entry.related_property:
+        links.append(("Property", entry.related_property.name))
+    if entry.related_loan:
+        links.append(("Loan", entry.related_loan.name))
+    if entry.related_investment:
+        links.append(("Investment", entry.related_investment.name))
+    if links:
+        sections.append({"heading": "Related Entities", "type": "info", "rows": links})
+    if entry.notes_text:
+        sections.append({"heading": "Notes", "type": "text", "content": entry.notes_text})
+    return render_pdf(request, f"cashflow-{entry.pk}", entry.description, sections=sections)
+
+
 def bulk_delete(request):
     if request.method == "POST":
         pks = request.POST.getlist("selected")
@@ -193,3 +254,95 @@ def bulk_export_csv(request):
         ("is_projected", "Projected"),
     ]
     return do_export(qs, fields, "cashflow_selected")
+
+
+# --- HTMX inline cashflow for detail pages ---
+
+def _inline_cashflow_context(qs, entity_field, entity, delete_url_name):
+    """Build context for inline cashflow list partials."""
+    entries = qs.order_by("-date")
+    totals = qs.aggregate(
+        inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+        outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+    )
+    return {
+        "cashflow_entries": entries,
+        "cashflow_inflows": totals["inflows"],
+        "cashflow_outflows": totals["outflows"],
+        "cashflow_net": totals["inflows"] - totals["outflows"],
+        entity_field: entity,
+        "delete_url_name": delete_url_name,
+    }
+
+
+def inline_cashflow_add(request, model_class, fk_field, entity_field, pk):
+    """Generic HTMX inline cashflow add for any related entity."""
+    from django.urls import reverse
+    entity = get_object_or_404(model_class, pk=pk)
+    add_url_name = f"cashflow:{entity_field}_cashflow_add"
+    delete_url_name = f"cashflow:{entity_field}_cashflow_delete"
+    if request.method == "POST":
+        form = InlineCashFlowForm(request.POST)
+        if form.is_valid():
+            entry = form.save(commit=False)
+            setattr(entry, fk_field, entity)
+            entry.save()
+            qs = CashFlowEntry.objects.filter(**{fk_field: entity})
+            return render(request, "cashflow/partials/_inline_cashflow_list.html",
+                          _inline_cashflow_context(qs, entity_field, entity, delete_url_name))
+    else:
+        form = InlineCashFlowForm(initial={"date": timezone.localdate()})
+    add_url = reverse(add_url_name, args=[pk])
+    return render(request, "cashflow/partials/_inline_cashflow_form.html",
+                  {"form": form, entity_field: entity, "add_url": add_url})
+
+
+def inline_cashflow_delete(request, fk_field, pk):
+    """Generic HTMX inline cashflow delete."""
+    entry = get_object_or_404(CashFlowEntry, pk=pk)
+    entity = getattr(entry, fk_field)
+    entity_field = fk_field.replace("related_", "")
+    delete_url_name = f"cashflow:{entity_field}_cashflow_delete"
+    if request.method == "POST":
+        entry.delete()
+    qs = CashFlowEntry.objects.filter(**{fk_field: entity})
+    return render(request, "cashflow/partials/_inline_cashflow_list.html",
+                  _inline_cashflow_context(qs, entity_field, entity, delete_url_name))
+
+
+# Concrete wrappers for each entity type
+
+def property_cashflow_add(request, pk):
+    from assets.models import RealEstate
+    return inline_cashflow_add(request, RealEstate, "related_property", "property", pk)
+
+
+def property_cashflow_delete(request, pk):
+    return inline_cashflow_delete(request, "related_property", pk)
+
+
+def loan_cashflow_add(request, pk):
+    from assets.models import Loan
+    return inline_cashflow_add(request, Loan, "related_loan", "loan", pk)
+
+
+def loan_cashflow_delete(request, pk):
+    return inline_cashflow_delete(request, "related_loan", pk)
+
+
+def investment_cashflow_add(request, pk):
+    from assets.models import Investment
+    return inline_cashflow_add(request, Investment, "related_investment", "investment", pk)
+
+
+def investment_cashflow_delete(request, pk):
+    return inline_cashflow_delete(request, "related_investment", pk)
+
+
+def stakeholder_cashflow_add(request, pk):
+    from stakeholders.models import Stakeholder
+    return inline_cashflow_add(request, Stakeholder, "related_stakeholder", "stakeholder", pk)
+
+
+def stakeholder_cashflow_delete(request, pk):
+    return inline_cashflow_delete(request, "related_stakeholder", pk)

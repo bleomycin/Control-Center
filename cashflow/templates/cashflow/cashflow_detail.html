@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ entry.description }} - Cash Flow - Control Center{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+        <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+        <span class="text-gray-600">/</span>
+        <a href="{% url 'cashflow:list' %}" class="hover:text-gray-300">Cash Flow</a>
+        <span class="text-gray-600">/</span>
+        <span class="text-gray-200">{{ entry.description|truncatewords:5 }}</span>
+    </nav>
+
+    <div class="flex items-center justify-between mb-6 mt-2">
+        <h1 class="text-2xl font-bold text-white">{{ entry.description }}</h1>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'cashflow:export_pdf' entry.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors">PDF</a>
+            <a href="{% url 'cashflow:edit' entry.pk %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Edit</a>
+            <a href="{% url 'cashflow:delete' entry.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm font-medium rounded-md transition-colors">Delete</a>
+        </div>
+    </div>
+
+    <!-- Amount & Type -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-6 mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <span class="text-3xl font-bold {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
+                    {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:2|intcomma }}
+                </span>
+                <div class="flex items-center gap-2 mt-2">
+                    <span class="text-xs px-2 py-0.5 rounded-full {% if entry.entry_type == 'inflow' %}bg-green-900/50 text-green-300{% else %}bg-red-900/50 text-red-300{% endif %}">{{ entry.get_entry_type_display }}</span>
+                    {% if entry.is_projected %}<span class="text-xs px-2 py-0.5 rounded-full bg-yellow-900/50 text-yellow-300">Projected</span>{% endif %}
+                    {% if entry.is_recurring %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Recurring ({{ entry.get_recurrence_rule_display }})</span>{% endif %}
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-lg text-gray-200">{{ entry.date|date:"F j, Y" }}</p>
+                {% if entry.category %}<p class="text-sm text-gray-400 mt-1">{{ entry.category|choice_label:"cashflow_category" }}</p>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Details</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Description</span>
+                <span class="text-sm text-gray-200">{{ entry.description }}</span>
+            </div>
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Date</span>
+                <span class="text-sm text-gray-200">{{ entry.date|date:"F j, Y" }}</span>
+            </div>
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Type</span>
+                <span class="text-sm text-gray-200">{{ entry.get_entry_type_display }}</span>
+            </div>
+            {% if entry.category %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Category</span>
+                <span class="text-sm text-gray-200">{{ entry.category|choice_label:"cashflow_category" }}</span>
+            </div>
+            {% endif %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Projected</span>
+                <span class="text-sm text-gray-200">{% if entry.is_projected %}Yes{% else %}No{% endif %}</span>
+            </div>
+            {% if entry.is_recurring %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Recurrence</span>
+                <span class="text-sm text-gray-200">{{ entry.get_recurrence_rule_display }}</span>
+            </div>
+            {% endif %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Created</span>
+                <span class="text-sm text-gray-200">{{ entry.created_at|date:"F j, Y g:i A" }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Related Entities -->
+    {% if entry.related_stakeholder or entry.related_property or entry.related_loan or entry.related_investment %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Entities</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% if entry.related_stakeholder %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Stakeholder</span>
+                <a href="{{ entry.related_stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ entry.related_stakeholder.name }}</a>
+            </div>
+            {% endif %}
+            {% if entry.related_property %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Property</span>
+                <a href="{{ entry.related_property.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ entry.related_property.name }}</a>
+            </div>
+            {% endif %}
+            {% if entry.related_loan %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Loan</span>
+                <a href="{{ entry.related_loan.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ entry.related_loan.name }}</a>
+            </div>
+            {% endif %}
+            {% if entry.related_investment %}
+            <div class="flex justify-between px-4 py-3">
+                <span class="text-sm text-gray-400">Investment</span>
+                <a href="{{ entry.related_investment.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ entry.related_investment.name }}</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Notes -->
+    {% if entry.notes_text %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+        </div>
+        <div class="px-4 py-3">
+            <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ entry.notes_text }}</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

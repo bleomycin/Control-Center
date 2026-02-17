@@ -351,23 +351,16 @@
     </div>
 
     <div class="tab-content hidden" id="tab-cashflow">
-        <div class="divide-y divide-gray-700">
-            {% for entry in all_cashflow %}
-            <div class="flex items-center justify-between px-4 py-3">
-                <div class="flex-1">
-                    <span class="text-sm text-gray-200">{{ entry.description }}</span>
-                    <span class="text-xs text-gray-400 ml-2">{{ entry.category }}</span>
-                </div>
-                <div class="text-right">
-                    <span class="text-sm font-medium {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
-                        {% if entry.entry_type == 'outflow' %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}
-                    </span>
-                    <span class="text-xs text-gray-400 block">{{ entry.date|date:"M j, Y" }}</span>
-                </div>
-            </div>
-            {% empty %}
-            <p class="px-4 py-8 text-sm text-gray-500 text-center">No cash flow entries</p>
-            {% endfor %}
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Cash flow entries for this stakeholder</span>
+            <button hx-get="{% url 'cashflow:stakeholder_cashflow_add' stakeholder.pk %}"
+                    hx-target="#sh-cashflow-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Entry</button>
+        </div>
+        <div id="sh-cashflow-form-container"></div>
+        <div id="inline-cashflow-list">
+            {% include "cashflow/partials/_inline_cashflow_list.html" %}
         </div>
     </div>
 </div>

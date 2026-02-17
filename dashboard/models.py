@@ -10,6 +10,7 @@ CATEGORY_CHOICES = [
     ("policy_type", "Insurance Policy Type"),
     ("vehicle_type", "Vehicle Type"),
     ("aircraft_type", "Aircraft Type"),
+    ("cashflow_category", "Cash Flow Category"),
 ]
 
 

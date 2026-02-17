@@ -57,4 +57,18 @@ SEED_DATA = [
     ("aircraft_type", "jet", "Jet", 3),
     ("aircraft_type", "helicopter", "Helicopter", 4),
     ("aircraft_type", "glider", "Glider", 5),
+    # Cash flow categories
+    ("cashflow_category", "rental_income", "Rental Income", 0),
+    ("cashflow_category", "mortgage", "Mortgage", 1),
+    ("cashflow_category", "loan_payment", "Loan Payment", 2),
+    ("cashflow_category", "insurance", "Insurance", 3),
+    ("cashflow_category", "legal_fees", "Legal Fees", 4),
+    ("cashflow_category", "renovation", "Renovation", 5),
+    ("cashflow_category", "investment", "Investment", 6),
+    ("cashflow_category", "investment_income", "Investment Income", 7),
+    ("cashflow_category", "professional_services", "Professional Services", 8),
+    ("cashflow_category", "acquisition", "Acquisition", 9),
+    ("cashflow_category", "taxes", "Taxes", 10),
+    ("cashflow_category", "maintenance", "Maintenance", 11),
+    ("cashflow_category", "other", "Other", 12),
 ]
