@@ -41,7 +41,8 @@
             </span>
             {% endif %}
             {% endwith %}
-            <span>{{ note.date|date:"M j, Y g:i A" }}</span>
+            <span class="hidden sm:inline">{{ note.date|date:"M j, Y g:i A" }}</span>
+            <span class="sm:hidden">{{ note.date|date:"M j" }}</span>
         </div>
     </div>
 

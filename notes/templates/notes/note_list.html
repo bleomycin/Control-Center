@@ -2,18 +2,49 @@
 {% load tag_colors %}
 {% block title %}Notes - Control Center{% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-4 sm:mb-6">
     <div>
         <h1 class="text-2xl font-bold text-white">Notes</h1>
     </div>
-    <div class="flex flex-wrap items-center gap-2">
-        <a href="{% url 'notes:export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
+    <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- View toggle: icon-only on mobile, icon+text on desktop -->
+        <div class="flex items-center gap-1">
+            <button id="btn-cards" onclick="switchNoteView('cards')" class="px-2 py-1 sm:px-2.5 text-xs rounded-md transition-colors {% if current_view == 'cards' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
+                <svg class="w-4 h-4 inline-block sm:mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                <span class="hidden sm:inline">Cards</span>
+            </button>
+            <button id="btn-list" onclick="switchNoteView('list')" class="px-2 py-1 sm:px-2.5 text-xs rounded-md transition-colors {% if current_view == 'list' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
+                <svg class="w-4 h-4 inline-block sm:mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                <span class="hidden sm:inline">List</span>
+            </button>
+            <button id="btn-timeline" onclick="switchNoteView('timeline')" class="px-2 py-1 sm:px-2.5 text-xs rounded-md transition-colors {% if current_view == 'timeline' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
+                <svg class="w-4 h-4 inline-block sm:mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span class="hidden sm:inline">Timeline</span>
+            </button>
+        </div>
+        <a href="{% url 'notes:export_csv' %}" class="hidden sm:inline-block px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
         <a href="{% url 'notes:create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ New</a>
     </div>
 </div>
 
-<!-- Folder Tabs -->
-<div id="folder-tabs" class="flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2 items-center"
+<!-- Mobile Folder Dropdown -->
+<div class="sm:hidden flex items-center gap-2 mb-3">
+    <select id="mobile-folder-select" onchange="switchFolder(this.value)"
+            class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2">
+        <option value="" {% if current_folder == '' or current_folder == 'all' %}selected{% endif %}>All Notes</option>
+        {% for folder in folders %}
+        <option value="{{ folder.pk }}" {% if current_folder == folder.pk|stringformat:'d' %}selected{% endif %}>{{ folder.name }} ({{ folder.note_count }})</option>
+        {% endfor %}
+        <option value="unfiled" {% if current_folder == 'unfiled' %}selected{% endif %}>Unfiled ({{ unfiled_count }})</option>
+    </select>
+    <button onclick="document.getElementById('folder-manage-panel').classList.toggle('hidden')"
+            class="px-2 py-2 text-gray-500 hover:text-gray-300 transition-colors" title="Manage folders">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    </button>
+</div>
+
+<!-- Desktop Folder Tabs -->
+<div id="folder-tabs" class="hidden sm:flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2 items-center"
      hx-get="{% url 'notes:folder_tabs' %}" hx-trigger="foldersChanged from:body" hx-include="#current-folder" hx-swap="innerHTML">
     {% include "notes/partials/_folder_tabs.html" %}
 </div>
@@ -31,82 +62,93 @@
     </div>
 </div>
 
-<form id="filter-form" class="flex flex-col gap-3 mb-4">
+{% with filter_count=selected_types|length %}
+<form id="filter-form" onsubmit="return false;" class="mb-4">
     <input type="hidden" name="folder" id="current-folder" value="{{ current_folder }}">
     <input type="hidden" name="view" id="current-view" value="{{ current_view }}">
-    <div class="flex flex-col sm:flex-row gap-3">
+    <!-- Search bar -->
+    <div class="mb-2 sm:mb-3">
         <input type="text" name="q" value="{{ search_query }}" placeholder="Search notes..."
                hx-get="{% url 'notes:list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-               class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
+               class="w-full rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
+    </div>
+    <!-- Dropdowns row: 2-col grid on mobile, inline flex on desktop -->
+    <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 mb-2 sm:mb-3">
         <select name="stakeholder" hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
             <option value="">All People</option>
             {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_stakeholder == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
         </select>
+        <button type="button" id="note-filter-toggle-btn" onclick="toggleNoteFilters()"
+                class="inline-flex items-center justify-center gap-1.5 px-2 py-2 sm:px-3 text-sm font-medium rounded-md transition-colors {% if selected_types or selected_tags or date_from or date_to %}bg-blue-600/20 border border-blue-500 text-blue-300{% else %}bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600{% endif %}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            Filters
+            {% if filter_count or selected_tags or date_from or date_to %}
+            <span class="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-500 text-white rounded-full" id="note-filter-count">{% if filter_count %}{{ filter_count }}{% else %}&bull;{% endif %}</span>
+            {% endif %}
+        </button>
     </div>
-    <!-- Type checkboxes -->
-    <div class="flex flex-wrap gap-2 items-center">
-        <span class="text-xs text-gray-400">Type:</span>
-        {% for val, label in note_types %}
-        <label class="inline-flex items-center gap-1 text-xs text-gray-300">
-            <input type="checkbox" name="type" value="{{ val }}"
-                   {% if val in selected_types %}checked{% endif %}
-                   hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
-                   hx-include="#filter-form" hx-indicator="#loading-spinner"
-                   class="rounded border-gray-600 bg-gray-700 text-blue-600 h-3.5 w-3.5">
-            {{ label }}
-        </label>
-        {% endfor %}
-    </div>
-    <!-- Tag filter pills -->
-    {% if all_tags %}
-    <div class="flex flex-wrap gap-1.5 items-center">
-        <span class="text-xs text-gray-400">Tags:</span>
-        {% for tag in all_tags %}
-        {% tag_classes tag.color as tc %}
-        <label class="cursor-pointer">
-            <input type="checkbox" name="tag" value="{{ tag.slug }}"
-                   {% if tag.slug in selected_tags %}checked{% endif %}
-                   hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
-                   hx-include="#filter-form" hx-indicator="#loading-spinner"
-                   class="sr-only peer">
-            <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
-                         peer-checked:{{ tc.bg }} peer-checked:{{ tc.text }} peer-checked:{{ tc.border }}
-                         border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500">
-                #{{ tag.name }}
-            </span>
-        </label>
-        {% endfor %}
-    </div>
-    {% endif %}
-    <!-- Date range -->
-    <div class="flex flex-wrap gap-2 items-center">
-        <span class="text-xs text-gray-400">Date:</span>
-        <input type="date" name="date_from" value="{{ date_from }}"
-               hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-               class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
-        <span class="text-xs text-gray-500">to</span>
-        <input type="date" name="date_to" value="{{ date_to }}"
-               hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-               class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+
+    <!-- Collapsible filter panel -->
+    <div id="note-filter-panel" class="{% if not selected_types and not selected_tags and not date_from and not date_to %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
+            <!-- Type checkboxes -->
+            <div>
+                <span class="text-xs text-gray-400 font-medium">Type:</span>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                    {% for val, label in note_types %}
+                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                        <input type="checkbox" name="type" value="{{ val }}"
+                               {% if val in selected_types %}checked{% endif %}
+                               hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
+                               hx-include="#filter-form" hx-indicator="#loading-spinner"
+                               class="rounded border-gray-600 bg-gray-700 text-blue-600 h-3.5 w-3.5">
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- Tag filter pills -->
+            {% if all_tags %}
+            <div>
+                <span class="text-xs text-gray-400 font-medium">Tags:</span>
+                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:ml-0 items-center">
+                    {% for tag in all_tags %}
+                    {% tag_classes tag.color as tc %}
+                    <label class="cursor-pointer">
+                        <input type="checkbox" name="tag" value="{{ tag.slug }}"
+                               {% if tag.slug in selected_tags %}checked{% endif %}
+                               hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
+                               hx-include="#filter-form" hx-indicator="#loading-spinner"
+                               class="sr-only peer">
+                        <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                     peer-checked:{{ tc.bg }} peer-checked:{{ tc.text }} peer-checked:{{ tc.border }}
+                                     border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500">
+                            #{{ tag.name }}
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            <!-- Date range -->
+            <div class="w-full sm:w-auto">
+                <span class="text-xs text-gray-400 font-medium">Date:</span>
+                <div class="flex items-center gap-2 mt-1 sm:mt-0 sm:inline-flex">
+                    <input type="date" name="date_from" value="{{ date_from }}"
+                           hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="flex-1 sm:flex-none rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+                    <span class="text-xs text-gray-500">to</span>
+                    <input type="date" name="date_to" value="{{ date_to }}"
+                           hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="flex-1 sm:flex-none rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+                </div>
+            </div>
+            <button type="button" onclick="clearNoteFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2 self-start sm:self-center">Clear</button>
+        </div>
     </div>
 </form>
-
-<!-- View Toggle -->
-<div class="flex items-center gap-1 mb-3">
-    <button id="btn-cards" onclick="switchNoteView('cards')" class="px-2.5 py-1 text-xs rounded-md transition-colors {% if current_view == 'cards' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
-        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-        Cards
-    </button>
-    <button id="btn-list" onclick="switchNoteView('list')" class="px-2.5 py-1 text-xs rounded-md transition-colors {% if current_view == 'list' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
-        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-        List
-    </button>
-    <button id="btn-timeline" onclick="switchNoteView('timeline')" class="px-2.5 py-1 text-xs rounded-md transition-colors {% if current_view == 'timeline' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
-        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        Timeline
-    </button>
-</div>
+{% endwith %}
 
 <div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>
 
@@ -188,6 +230,9 @@
 <script>
 function switchFolder(folderId) {
     document.getElementById('current-folder').value = folderId;
+    // Sync mobile dropdown
+    var mobileSelect = document.getElementById('mobile-folder-select');
+    if (mobileSelect) mobileSelect.value = folderId;
     // Update tab highlights via JS (no full page reload)
     var inactiveClasses = 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50';
     document.querySelectorAll('.folder-tab').forEach(function(btn) {
@@ -268,6 +313,37 @@ function setBulkTagMode(mode) {
         submitBtn.textContent = 'Apply';
         submitBtn.className = 'px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors ml-2';
     }
+}
+
+function toggleNoteFilters() {
+    var panel = document.getElementById('note-filter-panel');
+    var btn = document.getElementById('note-filter-toggle-btn');
+    panel.classList.toggle('hidden');
+    var isOpen = !panel.classList.contains('hidden');
+    if (isOpen) {
+        btn.classList.add('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.remove('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    } else if (!document.querySelector('#note-filter-panel input:checked') && !Array.from(document.querySelectorAll('#note-filter-panel input[type=date]')).some(function(d) { return d.value; })) {
+        btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    }
+}
+
+function clearNoteFilters() {
+    var panel = document.getElementById('note-filter-panel');
+    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+    panel.querySelectorAll('input[type=date]').forEach(function(d) { d.value = ''; });
+    // Also reset tag pill visuals (peer-checked CSS handles it, but clear state)
+    var badge = document.getElementById('note-filter-count');
+    if (badge) badge.remove();
+    var btn = document.getElementById('note-filter-toggle-btn');
+    btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+    btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    htmx.ajax('GET', '{% url "notes:list" %}', {
+        target: '#note-content',
+        swap: 'innerHTML',
+        source: document.getElementById('filter-form'),
+    });
 }
 
 function switchNoteView(mode) {
