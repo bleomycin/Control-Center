@@ -79,6 +79,7 @@ class TaskListView(ListView):
         qs = super().get_queryset().prefetch_related("related_stakeholders", "follow_ups").annotate(
             subtask_count=Count("subtasks", distinct=True),
             subtask_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
+            note_count=Count("notes", distinct=True),
         )
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -245,6 +246,7 @@ class TaskDetailView(DetailView):
         ctx["follow_ups"] = self.object.follow_ups.select_related("stakeholder").all()
         ctx["followup_form"] = FollowUpForm()
         ctx["notes"] = self.object.notes.all()[:5]
+        ctx["note_count"] = self.object.notes.count()
         subtasks = self.object.subtasks.all()
         ctx["subtasks"] = subtasks
         ctx["subtask_form"] = SubTaskForm()

@@ -36,22 +36,31 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "content": forms.Textarea(attrs={"rows": 6}),
             "note_type": forms.Select(),
-            "participants": forms.SelectMultiple(attrs={"size": 3}),
-            "related_stakeholders": forms.SelectMultiple(attrs={"size": 3}),
-            "related_legal_matters": forms.SelectMultiple(attrs={"size": 3}),
-            "related_properties": forms.SelectMultiple(attrs={"size": 3}),
-            "related_investments": forms.SelectMultiple(attrs={"size": 3}),
-            "related_loans": forms.SelectMultiple(attrs={"size": 3}),
-            "related_tasks": forms.SelectMultiple(attrs={"size": 3}),
-            "related_policies": forms.SelectMultiple(attrs={"size": 3}),
-            "related_vehicles": forms.SelectMultiple(attrs={"size": 3}),
-            "related_aircraft": forms.SelectMultiple(attrs={"size": 3}),
+            "participants": forms.SelectMultiple(attrs={"size": 4}),
+            "related_stakeholders": forms.SelectMultiple(attrs={"size": 4}),
+            "related_legal_matters": forms.SelectMultiple(attrs={"size": 4}),
+            "related_properties": forms.SelectMultiple(attrs={"size": 4}),
+            "related_investments": forms.SelectMultiple(attrs={"size": 4}),
+            "related_loans": forms.SelectMultiple(attrs={"size": 4}),
+            "related_tasks": forms.SelectMultiple(attrs={"size": 4}),
+            "related_policies": forms.SelectMultiple(attrs={"size": 4}),
+            "related_vehicles": forms.SelectMultiple(attrs={"size": 4}),
+            "related_aircraft": forms.SelectMultiple(attrs={"size": 4}),
             "tags": forms.CheckboxSelectMultiple(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["note_type"].widget.choices = get_choices("note_type")
+
+    @property
+    def selected_tag_pks(self):
+        """Return set of selected tag PKs (handles bound and unbound forms)."""
+        if self.is_bound:
+            return {int(pk) for pk in self.data.getlist("tags") if pk}
+        if self.initial.get("tags"):
+            return set(self.initial["tags"])
+        return set()
 
     def entity_linked_count(self):
         """Count how many entity M2M fields have selected values."""

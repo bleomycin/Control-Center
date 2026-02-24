@@ -1,6 +1,7 @@
 from django.utils import timezone
 
-from notes.models import Note
+from dashboard.models import ChoiceOption
+from notes.models import Note, Tag
 from e2e.base import PlaywrightTestCase
 
 
@@ -94,3 +95,136 @@ class NoteFormTests(PlaywrightTestCase):
         # Wait for entity fields to be visible
         entity_grid.wait_for(state="visible")
         self.assertTrue(entity_grid.is_visible())
+
+    def test_form_3col_layout(self):
+        """Date, Note type, and Folder render in a 3-col grid on desktop."""
+        self.page.goto(self.url("/notes/create/"))
+
+        # The 3-col grid container should exist
+        grid = self.page.locator(".sm\\:grid-cols-3")
+        grid.wait_for(state="visible")
+        self.assertTrue(grid.is_visible())
+
+        # It should contain all 3 fields
+        self.assertTrue(grid.locator("#id_date").is_visible())
+        self.assertTrue(grid.locator("#id_note_type").is_visible())
+        self.assertTrue(grid.locator("#id_folder").is_visible())
+
+    def test_form_tag_pills_toggle(self):
+        """Clicking tag pill toggles its visual active state."""
+        Tag.objects.create(name="Urgent", slug="urgent", color="red")
+        Tag.objects.create(name="Personal", slug="personal", color="blue")
+        self.page.goto(self.url("/notes/create/"))
+
+        # Find the first tag pill span
+        pills = self.page.locator(".form-tag-pill")
+        pills.first.wait_for(state="visible")
+        self.assertEqual(2, pills.count())
+
+        first_pill = pills.first
+
+        # Initially should have inactive styling (border-gray-600)
+        self.assertIn("border-gray-600", first_pill.get_attribute("class"))
+
+        # Click the pill (click the label which wraps it)
+        first_pill.click()
+
+        # After click, should have active styling (data-active-bg class applied)
+        active_bg = first_pill.get_attribute("data-active-bg")
+        self.page.wait_for_function(
+            f"document.querySelector('.form-tag-pill').classList.contains('{active_bg}')"
+        )
+        self.assertIn(active_bg, first_pill.get_attribute("class"))
+        self.assertNotIn("border-gray-600", first_pill.get_attribute("class"))
+
+        # Click again to deselect
+        first_pill.click()
+
+        # Should revert to inactive
+        self.page.wait_for_function(
+            "document.querySelector('.form-tag-pill').classList.contains('border-gray-600')"
+        )
+        self.assertIn("border-gray-600", first_pill.get_attribute("class"))
+
+
+class NoteTypeFilterPillTests(PlaywrightTestCase):
+    """Test note type colored filter pills on the notes list."""
+
+    def setUp(self):
+        super().setUp()
+        # ChoiceOption seed data is wiped by TransactionTestCase flush;
+        # recreate the note_type choices needed for filter pills to render.
+        for val, label in [("call", "Call"), ("email", "Email"), ("meeting", "Meeting")]:
+            ChoiceOption.objects.get_or_create(
+                category="note_type", value=val, defaults={"label": label, "is_active": True}
+            )
+        self.call_note = Note.objects.create(
+            title="Call Note", content="Phone call", date=timezone.now(), note_type="call"
+        )
+        self.email_note = Note.objects.create(
+            title="Email Note", content="Email content", date=timezone.now(), note_type="email"
+        )
+        self.meeting_note = Note.objects.create(
+            title="Meeting Note", content="Meeting", date=timezone.now(), note_type="meeting"
+        )
+
+    def test_type_pills_visible_in_filter_panel(self):
+        """Type filter pills are visible when filter panel is opened."""
+        self.page.goto(self.url("/notes/"))
+
+        # Open the filter panel
+        self.page.click("#note-filter-toggle-btn")
+
+        # Type pills should be visible
+        type_pills = self.page.locator("input[name='type'] + span")
+        type_pills.first.wait_for(state="visible")
+        self.assertGreaterEqual(type_pills.count(), 3)
+
+    def test_type_pill_click_activates_styling(self):
+        """Clicking a type pill toggles its active color classes."""
+        self.page.goto(self.url("/notes/"))
+        self.page.click("#note-filter-toggle-btn")
+
+        # Find the Call pill (first one typically)
+        call_checkbox = self.page.locator("input[name='type'][value='call']")
+        call_pill = call_checkbox.locator("+ span")
+        call_pill.wait_for(state="visible")
+
+        # Initially inactive
+        self.assertIn("border-gray-600", call_pill.get_attribute("class"))
+
+        # Click to activate
+        call_pill.click()
+
+        # Should get active color classes from data attributes
+        active_bg = call_pill.get_attribute("data-active-bg")
+        self.page.wait_for_function(
+            f"document.querySelector(\"input[name='type'][value='call'] + span\").classList.contains('{active_bg}')"
+        )
+        self.assertIn(active_bg, call_pill.get_attribute("class"))
+
+    def test_type_pill_filters_notes(self):
+        """Clicking a type pill filters the note list to that type."""
+        self.page.goto(self.url("/notes/"))
+
+        # All 3 notes should be visible initially
+        self.page.wait_for_selector("#note-content")
+        content = self.page.locator("#note-content")
+        self.assertIn("Call Note", content.text_content())
+        self.assertIn("Email Note", content.text_content())
+        self.assertIn("Meeting Note", content.text_content())
+
+        # Open filter panel and click the "call" type pill
+        self.page.click("#note-filter-toggle-btn")
+        call_pill = self.page.locator("input[name='type'][value='call'] + span")
+        call_pill.wait_for(state="visible")
+        call_pill.click()
+
+        # Wait for HTMX to swap content (Call Note should remain, others filtered out)
+        self.page.wait_for_function(
+            "!document.getElementById('note-content').textContent.includes('Email Note')"
+        )
+        content = self.page.locator("#note-content")
+        self.assertIn("Call Note", content.text_content())
+        self.assertNotIn("Email Note", content.text_content())
+        self.assertNotIn("Meeting Note", content.text_content())
