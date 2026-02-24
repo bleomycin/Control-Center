@@ -147,6 +147,69 @@ class NoteFormTests(PlaywrightTestCase):
         self.assertIn("border-gray-600", first_pill.get_attribute("class"))
 
 
+class NoteTagFilterPillTests(PlaywrightTestCase):
+    """Test tag filter pills on the notes list."""
+
+    def setUp(self):
+        super().setUp()
+        self.tag1 = Tag.objects.create(name="Urgent", slug="urgent", color="red")
+        self.tag2 = Tag.objects.create(name="Personal", slug="personal", color="blue")
+        self.tagged_note = Note.objects.create(
+            title="Tagged Note", content="Has tag", date=timezone.now(), note_type="general"
+        )
+        self.tagged_note.tags.add(self.tag1)
+        self.untagged_note = Note.objects.create(
+            title="Untagged Note", content="No tag", date=timezone.now(), note_type="general"
+        )
+
+    def test_tag_pill_click_activates_styling(self):
+        """Clicking a tag filter pill toggles its active color classes."""
+        self.page.goto(self.url("/notes/"))
+        self.page.click("#note-filter-toggle-btn")
+
+        # Find the Urgent tag pill
+        pill_span = self.page.locator("input[name='tag'][value='urgent'] + span")
+        pill_span.wait_for(state="visible")
+
+        # Initially inactive
+        self.assertIn("border-gray-600", pill_span.get_attribute("class"))
+
+        # Click to activate
+        pill_span.click()
+
+        # Should get active color (data-active-bg attribute applied as class)
+        active_bg = pill_span.get_attribute("data-active-bg")
+        self.page.wait_for_function(
+            f"document.querySelector(\"input[name='tag'][value='urgent'] + span\").classList.contains('{active_bg}')"
+        )
+        self.assertIn(active_bg, pill_span.get_attribute("class"))
+        self.assertNotIn("border-gray-600", pill_span.get_attribute("class"))
+
+    def test_tag_pill_filters_notes(self):
+        """Clicking a tag pill filters notes to only those with the tag."""
+        self.page.goto(self.url("/notes/"))
+
+        # Both notes visible initially
+        content = self.page.locator("#note-content")
+        content.wait_for(state="visible")
+        self.assertIn("Tagged Note", content.text_content())
+        self.assertIn("Untagged Note", content.text_content())
+
+        # Open filters, click the Urgent tag pill
+        self.page.click("#note-filter-toggle-btn")
+        pill_span = self.page.locator("input[name='tag'][value='urgent'] + span")
+        pill_span.wait_for(state="visible")
+        pill_span.click()
+
+        # Wait for HTMX filter — only tagged note should remain
+        self.page.wait_for_function(
+            "!document.getElementById('note-content').textContent.includes('Untagged Note')"
+        )
+        content = self.page.locator("#note-content")
+        self.assertIn("Tagged Note", content.text_content())
+        self.assertNotIn("Untagged Note", content.text_content())
+
+
 class NoteTypeFilterPillTests(PlaywrightTestCase):
     """Test note type colored filter pills on the notes list."""
 
