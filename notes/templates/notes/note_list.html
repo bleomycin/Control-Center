@@ -117,8 +117,8 @@
             <!-- Tag filter pills -->
             {% if all_tags %}
             <div>
-                <span class="text-xs text-gray-400 font-medium">Tags:</span>
-                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:ml-0 items-center">
+                <span class="text-xs text-gray-400 font-medium mr-1">Tags:</span>
+                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:inline-flex items-center">
                     {% for tag in all_tags %}
                     {% tag_classes tag.color as tc %}
                     <label class="cursor-pointer">
