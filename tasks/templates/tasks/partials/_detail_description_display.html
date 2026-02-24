@@ -1,0 +1,13 @@
+<div id="task-description-block" class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Description</p>
+        <button hx-get="{% url 'tasks:inline_edit_description' task.pk %}"
+                hx-target="#task-description-block" hx-swap="outerHTML"
+                class="text-xs text-gray-500 hover:text-blue-400">Edit</button>
+    </div>
+    {% if task.description %}
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.description }}</p>
+    {% else %}
+    <p class="text-sm text-gray-500 italic">No description</p>
+    {% endif %}
+</div>

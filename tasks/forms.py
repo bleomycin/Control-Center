@@ -37,7 +37,7 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
             "reminder_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
-            "description": forms.Textarea(attrs={"rows": 3}),
+            "description": forms.Textarea(attrs={"rows": 6}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": "5"}),
         }
 
@@ -81,7 +81,7 @@ class FollowUpForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "outreach_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "method": forms.Select(),
-            "notes_text": forms.Textarea(attrs={"rows": 2}),
+            "notes_text": forms.Textarea(attrs={"rows": 2, "class": "auto-grow-textarea"}),
         }
         labels = {
             "reminder_enabled": "Enable reminder",

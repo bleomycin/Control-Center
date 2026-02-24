@@ -1,0 +1,17 @@
+<div id="task-metadata-block" class="flex items-center gap-2 mt-2">
+    <span id="task-status-area">{% include "tasks/partials/_task_status_badge.html" %}</span>
+    <span class="text-xs px-2 py-0.5 rounded-full
+        {% if task.priority == 'critical' %}bg-red-900/50 text-red-300
+        {% elif task.priority == 'high' %}bg-orange-900/50 text-orange-300
+        {% elif task.priority == 'medium' %}bg-yellow-900/50 text-yellow-300
+        {% else %}bg-gray-700 text-gray-300{% endif %}">{{ task.get_priority_display }}</span>
+    {% if task.direction == "outbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-cyan-900/50 text-cyan-300">&nearr; Outbound</span>
+    {% elif task.direction == "inbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300">&swarr; Inbound</span>
+    {% endif %}
+    {% if task.is_meeting %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Meeting</span>
+    {% else %}<span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>{% endif %}
+    {% if task.is_recurring %}<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300">&#x21bb; {{ task.get_recurrence_rule_display }}</span>{% endif %}
+    <button hx-get="{% url 'tasks:inline_edit_metadata' task.pk %}"
+            hx-target="#task-metadata-block" hx-swap="outerHTML"
+            class="text-xs text-gray-500 hover:text-blue-400 ml-1">Edit</button>
+</div>
