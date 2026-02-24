@@ -346,6 +346,21 @@ function clearNoteFilters() {
     });
 }
 
+function toggleNoteExpand(pk) {
+    var preview = document.getElementById('note-preview-' + pk);
+    var full = document.getElementById('note-full-' + pk);
+    var btn = document.getElementById('note-expand-btn-' + pk);
+    if (full.classList.contains('hidden')) {
+        preview.classList.add('hidden');
+        full.classList.remove('hidden');
+        btn.textContent = 'Show less';
+    } else {
+        preview.classList.remove('hidden');
+        full.classList.add('hidden');
+        btn.textContent = 'Show more';
+    }
+}
+
 function switchNoteView(mode) {
     document.getElementById('current-view').value = mode;
     // Update button classes

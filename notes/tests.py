@@ -867,3 +867,136 @@ class SettingsHubTests(TestCase):
     def test_settings_hub_has_folder_link(self):
         resp = self.client.get(reverse("dashboard:settings_hub"))
         self.assertContains(resp, "Manage Folders")
+
+
+class InlineEditContentTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.note = Note.objects.create(
+            title="Inline Test", content="Original content",
+            date=timezone.now(), note_type="general",
+        )
+
+    def test_get_returns_editor(self):
+        resp = self.client.get(reverse("notes:inline_edit_content", args=[self.note.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "id_inline_content")
+
+    def test_get_display_returns_display(self):
+        resp = self.client.get(reverse("notes:inline_edit_content", args=[self.note.pk]), {"display": "1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "note-content-block")
+        self.assertNotContains(resp, "id_inline_content")
+
+    def test_post_saves_content(self):
+        resp = self.client.post(reverse("notes:inline_edit_content", args=[self.note.pk]), {"content": "Updated content"})
+        self.assertEqual(resp.status_code, 200)
+        self.note.refresh_from_db()
+        self.assertEqual(self.note.content, "Updated content")
+
+    def test_post_returns_display_partial(self):
+        resp = self.client.post(reverse("notes:inline_edit_content", args=[self.note.pk]), {"content": "New stuff"})
+        self.assertContains(resp, "note-content-block")
+        self.assertContains(resp, "New stuff")
+
+
+class InlineEditTitleTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.note = Note.objects.create(
+            title="Old Title", content="content",
+            date=timezone.now(), note_type="general",
+        )
+
+    def test_get_returns_editor(self):
+        resp = self.client.get(reverse("notes:inline_edit_title", args=[self.note.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'name="title"')
+
+    def test_get_display_returns_display(self):
+        resp = self.client.get(reverse("notes:inline_edit_title", args=[self.note.pk]), {"display": "1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "note-title-block")
+
+    def test_post_saves_title(self):
+        resp = self.client.post(reverse("notes:inline_edit_title", args=[self.note.pk]), {"title": "New Title"})
+        self.assertEqual(resp.status_code, 200)
+        self.note.refresh_from_db()
+        self.assertEqual(self.note.title, "New Title")
+
+    def test_post_empty_title_keeps_old(self):
+        resp = self.client.post(reverse("notes:inline_edit_title", args=[self.note.pk]), {"title": ""})
+        self.assertEqual(resp.status_code, 200)
+        self.note.refresh_from_db()
+        self.assertEqual(self.note.title, "Old Title")
+
+    def test_post_returns_hx_trigger(self):
+        resp = self.client.post(reverse("notes:inline_edit_title", args=[self.note.pk]), {"title": "Changed"})
+        self.assertIn("HX-Trigger", resp.headers)
+
+
+class InlineEditMetadataTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.folder = Folder.objects.create(name="Test Folder")
+        cls.tag = Tag.objects.create(name="testtag", slug="testtag")
+        cls.note = Note.objects.create(
+            title="Meta Test", content="content",
+            date=timezone.now(), note_type="general",
+        )
+
+    def test_get_returns_editor(self):
+        resp = self.client.get(reverse("notes:inline_edit_metadata", args=[self.note.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'name="note_type"')
+        self.assertContains(resp, 'name="folder"')
+
+    def test_get_display_returns_display(self):
+        resp = self.client.get(reverse("notes:inline_edit_metadata", args=[self.note.pk]), {"display": "1"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "note-metadata-block")
+
+    def test_post_updates_type_and_folder(self):
+        resp = self.client.post(reverse("notes:inline_edit_metadata", args=[self.note.pk]), {
+            "note_type": "meeting",
+            "folder": str(self.folder.pk),
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.note.refresh_from_db()
+        self.assertEqual(self.note.note_type, "meeting")
+        self.assertEqual(self.note.folder_id, self.folder.pk)
+
+    def test_post_sets_pinned(self):
+        resp = self.client.post(reverse("notes:inline_edit_metadata", args=[self.note.pk]), {
+            "note_type": "general",
+            "is_pinned": "1",
+        })
+        self.note.refresh_from_db()
+        self.assertTrue(self.note.is_pinned)
+
+    def test_post_clears_pinned(self):
+        self.note.is_pinned = True
+        self.note.save()
+        resp = self.client.post(reverse("notes:inline_edit_metadata", args=[self.note.pk]), {
+            "note_type": "general",
+        })
+        self.note.refresh_from_db()
+        self.assertFalse(self.note.is_pinned)
+
+    def test_post_sets_tags(self):
+        resp = self.client.post(reverse("notes:inline_edit_metadata", args=[self.note.pk]), {
+            "note_type": "general",
+            "tags": [str(self.tag.pk)],
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(self.tag, self.note.tags.all())
+
+    def test_post_clears_folder(self):
+        self.note.folder = self.folder
+        self.note.save()
+        resp = self.client.post(reverse("notes:inline_edit_metadata", args=[self.note.pk]), {
+            "note_type": "general",
+            "folder": "",
+        })
+        self.note.refresh_from_db()
+        self.assertIsNone(self.note.folder_id)

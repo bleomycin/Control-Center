@@ -5,7 +5,7 @@
       class="mt-1">
     {% csrf_token %}
     <textarea name="notes" rows="2"
-              class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-xs px-2 py-1 focus:border-blue-500 focus:ring-blue-500">{{ notes }}</textarea>
+              class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-xs px-2 py-1 focus:border-blue-500 focus:ring-blue-500 auto-grow-textarea">{{ notes }}</textarea>
     <div class="flex gap-1.5 mt-1">
         <button type="submit" class="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded transition-colors">Save</button>
         <button type="button"
