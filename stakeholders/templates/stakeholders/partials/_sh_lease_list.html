@@ -1,0 +1,27 @@
+{% load humanize %}
+<div class="divide-y divide-gray-700">
+    {% for lp in lease_parties %}
+    <div class="px-4 py-3 group">
+        <div class="flex items-center justify-between">
+            <div>
+                <a href="{{ lp.lease.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ lp.lease.name }}</a>
+                {% if lp.role %}<span class="text-xs text-gray-400 ml-2">({{ lp.role }})</span>{% endif %}
+                <span class="text-xs ml-2 {% if lp.lease.status == 'active' %}text-green-400{% elif lp.lease.status == 'expired' %}text-red-400{% elif lp.lease.status == 'upcoming' %}text-blue-400{% elif lp.lease.status == 'month_to_month' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ lp.lease.get_status_display }}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                {% if lp.lease.monthly_rent %}<span class="text-xs text-green-400">${{ lp.lease.monthly_rent|floatformat:0|intcomma }}/mo</span>{% endif %}
+                <button hx-post="{% url 'stakeholders:lease_party_delete' lp.pk %}"
+                        hx-target="#lease-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this lease party?"
+                        class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                    &times;
+                </button>
+            </div>
+        </div>
+        {% include "assets/partials/_inline_notes.html" with notes=lp.notes edit_url=lp.get_notes_url notes_id=lp.get_notes_id %}
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No lease connections</p>
+    {% endfor %}
+</div>

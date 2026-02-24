@@ -136,6 +136,25 @@
 </div>
 {% endif %}
 
+{% if leases %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Leases ({{ leases|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for lease in leases %}
+        <a href="{{ lease.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ lease.name }}</p>
+                <p class="text-xs text-gray-400">{{ lease.related_property.name }}</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ lease.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if cashflow_entries %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
     <div class="px-4 py-3 border-b border-gray-700">

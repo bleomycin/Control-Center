@@ -177,6 +177,8 @@ def global_search(request):
         context["cashflow_entries"] = CashFlowEntry.objects.filter(
             description__icontains=q
         )[:limit]
+        from assets.models import Lease
+        context["leases"] = Lease.objects.filter(name__icontains=q).select_related("related_property")[:limit]
         context["has_results"] = any([
             context["stakeholders"],
             context["tasks_results"],
@@ -186,6 +188,7 @@ def global_search(request):
             context["investments"],
             context["loans"],
             context["cashflow_entries"],
+            context["leases"],
         ])
     else:
         context["has_results"] = False
@@ -643,6 +646,28 @@ def calendar_events(request):
             "extendedProps": {"type": "contact"},
         })
 
+    # Lease expiry events (emerald)
+    from assets.models import Lease
+    lease_qs = Lease.objects.filter(
+        status__in=["active", "month_to_month"],
+        end_date__isnull=False,
+    )
+    if start:
+        lease_qs = lease_qs.filter(end_date__gte=start)
+    if end:
+        lease_qs = lease_qs.filter(end_date__lte=end)
+    for lease in lease_qs:
+        title = f"Lease expires: {lease.name}"
+        if lease.monthly_rent:
+            title = f"${lease.monthly_rent:,.0f}/mo — {lease.name}"
+        events.append({
+            "title": title,
+            "start": str(lease.end_date),
+            "url": lease.get_absolute_url(),
+            "color": "#10b981",
+            "extendedProps": {"type": "lease"},
+        })
+
     return JsonResponse(events, safe=False)
 
 
@@ -847,6 +872,8 @@ def sample_data_remove(request):
         "tasks.task",
         "legal.evidence",
         "legal.legalmatter",
+        "assets.leaseparty",
+        "assets.lease",
         "assets.policyholder",
         "assets.insurancepolicy",
         "assets.aircraftowner",

@@ -56,6 +56,27 @@
 
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Leases</p>
+        <a href="{% url 'assets:lease_create' %}?property={{ property.pk }}"
+           class="text-xs text-blue-400 hover:text-blue-300">+ New Lease</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for lease in property.leases.all %}
+        <div class="px-4 py-3 group flex items-center justify-between">
+            <div>
+                <a href="{{ lease.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ lease.name }}</a>
+                <span class="text-xs ml-2 {% if lease.status == 'active' %}text-green-400{% elif lease.status == 'expired' %}text-red-400{% elif lease.status == 'upcoming' %}text-blue-400{% elif lease.status == 'month_to_month' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ lease.get_status_display }}</span>
+            </div>
+            {% if lease.monthly_rent %}<span class="text-xs text-green-400">${{ lease.monthly_rent|floatformat:0|intcomma }}/mo</span>{% endif %}
+        </div>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">No leases</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <p class="text-xs text-gray-400 uppercase tracking-wide">Loans</p>
         <div class="flex items-center gap-3">
             <button hx-get="{% url 'assets:property_loan_link' property.pk %}"

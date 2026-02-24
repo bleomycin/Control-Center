@@ -94,6 +94,9 @@ class Note(models.Model):
     related_aircraft = models.ManyToManyField(
         "assets.Aircraft", blank=True, related_name="notes",
     )
+    related_leases = models.ManyToManyField(
+        "assets.Lease", blank=True, related_name="notes",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

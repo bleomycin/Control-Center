@@ -520,3 +520,48 @@
     </div>
 </div>
 {% endif %}
+
+{% if "leases" in current_asset_types %}
+{% if current_asset_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Leases ({{ leases|length }})</h3>
+{% endif %}
+{% if current_asset_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'assets:lease_bulk_delete' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+    <button onclick="const pks = Array.from(document.querySelectorAll('input[name=selected]:checked')).map(cb => cb.value); window.location.href='{% url 'assets:lease_bulk_export_csv' %}?' + pks.map(pk => 'selected=' + pk).join('&');"
+            class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_asset_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_asset_types|length == 1 %}
+                    <th class="px-4 py-3 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">Name</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">Property</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden md:table-cell">Rent</th>
+                    <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody id="table-body" class="divide-y divide-gray-700">
+                {% for lease in leases %}
+                    {% include "assets/partials/_lease_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-12 text-center">
+                    <p class="text-sm text-gray-500 mb-3">No leases found</p>
+                    <a href="{% url 'assets:lease_create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Lease</a>
+                </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}

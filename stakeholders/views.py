@@ -11,9 +11,9 @@ from django.views.decorators.http import require_POST
 
 from dashboard.choices import get_choice_label, get_choices
 from .forms import (ContactLogForm, EmployeeAssignForm, StakeholderAircraftForm,
-                     StakeholderForm, StakeholderInvestmentForm, StakeholderLoanForm,
-                     StakeholderPolicyForm, StakeholderPropertyForm, StakeholderRelationshipForm,
-                     StakeholderTabForm, StakeholderVehicleForm)
+                     StakeholderForm, StakeholderInvestmentForm, StakeholderLeaseForm,
+                     StakeholderLoanForm, StakeholderPolicyForm, StakeholderPropertyForm,
+                     StakeholderRelationshipForm, StakeholderTabForm, StakeholderVehicleForm)
 from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
 
 
@@ -205,13 +205,15 @@ class StakeholderDetailView(DetailView):
         ctx["all_legal_matters"] = obj.legal_matters.all()
 
         # Properties, investments, loans, vehicles, aircraft via through models
-        from assets.models import (PropertyOwnership, InvestmentParticipant, LoanParty,
-                                   VehicleOwner, AircraftOwner, PolicyHolder, InsurancePolicy)
+        from assets.models import (PropertyOwnership, InvestmentParticipant, LeaseParty,
+                                   LoanParty, VehicleOwner, AircraftOwner, PolicyHolder,
+                                   InsurancePolicy)
         ctx["property_ownerships"] = PropertyOwnership.objects.filter(stakeholder=obj).select_related("property")
         ctx["investment_participants"] = InvestmentParticipant.objects.filter(stakeholder=obj).select_related("investment")
         ctx["loan_parties"] = LoanParty.objects.filter(stakeholder=obj).select_related("loan")
         ctx["vehicle_ownerships"] = VehicleOwner.objects.filter(stakeholder=obj).select_related("vehicle")
         ctx["aircraft_ownerships"] = AircraftOwner.objects.filter(stakeholder=obj).select_related("aircraft")
+        ctx["lease_parties"] = LeaseParty.objects.filter(stakeholder=obj).select_related("lease")
         ctx["policyholder_roles"] = PolicyHolder.objects.filter(stakeholder=obj).select_related("policy")
         ctx["policies_as_carrier"] = InsurancePolicy.objects.filter(carrier=obj)
         ctx["policies_as_agent"] = InsurancePolicy.objects.filter(agent=obj)
@@ -246,6 +248,7 @@ class StakeholderDetailView(DetailView):
             "loans": ctx["loan_parties"].count(),
             "vehicles": ctx["vehicle_ownerships"].count(),
             "aircraft": ctx["aircraft_ownerships"].count(),
+            "leases": ctx["lease_parties"].count(),
             "policies": policy_count,
             "legal_matters": ctx["all_legal_matters"].count(),
             "tasks": ctx["all_tasks"].count(),
@@ -516,6 +519,13 @@ def relationship_graph_data(request, pk):
             label += f" ({ao.ownership_percentage}%)"
         edges.append({"source": f"s-{center.pk}", "target": f"ac-{ac.pk}", "label": label})
 
+    # Leases (via lease parties)
+    from assets.models import LeaseParty as LP2
+    for lp in LP2.objects.filter(stakeholder=center).select_related("lease"):
+        lease = lp.lease
+        add_node(f"lease-{lease.pk}", lease.name, "Lease", "barrel", lease.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"lease-{lease.pk}", "label": lp.role or "party"})
+
     # Insurance policies (as carrier, agent, or policyholder)
     from assets.models import InsurancePolicy, PolicyHolder
     for holder in PolicyHolder.objects.filter(stakeholder=center).select_related("policy"):
@@ -747,6 +757,35 @@ def policyholder_delete(request, pk):
                   {"policyholder_roles": PolicyHolder.objects.filter(stakeholder=stakeholder).select_related("policy"),
                    "policies_as_carrier": InsurancePolicy.objects.filter(carrier=stakeholder),
                    "policies_as_agent": InsurancePolicy.objects.filter(agent=stakeholder),
+                   "stakeholder": stakeholder})
+
+
+def lease_party_add(request, pk):
+    from assets.models import LeaseParty
+    stakeholder = get_object_or_404(Stakeholder, pk=pk)
+    if request.method == "POST":
+        form = StakeholderLeaseForm(request.POST)
+        if form.is_valid():
+            party = form.save(commit=False)
+            party.stakeholder = stakeholder
+            party.save()
+            return render(request, "stakeholders/partials/_sh_lease_list.html",
+                          {"lease_parties": LeaseParty.objects.filter(stakeholder=stakeholder).select_related("lease"),
+                           "stakeholder": stakeholder})
+    else:
+        form = StakeholderLeaseForm()
+    return render(request, "stakeholders/partials/_sh_lease_form.html",
+                  {"form": form, "stakeholder": stakeholder})
+
+
+def lease_party_delete(request, pk):
+    from assets.models import LeaseParty
+    party = get_object_or_404(LeaseParty, pk=pk)
+    stakeholder = party.stakeholder
+    if request.method == "POST":
+        party.delete()
+    return render(request, "stakeholders/partials/_sh_lease_list.html",
+                  {"lease_parties": LeaseParty.objects.filter(stakeholder=stakeholder).select_related("lease"),
                    "stakeholder": stakeholder})
 
 

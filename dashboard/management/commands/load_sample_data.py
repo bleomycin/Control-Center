@@ -10,8 +10,8 @@ from django.utils import timezone
 
 from stakeholders.models import Stakeholder, Relationship, ContactLog
 from assets.models import (
-    Aircraft, AircraftOwner, InsurancePolicy, Investment, Loan,
-    PolicyHolder, RealEstate, Vehicle, VehicleOwner,
+    Aircraft, AircraftOwner, InsurancePolicy, Investment, Lease, LeaseParty,
+    Loan, PolicyHolder, RealEstate, Vehicle, VehicleOwner,
 )
 from legal.models import LegalMatter, Evidence
 from tasks.models import Task, FollowUp
@@ -673,6 +673,49 @@ class Command(BaseCommand):
             )
             cashflow_pks.append(cf.pk)
 
+        self.stdout.write("Creating leases...")
+        leases = {}
+        lease_data = [
+            ("Oak Ave Residential Lease", "1200 Oak Avenue", "residential", "active",
+             today - timedelta(days=300), today + timedelta(days=65),
+             Decimal("1800.00"), Decimal("1800.00"), 1, "auto",
+             "Standard 1-year residential lease with auto-renewal clause.", Decimal("3.00")),
+            ("Elm St Unit A Lease", "450 Elm Street", "residential", "active",
+             today - timedelta(days=200), today + timedelta(days=165),
+             Decimal("1350.00"), Decimal("1350.00"), 1, "option",
+             "1-year residential lease. Tenant has option to renew for another year at same rate.", None),
+            ("Elm St Unit B Lease", "450 Elm Street", "residential", "active",
+             today - timedelta(days=300), today + timedelta(days=65),
+             Decimal("1275.00"), Decimal("1275.00"), 1, "negotiable",
+             "Lease expiring soon. Need to discuss renewal terms with tenant.", None),
+            ("Magnolia Commercial Lease", "3300 Magnolia Blvd", "commercial", "upcoming",
+             today + timedelta(days=30), today + timedelta(days=30 + 365 * 5),
+             Decimal("8500.00"), Decimal("12000.00"), 1, "negotiable",
+             "5-year NNN commercial lease. Starts after property closing.", Decimal("4.00")),
+        ]
+        lease_pks = []
+        for name, prop_name, ltype, status, start, end, rent, deposit, due_day, renewal, notes, escalation in lease_data:
+            lease = Lease.objects.create(
+                name=name, related_property=properties[prop_name],
+                lease_type=ltype, status=status,
+                start_date=start, end_date=end,
+                monthly_rent=rent, security_deposit=deposit,
+                rent_due_day=due_day, renewal_type=renewal,
+                notes_text=notes, escalation_rate=escalation,
+            )
+            leases[name] = lease
+            lease_pks.append(lease.pk)
+
+        # Add Nina Patel as Co-landlord on Magnolia lease
+        lease_party_pks = []
+        lp = LeaseParty.objects.create(
+            lease=leases["Magnolia Commercial Lease"],
+            stakeholder=stakeholders["Nina Patel"],
+            role="Co-landlord",
+            notes="Co-investor on Magnolia portfolio.",
+        )
+        lease_party_pks.append(lp.pk)
+
         self.stdout.write("Creating tags and folders...")
         tag_data = [
             ("legal", "Legal", "red"),
@@ -923,6 +966,8 @@ class Command(BaseCommand):
                     aircraft__in=aircraft_dict.values()
                 ).values_list("pk", flat=True)
             ),
+            "assets.lease": lease_pks,
+            "assets.leaseparty": lease_party_pks,
             "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
             "legal.evidence": list(
                 Evidence.objects.filter(
@@ -959,6 +1004,7 @@ class Command(BaseCommand):
             f"  Policies:       {len(manifest['assets.insurancepolicy'])}\n"
             f"  Vehicles:       {len(manifest['assets.vehicle'])}\n"
             f"  Aircraft:       {len(manifest['assets.aircraft'])}\n"
+            f"  Leases:         {len(manifest['assets.lease'])}\n"
             f"  Legal Matters:  {len(manifest['legal.legalmatter'])}\n"
             f"  Evidence:       {len(manifest['legal.evidence'])}\n"
             f"  Tasks:          {len(manifest['tasks.task'])}\n"

@@ -1,0 +1,27 @@
+{% load humanize choice_labels %}
+<tr id="lease-row-{{ lease.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ lease.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    {% endif %}
+    <td class="px-4 py-3">
+        <a href="{{ lease.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ lease.name }}</a>
+        {% if lease.related_property %}<p class="text-xs text-gray-400">{{ lease.related_property.name }}</p>{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{% if lease.related_property %}<a href="{{ lease.related_property.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ lease.related_property.name }}</a>{% else %}-{% endif %}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ lease.monthly_rent|floatformat:0|intcomma|default:"-" }}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'assets:lease_inline_status' lease.pk %}',{target:'#lease-row-{{ lease.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if lease.status == 'active' %}text-green-300
+                    {% elif lease.status == 'expired' %}text-red-300
+                    {% elif lease.status == 'upcoming' %}text-blue-300
+                    {% elif lease.status == 'month_to_month' %}text-yellow-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in lease.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if lease.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>

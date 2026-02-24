@@ -102,6 +102,19 @@ urlpatterns = [
     path("aircraft-owner/<int:pk>/delete/", views.aircraft_owner_delete, name="aircraft_owner_delete"),
     path("aircraft/bulk/delete/", views.bulk_delete_aircraft, name="aircraft_bulk_delete"),
     path("aircraft/bulk/export/", views.bulk_export_aircraft_csv, name="aircraft_bulk_export_csv"),
+    # Leases
+    path("leases/", views.LeaseListView.as_view(), name="lease_list"),
+    path("leases/<int:pk>/inline-status/", views.inline_update_lease_status, name="lease_inline_status"),
+    path("leases/export/", views.export_lease_csv, name="lease_export_csv"),
+    path("leases/create/", views.LeaseCreateView.as_view(), name="lease_create"),
+    path("leases/<int:pk>/", views.LeaseDetailView.as_view(), name="lease_detail"),
+    path("leases/<int:pk>/pdf/", views.export_pdf_lease_detail, name="lease_export_pdf"),
+    path("leases/<int:pk>/edit/", views.LeaseUpdateView.as_view(), name="lease_edit"),
+    path("leases/<int:pk>/delete/", views.LeaseDeleteView.as_view(), name="lease_delete"),
+    path("leases/<int:pk>/party/add/", views.lease_party_add, name="lease_party_add"),
+    path("lease-party/<int:pk>/delete/", views.lease_party_delete, name="lease_party_delete"),
+    path("leases/bulk/delete/", views.bulk_delete_lease, name="lease_bulk_delete"),
+    path("leases/bulk/export/", views.bulk_export_lease_csv, name="lease_bulk_export_csv"),
     # Inline notes editing for through models
     path("ownership/<int:pk>/notes/", views.ownership_notes, name="ownership_notes"),
     path("participant/<int:pk>/notes/", views.participant_notes, name="participant_notes"),
@@ -109,4 +122,5 @@ urlpatterns = [
     path("vehicle-owner/<int:pk>/notes/", views.vehicle_owner_notes, name="vehicle_owner_notes"),
     path("aircraft-owner/<int:pk>/notes/", views.aircraft_owner_notes, name="aircraft_owner_notes"),
     path("policyholder/<int:pk>/notes/", views.policyholder_notes, name="policyholder_notes"),
+    path("lease-party/<int:pk>/notes/", views.lease_party_notes, name="lease_party_notes"),
 ]
