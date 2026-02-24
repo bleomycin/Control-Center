@@ -1,35 +1,78 @@
-<div class="p-6">
-    <h2 class="text-lg font-semibold text-white mb-4">Quick Capture</h2>
-    <form hx-post="{% url 'notes:quick_capture' %}" hx-swap="none" class="space-y-4">
+{% load tag_colors %}
+<div class="p-4 sm:p-6">
+    <h2 class="text-lg font-semibold text-white mb-3">Quick Capture</h2>
+    <form hx-post="{% url 'notes:quick_capture' %}" hx-swap="none" class="space-y-3">
         {% csrf_token %}
-        {% for field in form %}
-        {% if field.name == 'stakeholder' or field.name == 'task' or field.name == 'folder' or field.name == 'tags' %}
-        {% elif field.name == 'title' or field.name == 'content' or field.name == 'date' or field.name == 'note_type' %}
+
+        {# Content first — the main thing you're here to write #}
         <div>
-            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.label }}</label>
-            {{ field }}
-            {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+            <label for="id_content" class="block text-sm font-medium text-gray-300 mb-1">Content</label>
+            {{ form.content }}
+            {% if form.content.errors %}<p class="mt-1 text-sm text-red-400">{{ form.content.errors.0 }}</p>{% endif %}
         </div>
-        {% endif %}
-        {% endfor %}
+
+        {# Title — optional, secondary #}
+        <div>
+            <label for="id_title" class="block text-sm font-medium text-gray-300 mb-1">
+                Title <span class="text-gray-500 font-normal">(optional — auto-generated if blank)</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.errors %}<p class="mt-1 text-sm text-red-400">{{ form.title.errors.0 }}</p>{% endif %}
+        </div>
+
+        {# Date + Note type — stacked on mobile, side-by-side on desktop #}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+                <label for="id_date" class="block text-sm font-medium text-gray-300 mb-1">Date</label>
+                <div class="w-fit">{{ form.date }}</div>
+            </div>
+            <div>
+                <label for="id_note_type" class="block text-sm font-medium text-gray-300 mb-1">Type</label>
+                {{ form.note_type }}
+            </div>
+        </div>
+
+        {# More options — folder, tags, stakeholder, task #}
         <details class="border border-gray-700 rounded-md">
             <summary class="px-3 py-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300">More options</summary>
             <div class="px-3 py-3 space-y-3 border-t border-gray-700">
-                {% for field in form %}
-                {% if field.name == 'stakeholder' or field.name == 'task' or field.name == 'folder' %}
                 <div>
-                    <label for="{{ field.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ field.label }}</label>
-                    {{ field }}
+                    <label for="id_folder" class="block text-xs font-medium text-gray-400 mb-1">Folder</label>
+                    {{ form.folder }}
                 </div>
-                {% elif field.name == 'tags' %}
+                {# Tag pills #}
+                {% if tags %}
                 <div>
                     <label class="block text-xs font-medium text-gray-400 mb-1">Tags</label>
-                    <div class="flex flex-wrap gap-2">{{ field }}</div>
+                    <div class="flex flex-wrap gap-1.5">
+                        {% for tag in tags %}
+                            {% tag_classes tag.color as tc %}
+                            <label class="cursor-pointer">
+                                <input type="checkbox" name="tags" value="{{ tag.pk }}"
+                                       class="hidden"
+                                       onchange="toggleTypePill(this, '{{ tc.bg }}', '{{ tc.text }}', '{{ tc.border }}')">
+                                <span class="form-tag-pill inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                             border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500"
+                                      data-active-bg="{{ tc.bg }}" data-active-text="{{ tc.text }}" data-active-border="{{ tc.border }}">
+                                    {{ tag.name }}
+                                </span>
+                            </label>
+                        {% endfor %}
+                    </div>
                 </div>
                 {% endif %}
-                {% endfor %}
+                <div>
+                    <label for="id_stakeholder" class="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
+                    {{ form.stakeholder }}
+                </div>
+                <div>
+                    <label for="id_task" class="block text-xs font-medium text-gray-400 mb-1">Task</label>
+                    {{ form.task }}
+                </div>
             </div>
         </details>
+
+        {# Save bar #}
         <div class="flex gap-3 pt-2">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Note</button>
             <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
@@ -37,11 +80,48 @@
     </form>
     <script>
         // Set date field to browser-local time (not server time)
-        const dt = document.getElementById("id_date");
-        if (dt && !dt.value) {
-            const now = new Date();
-            const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-            dt.value = local.toISOString().slice(0, 16);
+        (function() {
+            var dt = document.getElementById("id_date");
+            if (dt && !dt.value) {
+                var now = new Date();
+                var local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+                dt.value = local.toISOString().slice(0, 16);
+            }
+
+            // Auto-focus content textarea
+            var content = document.getElementById("id_content");
+            if (content) {
+                content.focus();
+            }
+
+            // Auto-expand textarea as user types
+            if (content) {
+                var maxHeight = window.innerHeight * 0.4;
+                function autoExpand() {
+                    content.style.height = 'auto';
+                    var newHeight = Math.min(content.scrollHeight, maxHeight);
+                    content.style.height = newHeight + 'px';
+                }
+                content.addEventListener('input', autoExpand);
+                content.style.overflow = 'auto';
+                content.style.resize = 'none';
+            }
+        })();
+
+        // Tag pill toggle (reuse pattern from note list filters)
+        function toggleTypePill(checkbox, bg, text, border) {
+            var span = checkbox.nextElementSibling;
+            if (checkbox.checked) {
+                bg.split(' ').forEach(function(c) { if(c) span.classList.add(c); });
+                text.split(' ').forEach(function(c) { if(c) span.classList.add(c); });
+                border.split(' ').forEach(function(c) { if(c) span.classList.add(c); });
+                span.classList.remove('border-gray-600', 'text-gray-500');
+            } else {
+                bg.split(' ').forEach(function(c) { if(c) span.classList.remove(c); });
+                text.split(' ').forEach(function(c) { if(c) span.classList.remove(c); });
+                border.split(' ').forEach(function(c) { if(c) span.classList.remove(c); });
+                span.classList.add('border-gray-600', 'text-gray-500');
+            }
         }
     </script>
 </div>

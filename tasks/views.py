@@ -216,6 +216,12 @@ class TaskCreateView(CreateView):
             initial["related_property"] = self.request.GET["property"]
         if self.request.GET.get("direction"):
             initial["direction"] = self.request.GET["direction"]
+        if self.request.GET.get("due_date"):
+            initial["due_date"] = self.request.GET["due_date"]
+        if self.request.GET.get("due_time"):
+            initial["due_time"] = self.request.GET["due_time"]
+        if self.request.GET.get("task_type"):
+            initial["task_type"] = self.request.GET["task_type"]
         return initial
 
     def form_valid(self, form):

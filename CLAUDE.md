@@ -112,7 +112,7 @@ Seven Django apps + one e2e test package, all relationally linked:
 | **tasks** | Task, FollowUp, SubTask | Deadlines, priorities, follow-ups, subtask checklists; bidirectional direction; multi-stakeholder M2M; meetings with time; kanban board; recurring tasks; grouped views |
 | **cashflow** | CashFlowEntry | Actual + projected inflows/outflows with category filtering and charts |
 | **notes** | Note, Attachment, Link, Tag, Folder | Searchable records linked to entities via M2M; external links; pinned notes, tags, folders, 3 view modes (cards/table/timeline) |
-| **e2e** | *(no models)* | Playwright browser tests — `StaticLiveServerTestCase` base class in `e2e/base.py`; 59 tests covering inline editing, HTMX swaps, form interactivity |
+| **e2e** | *(no models)* | Playwright browser tests — `StaticLiveServerTestCase` base class in `e2e/base.py`; 78 tests covering inline editing, HTMX swaps, form interactivity, calendar |
 
 ## Key Patterns
 
@@ -131,7 +131,7 @@ Seven Django apps + one e2e test package, all relationally linked:
 - **Mobile responsive**: All list pages mobile-optimized. Pattern: view toggle in header (icon-only on mobile via `hidden sm:inline`), Export CSV hidden on mobile (`hidden sm:inline-block`), 2-col grid for dropdowns (`grid grid-cols-2 sm:flex`), collapsible Filters panel with badge count, table rows hide columns on mobile and show `sm:hidden` metadata line in title cell, tabs collapse to `<select>` dropdown on mobile (`sm:hidden` / `hidden sm:flex`)
 - **Inline editing on detail pages**: Tasks and notes use HTMX display/editor partial swaps. Pattern: `_detail_title_display.html` + `_detail_title_editor.html` (pencil icon → input + Save/Cancel). Description uses click-to-edit with textarea. Metadata uses badge row → dropdown row swap. Breadcrumb updates via `HX-Trigger` event.
 - **Form layout**: Explicit field rendering (not `{% for field in form %}` loops) for precise layout control. Short fields (dropdowns, dates) in responsive 2-col grids (`grid grid-cols-1 sm:grid-cols-2 gap-4`); title/description full-width. Note form uses 3-col grid for Date/Type/Folder.
-- **Colored pill toggles**: Used for tag selection (forms + filters) and note type filters. Pattern: hidden `<input type="checkbox">` + styled `<span>` with `data-active-bg`/`data-active-text`/`data-active-border` attributes; JS `onchange` handler toggles CSS classes.
+- **Colored pill toggles**: Used for tag selection (forms + filters), note type filters, and task list filters (status/direction/type). Pattern: hidden `<input type="checkbox">` + styled `<span>` with `data-active-bg`/`data-active-text`/`data-active-border` attributes; JS `onchange` handler toggles CSS classes.
 
 ### Editable Choices (DB-backed dropdowns)
 - `ChoiceOption` model in `dashboard/models.py` — 7 categories: `entity_type`, `contact_method`, `matter_type`, `note_type`, `policy_type`, `vehicle_type`, `aircraft_type`
@@ -191,6 +191,29 @@ Seven Django apps + one e2e test package, all relationally linked:
 - Inline detail edit: title (pencil → input), description (click → textarea), metadata (badges → dropdowns) — partials in `tasks/partials/_detail_*_display.html` / `_detail_*_editor.html`; breadcrumb synced via `HX-Trigger: updateTaskBreadcrumb`
 - Note indicator: `note_count` annotation on list queryset; icon + count link on list rows (links to `#notes-section` on detail); count badge in detail Notes section header
 
+### Calendar
+- FullCalendar v6.1.11, dark theme CSS overrides in `calendar.html`; JSON events from `calendar_events()` in `dashboard/views.py`
+- Event types: task (priority-colored), meeting (blue), payment (red), followup (amber), legal (purple), hearing (violet), contact (cyan)
+- Client-side filter toggles: `cal-toggle` buttons with `hiddenTypes` object; mobile collapsible filter panel
+- `dayMaxEvents: isMobile ? 3 : 4` — desktop shows "+N more" overflow link
+- Meetings with `due_time` rendered as timed events (`allDay: false`); week view shows them in time slots
+- Week view: `slotMinTime: '07:00:00'`, `slotMaxTime: '22:00:00'`, `expandRows: true` (hides dead hours)
+- Direction arrows: `↗` (outbound) / `↙` (inbound) replace old `[OUT]`/`[IN]` text prefixes
+- Payment amounts: `$2,500 — Loan Name` when `monthly_payment` exists; falls back to `Payment: Loan Name`
+- Hover tooltips: `info.el.title = info.event.title` in `eventDidMount`
+- Click-to-create: desktop `dateClick` → `/tasks/create/?due_date=YYYY-MM-DD`; week view also passes `due_time` + `task_type=meeting`
+- `TaskCreateView.get_initial()` accepts `due_date`, `due_time`, `task_type` query params
+
+### Quick Capture (mobile-first)
+- Sidebar "Quick Note" button → HTMX modal (`notes:quick_capture`); `QuickNoteForm` in `notes/forms.py`
+- Content-first layout: content textarea above title; title optional (auto-generated from first ~50 chars of content)
+- Auto-expanding textarea: JS `oninput` resize up to 40% viewport height; auto-focus on open
+- Date + Type stacked on mobile (`grid-cols-1 sm:grid-cols-2`); date wrapped in `w-fit` to prevent stretching
+- "More options" collapsible: folder, tag pills (colored `toggleTypePill` pattern), multi-select stakeholder, task
+- Stakeholder field is `ModelMultipleChoiceField` (multi-select, adds to `note.participants`)
+- No flex layout on form — simple `space-y-3` to prevent content collapsing when "More options" opens
+- Auto-title: view does `commit=False`, generates title from `content.split("\n", 1)[0][:50]`, then `save()` + `save_m2m()`
+
 ### Notes System
 - 3 view modes: cards, list, timeline — `get_template_names()` routes by `view` param
 - `Tag` (name, slug, color) + `Folder` (name, color, sort_order); `notes/templatetags/tag_colors.py` maps color names → CSS class string literals (for Tailwind scanning)
@@ -233,7 +256,7 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - Browser shared per class (expensive to launch), fresh page per test for isolation; `url()` helper constructs full URL
 - `requirements-dev.txt` for dev-only dependencies (playwright); install browsers via `playwright install chromium`
 - Tests verify actual DOM state after HTMX swaps, JS toggle functions, and responsive behavior
-- Test files: `test_task_inline.py` (detail editing), `test_task_list.py` (list + form), `test_note_inline.py` (detail editing), `test_note_list.py` (list + form), `test_subtasks.py` (checklist interactions)
+- Test files: `test_task_inline.py` (detail editing), `test_task_list.py` (list + form), `test_note_inline.py` (detail editing), `test_note_list.py` (list + form), `test_subtasks.py` (checklist interactions), `test_calendar.py` (calendar events, filters, click-to-create)
 - `setUp()` calls `invalidate_choice_cache()` to avoid stale ChoiceOption cache across test classes
 - EasyMDE hides `<textarea>` — tests use `page.set_viewport_size({"width": 375, ...})` for mobile to skip EasyMDE
 

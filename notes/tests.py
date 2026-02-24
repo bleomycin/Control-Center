@@ -626,11 +626,26 @@ class QuickCaptureEnhancedTests(TestCase):
             "content": "x",
             "date": "2025-06-15T10:00",
             "note_type": "general",
-            "stakeholder": str(s.pk),
+            "stakeholder": [str(s.pk)],
         })
         self.assertEqual(resp.status_code, 204)
         note = Note.objects.get(title="Quick With Stakeholder")
         self.assertIn(s, note.participants.all())
+
+    def test_quick_capture_with_multiple_stakeholders(self):
+        s1 = Stakeholder.objects.create(name="Person One")
+        s2 = Stakeholder.objects.create(name="Person Two")
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "Multi Stakeholder Note",
+            "content": "x",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+            "stakeholder": [str(s1.pk), str(s2.pk)],
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.get(title="Multi Stakeholder Note")
+        self.assertIn(s1, note.participants.all())
+        self.assertIn(s2, note.participants.all())
 
     def test_quick_capture_with_task(self):
         t = Task.objects.create(title="Quick Task")
@@ -670,6 +685,43 @@ class QuickCaptureEnhancedTests(TestCase):
         self.assertEqual(resp.status_code, 204)
         note = Note.objects.get(title="Quick With Tags")
         self.assertIn(tag, note.tags.all())
+
+
+    def test_quick_capture_auto_title_from_content(self):
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "",
+            "content": "Called Marcus about the property closing",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.latest("pk")
+        self.assertEqual(note.title, "Called Marcus about the property closing")
+
+    def test_quick_capture_auto_title_truncates_long_content(self):
+        long_content = "This is a very long first line that goes well beyond the fifty character limit and should be truncated at a word boundary"
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "",
+            "content": long_content,
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.latest("pk")
+        self.assertTrue(note.title.endswith("..."))
+        self.assertTrue(len(note.title) <= 53)
+
+    def test_quick_capture_auto_title_uses_first_line(self):
+        resp = self.client.post(reverse("notes:quick_capture"), {
+            "title": "",
+            "content": "First line title\nSecond line details\nThird line",
+            "date": "2025-06-15T10:00",
+            "note_type": "general",
+        })
+        self.assertEqual(resp.status_code, 204)
+        note = Note.objects.latest("pk")
+        self.assertEqual(note.title, "First line title")
+
 
 
 class TimelineViewTests(TestCase):
