@@ -273,5 +273,25 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - E2E tests need `DJANGO_ALLOW_ASYNC_UNSAFE=true` (set in `e2e/base.py` setUp) for Playwright + LiveServerTestCase
 - EasyMDE textarea hiding: in e2e tests, use mobile viewport or target `.EasyMDEContainer` instead of the hidden `<textarea>`
 
+## UI & Frontend
+- Always verify UI changes visually using Playwright browser tests before marking mobile/responsive work as complete. Never assume CSS or layout changes work — take a screenshot or run an e2e check.
+- **Visual verification protocol**: After every template, CSS, or JS change, take Playwright screenshots at mobile (375x812) and desktop (1280x800) viewports against the running dev server. Examine for: overlapping elements, text overflow, hidden/misaligned buttons, missing backgrounds/borders, hamburger menu accessibility on mobile, HTMX-swapped content rendering correctly. Fix any issue and re-screenshot before moving on. Only report completion after both visual and test verification succeed.
+- iOS Safari is extremely finicky. Do NOT attempt CSS/JS workarounds for native input behaviors (date pickers, select styling). If a first approach fails, stop and discuss alternatives with the user rather than iterating through multiple failing approaches.
+
+## Data & Migrations
+- After implementing any feature, ensure sample data / seed data is updated to exercise the new feature in Docker. Check that migrations run before sample data is loaded, and verify M2M relationships use correct field/property name keys.
+
+## HTMX Patterns
+- When working with HTMX, always verify that elements outside the swap target (counters, progress bars, sort dropdowns, background styling) are not broken by the swap. Test the full page state after any HTMX partial update.
+
+## Deployment
+- After implementing features, always rebuild Docker and push GitHub release when the user asks. Standard deployment flow: run all tests → git push → docker build → push alpha release tag. Don't wait to be asked twice.
+
+## Feature Implementation
+- When the user asks for a feature similar to an existing one (e.g., 'like stakeholders'), study the existing implementation thoroughly before proposing a plan. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
+- **Plan-first for complex features**: For any feature touching 3+ files, read the existing implementation of the most similar feature and present a plan (models, views, templates, URLs) before writing code. Wait for user approval before implementing. This avoids wrong-approach rework.
+- **Bundle deployment into feature completion**: A feature is not "done" until all tests pass, changes are committed and pushed to GitHub, Docker is rebuilt and verified running, and a new alpha release tag is created. Don't stop at code — complete the full deploy pipeline. Use `/deploy` skill when ready.
+- **Test-driven iteration**: After each major component, write tests and run them before moving on. For any HTMX endpoint, write a test that verifies: 1) the partial renders correctly, 2) elements outside the swap target are preserved, 3) the feature works with and without sample data loaded.
+
 ## Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)
