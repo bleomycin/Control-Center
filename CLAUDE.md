@@ -284,8 +284,14 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 ## HTMX Patterns
 - When working with HTMX, always verify that elements outside the swap target (counters, progress bars, sort dropdowns, background styling) are not broken by the swap. Test the full page state after any HTMX partial update.
 
+## Repository
+- **Primary repo**: `https://github.com/bleomycin/Control-Center.git` (remote name: `origin`)
+- The old `Nexus` repo is retired — do NOT push or sync to it
+- There is only one remote (`origin`). If you see a `nexus` remote, remove it.
+
 ## Deployment
 - After implementing features, always rebuild Docker and push GitHub release when the user asks. Standard deployment flow: run all tests → git push → docker build → push alpha release tag. Don't wait to be asked twice.
+- **Production upgrade**: `upgrade.sh` in project root automates safe upgrades (backup → git pull → docker build → restart → health check → rollback on failure). Run `./upgrade.sh --help` for options. Logs saved to `persist/logs/`.
 
 ## Feature Implementation
 - When the user asks for a feature similar to an existing one (e.g., 'like stakeholders'), study the existing implementation thoroughly before proposing a plan. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
