@@ -201,6 +201,8 @@ class NoteCreateView(CreateView):
             initial["related_vehicles"] = [self.request.GET["vehicle"]]
         if self.request.GET.get("aircraft"):
             initial["related_aircraft"] = [self.request.GET["aircraft"]]
+        if self.request.GET.get("lease"):
+            initial["related_leases"] = [self.request.GET["lease"]]
         return initial
 
     def form_valid(self, form):

@@ -111,27 +111,24 @@
     </div>
 </div>
 
-{% if property.notes_text %}
-<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
-    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Internal Notes</p>
-    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ property.notes_text }}</p>
-</div>
-{% endif %}
+{% include "assets/partials/_asset_internal_notes_display.html" with asset=property edit_url=internal_notes_url %}
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'assets:property_legal_link' property.pk %}"
+                        hx-target="#legal-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'legal:create' %}?property={{ property.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New Matter</a>
+            </div>
         </div>
-        <div class="divide-y divide-gray-700">
-            {% for m in legal_matters %}
-            <a href="{{ m.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <span class="text-sm text-gray-200">{{ m.title }}</span>
-                <span class="text-xs px-2 py-0.5 rounded-full {% if m.status == 'active' %}bg-green-900/50 text-green-300{% else %}bg-gray-700 text-gray-300{% endif %}">{{ m.get_status_display }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
+        <div id="legal-form-container"></div>
+        <div id="legal-list">
+            {% include "assets/partials/_asset_legal_list.html" with legal_matters=legal_matters unlink_url_name="assets:property_legal_unlink" asset_pk=property.pk %}
         </div>
     </div>
 
@@ -155,17 +152,18 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
-            <a href="{% url 'notes:create' %}?property={{ property.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'assets:property_note_link' property.pk %}"
+                        hx-target="#note-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'notes:create' %}?property={{ property.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New Note</a>
+            </div>
         </div>
-        <div class="divide-y divide-gray-700">
-            {% for note in notes %}
-            <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <span class="text-sm text-gray-200">{{ note.title }}</span>
-                <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
+        <div id="note-form-container"></div>
+        <div id="note-list">
+            {% include "assets/partials/_asset_note_list.html" with notes=notes unlink_url_name="assets:property_note_unlink" asset_pk=property.pk %}
         </div>
     </div>
 

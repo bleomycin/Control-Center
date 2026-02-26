@@ -11,7 +11,9 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
                   "court", "filing_date", "next_hearing_date",
                   "settlement_amount", "judgment_amount", "outcome",
                   "description", "attorneys",
-                  "related_stakeholders", "related_properties"]
+                  "related_stakeholders", "related_properties",
+                  "related_investments", "related_loans", "related_vehicles",
+                  "related_aircraft", "related_policies", "related_leases"]
         widgets = {
             "filing_date": forms.DateInput(attrs={"type": "date"}),
             "next_hearing_date": forms.DateInput(attrs={"type": "date"}),
@@ -21,6 +23,12 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
             "attorneys": forms.SelectMultiple(attrs={"size": 4}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": 4}),
             "related_properties": forms.SelectMultiple(attrs={"size": 4}),
+            "related_investments": forms.SelectMultiple(attrs={"size": 4}),
+            "related_loans": forms.SelectMultiple(attrs={"size": 4}),
+            "related_vehicles": forms.SelectMultiple(attrs={"size": 4}),
+            "related_aircraft": forms.SelectMultiple(attrs={"size": 4}),
+            "related_policies": forms.SelectMultiple(attrs={"size": 4}),
+            "related_leases": forms.SelectMultiple(attrs={"size": 4}),
         }
 
     def __init__(self, *args, **kwargs):

@@ -547,9 +547,9 @@ class RealEstateDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         obj = self.object
         ctx["loans"] = obj.loans.prefetch_related("parties__stakeholder").all()
-        ctx["legal_matters"] = obj.legal_matters.all()[:5]
+        ctx["legal_matters"] = obj.legal_matters.all()
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
-        ctx["notes"] = obj.notes.all()[:5]
+        ctx["notes"] = obj.notes.all()
         cf_qs = obj.cash_flow_entries.all()
         cf_totals = cf_qs.aggregate(
             inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
@@ -561,6 +561,7 @@ class RealEstateDetailView(DetailView):
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:property_cashflow_delete"
         ctx["insurance_policies"] = obj.insurance_policies.all()
+        ctx["internal_notes_url"] = reverse("assets:property_internal_notes", args=[obj.pk])
         return ctx
 
 
@@ -652,7 +653,8 @@ class InvestmentDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
-        ctx["notes"] = self.object.notes.all()[:5]
+        ctx["notes"] = self.object.notes.all()
+        ctx["legal_matters"] = self.object.legal_matters.all()
         cf_qs = self.object.cash_flow_entries.all()
         cf_totals = cf_qs.aggregate(
             inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
@@ -663,6 +665,7 @@ class InvestmentDetailView(DetailView):
         ctx["cashflow_outflows"] = cf_totals["outflows"]
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:investment_cashflow_delete"
+        ctx["internal_notes_url"] = reverse("assets:investment_internal_notes", args=[self.object.pk])
         return ctx
 
 
@@ -781,7 +784,9 @@ class LoanDetailView(DetailView):
         ctx["cashflow_outflows"] = cf_totals["outflows"]
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:loan_cashflow_delete"
-        ctx["notes"] = self.object.notes.all()[:5]
+        ctx["notes"] = self.object.notes.all()
+        ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["internal_notes_url"] = reverse("assets:loan_internal_notes", args=[self.object.pk])
         return ctx
 
 
@@ -1044,7 +1049,9 @@ class InsurancePolicyDetailView(DetailView):
         ctx["covered_properties"] = self.object.covered_properties.all()
         ctx["covered_vehicles"] = self.object.covered_vehicles.all()
         ctx["covered_aircraft"] = self.object.covered_aircraft.all()
-        ctx["notes"] = self.object.notes.all()[:5]
+        ctx["notes"] = self.object.notes.all()
+        ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["internal_notes_url"] = reverse("assets:policy_internal_notes", args=[self.object.pk])
         return ctx
 
 
@@ -1274,7 +1281,9 @@ class VehicleDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
         ctx["insurance_policies"] = self.object.insurance_policies.all()
-        ctx["notes"] = self.object.notes.all()[:5]
+        ctx["notes"] = self.object.notes.all()
+        ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["internal_notes_url"] = reverse("assets:vehicle_internal_notes", args=[self.object.pk])
         return ctx
 
 
@@ -1489,7 +1498,9 @@ class AircraftDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         ctx["loans"] = self.object.loans.prefetch_related("parties__stakeholder").all()
         ctx["insurance_policies"] = self.object.insurance_policies.all()
-        ctx["notes"] = self.object.notes.all()[:5]
+        ctx["notes"] = self.object.notes.all()
+        ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["internal_notes_url"] = reverse("assets:aircraft_internal_notes", args=[self.object.pk])
         return ctx
 
 
@@ -1917,6 +1928,464 @@ def aircraft_loan_unlink(request, pk, loan_pk):
                   _loan_list_ctx(ac, "related_aircraft", "assets:aircraft_loan_unlink"))
 
 
+# --- Asset ↔ Note linking ---
+
+def _internal_notes_edit(request, model_class, pk, url_name):
+    """Shared handler for inline internal notes editing on asset detail pages."""
+    asset = get_object_or_404(model_class, pk=pk)
+    edit_url = reverse(url_name, args=[pk])
+    if request.method == "POST":
+        asset.notes_text = request.POST.get("notes_text", "").strip()
+        asset.save(update_fields=["notes_text"])
+        return render(request, "assets/partials/_asset_internal_notes_display.html",
+                      {"asset": asset, "edit_url": edit_url})
+    if request.GET.get("display"):
+        return render(request, "assets/partials/_asset_internal_notes_display.html",
+                      {"asset": asset, "edit_url": edit_url})
+    return render(request, "assets/partials/_asset_internal_notes_editor.html",
+                  {"asset": asset, "edit_url": edit_url})
+
+
+def property_internal_notes(request, pk):
+    return _internal_notes_edit(request, RealEstate, pk, "assets:property_internal_notes")
+
+
+def investment_internal_notes(request, pk):
+    return _internal_notes_edit(request, Investment, pk, "assets:investment_internal_notes")
+
+
+def loan_internal_notes(request, pk):
+    return _internal_notes_edit(request, Loan, pk, "assets:loan_internal_notes")
+
+
+def vehicle_internal_notes(request, pk):
+    return _internal_notes_edit(request, Vehicle, pk, "assets:vehicle_internal_notes")
+
+
+def aircraft_internal_notes(request, pk):
+    return _internal_notes_edit(request, Aircraft, pk, "assets:aircraft_internal_notes")
+
+
+def policy_internal_notes(request, pk):
+    return _internal_notes_edit(request, InsurancePolicy, pk, "assets:policy_internal_notes")
+
+
+def lease_internal_notes(request, pk):
+    return _internal_notes_edit(request, Lease, pk, "assets:lease_internal_notes")
+
+
+def _note_list_ctx(notes_qs, unlink_url_name, asset_pk):
+    """Build context for the shared _asset_note_list.html partial."""
+    return {
+        "notes": notes_qs,
+        "unlink_url_name": unlink_url_name,
+        "asset_pk": asset_pk,
+    }
+
+
+def property_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    prop = get_object_or_404(RealEstate, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_properties.add(prop)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(prop.notes.all(), "assets:property_note_unlink", prop.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:property_note_link", args=[prop.pk]),
+    })
+
+
+def property_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    prop = get_object_or_404(RealEstate, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_properties.remove(prop)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(prop.notes.all(), "assets:property_note_unlink", prop.pk))
+
+
+def investment_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    inv = get_object_or_404(Investment, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_investments.add(inv)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(inv.notes.all(), "assets:investment_note_unlink", inv.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:investment_note_link", args=[inv.pk]),
+    })
+
+
+def investment_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    inv = get_object_or_404(Investment, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_investments.remove(inv)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(inv.notes.all(), "assets:investment_note_unlink", inv.pk))
+
+
+def loan_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    loan = get_object_or_404(Loan, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_loans.add(loan)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(loan.notes.all(), "assets:loan_note_unlink", loan.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:loan_note_link", args=[loan.pk]),
+    })
+
+
+def loan_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    loan = get_object_or_404(Loan, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_loans.remove(loan)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(loan.notes.all(), "assets:loan_note_unlink", loan.pk))
+
+
+def vehicle_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_vehicles.add(vehicle)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(vehicle.notes.all(), "assets:vehicle_note_unlink", vehicle.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:vehicle_note_link", args=[vehicle.pk]),
+    })
+
+
+def vehicle_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_vehicles.remove(vehicle)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(vehicle.notes.all(), "assets:vehicle_note_unlink", vehicle.pk))
+
+
+def aircraft_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    ac = get_object_or_404(Aircraft, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_aircraft.add(ac)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(ac.notes.all(), "assets:aircraft_note_unlink", ac.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:aircraft_note_link", args=[ac.pk]),
+    })
+
+
+def aircraft_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    ac = get_object_or_404(Aircraft, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_aircraft.remove(ac)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(ac.notes.all(), "assets:aircraft_note_unlink", ac.pk))
+
+
+def policy_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    policy = get_object_or_404(InsurancePolicy, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_policies.add(policy)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(policy.notes.all(), "assets:policy_note_unlink", policy.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:policy_note_link", args=[policy.pk]),
+    })
+
+
+def policy_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    policy = get_object_or_404(InsurancePolicy, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_policies.remove(policy)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(policy.notes.all(), "assets:policy_note_unlink", policy.pk))
+
+
+def lease_note_link(request, pk):
+    from .forms import AssetNoteLinkForm
+    lease = get_object_or_404(Lease, pk=pk)
+    if request.method == "POST":
+        form = AssetNoteLinkForm(request.POST)
+        if form.is_valid():
+            note = form.cleaned_data["note"]
+            note.related_leases.add(lease)
+            return render(request, "assets/partials/_asset_note_list.html",
+                          _note_list_ctx(lease.notes.all(), "assets:lease_note_unlink", lease.pk))
+    else:
+        form = AssetNoteLinkForm()
+    return render(request, "assets/partials/_asset_note_form.html", {
+        "form": form,
+        "link_url": reverse("assets:lease_note_link", args=[lease.pk]),
+    })
+
+
+def lease_note_unlink(request, pk, note_pk):
+    from notes.models import Note
+    lease = get_object_or_404(Lease, pk=pk)
+    note = get_object_or_404(Note, pk=note_pk)
+    if request.method == "POST":
+        note.related_leases.remove(lease)
+    return render(request, "assets/partials/_asset_note_list.html",
+                  _note_list_ctx(lease.notes.all(), "assets:lease_note_unlink", lease.pk))
+
+
+# --- Asset ↔ Legal Matter linking ---
+
+def _legal_list_ctx(legal_qs, unlink_url_name, asset_pk):
+    """Build context for the shared _asset_legal_list.html partial."""
+    return {
+        "legal_matters": legal_qs,
+        "unlink_url_name": unlink_url_name,
+        "asset_pk": asset_pk,
+    }
+
+
+def property_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    prop = get_object_or_404(RealEstate, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_properties.add(prop)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(prop.legal_matters.all(), "assets:property_legal_unlink", prop.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:property_legal_link", args=[prop.pk]),
+    })
+
+
+def property_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    prop = get_object_or_404(RealEstate, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_properties.remove(prop)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(prop.legal_matters.all(), "assets:property_legal_unlink", prop.pk))
+
+
+def investment_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    inv = get_object_or_404(Investment, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_investments.add(inv)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(inv.legal_matters.all(), "assets:investment_legal_unlink", inv.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:investment_legal_link", args=[inv.pk]),
+    })
+
+
+def investment_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    inv = get_object_or_404(Investment, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_investments.remove(inv)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(inv.legal_matters.all(), "assets:investment_legal_unlink", inv.pk))
+
+
+def loan_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    loan = get_object_or_404(Loan, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_loans.add(loan)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(loan.legal_matters.all(), "assets:loan_legal_unlink", loan.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:loan_legal_link", args=[loan.pk]),
+    })
+
+
+def loan_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    loan = get_object_or_404(Loan, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_loans.remove(loan)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(loan.legal_matters.all(), "assets:loan_legal_unlink", loan.pk))
+
+
+def vehicle_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_vehicles.add(vehicle)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(vehicle.legal_matters.all(), "assets:vehicle_legal_unlink", vehicle.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:vehicle_legal_link", args=[vehicle.pk]),
+    })
+
+
+def vehicle_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    vehicle = get_object_or_404(Vehicle, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_vehicles.remove(vehicle)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(vehicle.legal_matters.all(), "assets:vehicle_legal_unlink", vehicle.pk))
+
+
+def aircraft_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    ac = get_object_or_404(Aircraft, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_aircraft.add(ac)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(ac.legal_matters.all(), "assets:aircraft_legal_unlink", ac.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:aircraft_legal_link", args=[ac.pk]),
+    })
+
+
+def aircraft_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    ac = get_object_or_404(Aircraft, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_aircraft.remove(ac)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(ac.legal_matters.all(), "assets:aircraft_legal_unlink", ac.pk))
+
+
+def policy_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    policy = get_object_or_404(InsurancePolicy, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_policies.add(policy)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(policy.legal_matters.all(), "assets:policy_legal_unlink", policy.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:policy_legal_link", args=[policy.pk]),
+    })
+
+
+def policy_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    policy = get_object_or_404(InsurancePolicy, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_policies.remove(policy)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(policy.legal_matters.all(), "assets:policy_legal_unlink", policy.pk))
+
+
+def lease_legal_link(request, pk):
+    from .forms import AssetLegalLinkForm
+    lease = get_object_or_404(Lease, pk=pk)
+    if request.method == "POST":
+        form = AssetLegalLinkForm(request.POST)
+        if form.is_valid():
+            matter = form.cleaned_data["legal_matter"]
+            matter.related_leases.add(lease)
+            return render(request, "assets/partials/_asset_legal_list.html",
+                          _legal_list_ctx(lease.legal_matters.all(), "assets:lease_legal_unlink", lease.pk))
+    else:
+        form = AssetLegalLinkForm()
+    return render(request, "assets/partials/_asset_legal_form.html", {
+        "form": form,
+        "link_url": reverse("assets:lease_legal_link", args=[lease.pk]),
+    })
+
+
+def lease_legal_unlink(request, pk, legal_pk):
+    from legal.models import LegalMatter
+    lease = get_object_or_404(Lease, pk=pk)
+    matter = get_object_or_404(LegalMatter, pk=legal_pk)
+    if request.method == "POST":
+        matter.related_leases.remove(lease)
+    return render(request, "assets/partials/_asset_legal_list.html",
+                  _legal_list_ctx(lease.legal_matters.all(), "assets:lease_legal_unlink", lease.pk))
+
+
 # --- Leases ---
 
 class LeaseListView(ListView):
@@ -1994,7 +2463,9 @@ class LeaseDetailView(DetailView):
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx["notes"] = self.object.notes.all()[:5]
+        ctx["notes"] = self.object.notes.all()
+        ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["internal_notes_url"] = reverse("assets:lease_internal_notes", args=[self.object.pk])
         return ctx
 
 

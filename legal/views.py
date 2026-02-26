@@ -71,6 +71,24 @@ class LegalMatterCreateView(CreateView):
     form_class = LegalMatterForm
     template_name = "legal/legal_form.html"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("property"):
+            initial["related_properties"] = [self.request.GET["property"]]
+        if self.request.GET.get("investment"):
+            initial["related_investments"] = [self.request.GET["investment"]]
+        if self.request.GET.get("loan"):
+            initial["related_loans"] = [self.request.GET["loan"]]
+        if self.request.GET.get("vehicle"):
+            initial["related_vehicles"] = [self.request.GET["vehicle"]]
+        if self.request.GET.get("aircraft"):
+            initial["related_aircraft"] = [self.request.GET["aircraft"]]
+        if self.request.GET.get("policy"):
+            initial["related_policies"] = [self.request.GET["policy"]]
+        if self.request.GET.get("lease"):
+            initial["related_leases"] = [self.request.GET["lease"]]
+        return initial
+
     def form_valid(self, form):
         messages.success(self.request, "Legal matter created.")
         return super().form_valid(form)

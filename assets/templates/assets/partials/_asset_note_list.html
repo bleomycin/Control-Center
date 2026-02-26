@@ -1,0 +1,23 @@
+{% load choice_labels %}
+<div class="divide-y divide-gray-700">
+    {% for note in notes %}
+    <div class="flex items-center justify-between px-4 py-3 group">
+        <a href="{{ note.get_absolute_url }}" class="flex-1">
+            <span class="text-sm text-blue-400 hover:text-blue-300">{{ note.title }}</span>
+            {% if note.note_type %}<span class="text-xs text-gray-400 ml-1">({{ note.note_type|choice_label:"note_type" }})</span>{% endif %}
+        </a>
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+            <button hx-post="{% url unlink_url_name asset_pk note.pk %}"
+                    hx-target="#note-list"
+                    hx-swap="innerHTML"
+                    hx-confirm="Unlink this note?"
+                    class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
+                &times;
+            </button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No notes linked</p>
+    {% endfor %}
+</div>

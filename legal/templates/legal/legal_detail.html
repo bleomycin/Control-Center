@@ -112,7 +112,7 @@
 </div>
 {% endif %}
 
-<!-- Properties -->
+<!-- Related Assets -->
 {% if matter.related_properties.exists %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700">
@@ -121,6 +121,84 @@
     <div class="divide-y divide-gray-700">
         {% for p in matter.related_properties.all %}
         <a href="{{ p.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ p.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if matter.related_investments.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Investments</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for inv in matter.related_investments.all %}
+        <a href="{{ inv.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ inv.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if matter.related_loans.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Loans</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for loan in matter.related_loans.all %}
+        <a href="{{ loan.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ loan.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if matter.related_vehicles.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Vehicles</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for v in matter.related_vehicles.all %}
+        <a href="{{ v.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ v.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if matter.related_aircraft.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Aircraft</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for ac in matter.related_aircraft.all %}
+        <a href="{{ ac.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ ac.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if matter.related_policies.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Insurance Policies</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for pol in matter.related_policies.all %}
+        <a href="{{ pol.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ pol.name }}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if matter.related_leases.exists %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Leases</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for lease in matter.related_leases.all %}
+        <a href="{{ lease.get_absolute_url }}" class="block px-4 py-3 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ lease.name }}</a>
         {% endfor %}
     </div>
 </div>

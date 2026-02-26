@@ -467,6 +467,14 @@ class Command(BaseCommand):
                 lm.related_properties.add(properties[p])
             legal_matters[title] = lm
 
+        # Link legal matters to other asset types (investments + vehicles available now)
+        if "Estate Plan Update" in legal_matters and investments:
+            for inv_name in list(investments.keys())[:2]:
+                legal_matters["Estate Plan Update"].related_investments.add(investments[inv_name])
+        if "Cedar Lane Boundary Dispute" in legal_matters and vehicles:
+            for v_name in list(vehicles.keys())[:1]:
+                legal_matters["Cedar Lane Boundary Dispute"].related_vehicles.add(vehicles[v_name])
+
         self.stdout.write("Creating evidence...")
         evidence_data = [
             ("Holston Eviction - 1200 Oak Ave", [
@@ -715,6 +723,11 @@ class Command(BaseCommand):
             notes="Co-investor on Magnolia portfolio.",
         )
         lease_party_pks.append(lp.pk)
+
+        # Link legal matters to leases (leases now exist)
+        if "Holston Eviction - 1200 Oak Ave" in legal_matters and leases:
+            for lease_name in list(leases.keys())[:1]:
+                legal_matters["Holston Eviction - 1200 Oak Ave"].related_leases.add(leases[lease_name])
 
         self.stdout.write("Creating tags and folders...")
         tag_data = [
