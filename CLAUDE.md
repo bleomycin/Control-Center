@@ -203,5 +203,7 @@ Seven Django apps, all relationally linked:
 
 - Sustainability hardening (Phase 1) — SQLite WAL mode + pragmas via `connection_created` signal (`dashboard/apps.py`). Gunicorn tuned from 4 workers/5s timeout to 2 workers/30s timeout. Database indexes on 8 frequently-filtered fields across 5 apps. Backup system: `python manage.py backup` (sqlite3 backup API + media → timestamped .tar.gz), `python manage.py restore <archive>` (validates, replaces DB + media, runs migrate), automated daily backup via django-q2 (keeps 7). Docker backup volume (`legacy-backups`). All 21 migrations squashed to 7 (one `0001_initial.py` per app). `.gitignore` updated for WAL files and backups dir. 14 new tests.
 
+- Comprehensive README.md — full feature documentation with URL reference tables for all 7 modules, complete management command reference (runserver, migrate, backup, restore, load_sample_data, setup_schedules, qcluster), backup/restore procedures with command examples, disaster recovery walkthrough, Docker deployment guide, environment variable reference, project directory structure, test coverage breakdown by module, and development workflow instructions.
+
 ### Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)
