@@ -41,4 +41,20 @@ SEED_DATA = [
     ("policy_type", "liability", "Liability", 5),
     ("policy_type", "life", "Life", 6),
     ("policy_type", "general", "General", 7),
+    # Vehicle types
+    ("vehicle_type", "sedan", "Sedan", 0),
+    ("vehicle_type", "suv", "SUV", 1),
+    ("vehicle_type", "truck", "Truck", 2),
+    ("vehicle_type", "motorcycle", "Motorcycle", 3),
+    ("vehicle_type", "rv", "RV", 4),
+    ("vehicle_type", "van", "Van", 5),
+    ("vehicle_type", "boat", "Boat", 6),
+    ("vehicle_type", "other", "Other", 7),
+    # Aircraft types
+    ("aircraft_type", "single_engine", "Single Engine", 0),
+    ("aircraft_type", "multi_engine", "Multi Engine", 1),
+    ("aircraft_type", "turboprop", "Turboprop", 2),
+    ("aircraft_type", "jet", "Jet", 3),
+    ("aircraft_type", "helicopter", "Helicopter", 4),
+    ("aircraft_type", "glider", "Glider", 5),
 ]

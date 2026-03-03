@@ -1,0 +1,26 @@
+{% load humanize choice_labels %}
+<tr id="vehicle-row-{{ vehicle.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ vehicle.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    {% endif %}
+    <td class="px-4 py-3">
+        <a href="{{ vehicle.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ vehicle.name }}</a>
+        {% if vehicle.year or vehicle.make %}<p class="text-xs text-gray-400">{{ vehicle.year|default:"" }} {{ vehicle.make }} {{ vehicle.model_name }}</p>{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ vehicle.vehicle_type|choice_label:"vehicle_type" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ vehicle.estimated_value|floatformat:0|intcomma|default:"-" }}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'assets:vehicle_inline_status' vehicle.pk %}',{target:'#vehicle-row-{{ vehicle.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if vehicle.status == 'active' %}text-green-300
+                    {% elif vehicle.status == 'in_dispute' %}text-red-300
+                    {% elif vehicle.status == 'stored' %}text-yellow-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in vehicle.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if vehicle.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>
