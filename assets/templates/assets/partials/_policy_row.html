@@ -1,0 +1,28 @@
+{% load humanize choice_labels %}
+<tr id="policy-row-{{ policy.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ policy.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    {% endif %}
+    <td class="px-4 py-3">
+        <a href="{{ policy.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ policy.name }}</a>
+        {% if policy.policy_number %}<p class="text-xs text-gray-400">#{{ policy.policy_number }}</p>{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ policy.policy_type|choice_label:"policy_type" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ policy.carrier.name|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ policy.premium_amount|floatformat:0|intcomma|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">{{ policy.expiration_date|date:"M j, Y"|default:"-" }}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'assets:policy_inline_status' policy.pk %}',{target:'#policy-row-{{ policy.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if policy.status == 'active' %}text-green-300
+                    {% elif policy.status == 'expired' or policy.status == 'cancelled' %}text-red-300
+                    {% elif policy.status == 'pending' %}text-yellow-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in policy.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if policy.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>

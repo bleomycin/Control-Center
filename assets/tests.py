@@ -6,8 +6,8 @@ from django.urls import reverse
 from stakeholders.models import Stakeholder
 
 from .models import (
-    AssetTab, Investment, InvestmentParticipant, Loan, LoanParty,
-    PropertyOwnership, RealEstate,
+    AssetTab, InsurancePolicy, Investment, InvestmentParticipant, Loan,
+    LoanParty, PolicyHolder, PropertyOwnership, RealEstate,
 )
 
 
@@ -489,17 +489,18 @@ class InlineStatusUpdateTests(TestCase):
 class AssetTabModelTests(TestCase):
     def test_seed_data_exists(self):
         tabs = AssetTab.objects.all()
-        self.assertEqual(tabs.count(), 4)
+        self.assertEqual(tabs.count(), 5)
         keys = list(tabs.values_list("key", flat=True))
         self.assertIn("all", keys)
         self.assertIn("properties", keys)
         self.assertIn("investments", keys)
         self.assertIn("loans", keys)
+        self.assertIn("insurance", keys)
 
     def test_builtin_tab(self):
         tab = AssetTab.objects.get(key="all")
         self.assertTrue(tab.is_builtin)
-        self.assertEqual(sorted(tab.asset_types), ["investments", "loans", "properties"])
+        self.assertEqual(sorted(tab.asset_types), ["investments", "loans", "policies", "properties"])
 
     def test_create_with_auto_key(self):
         tab = AssetTab(label="My Custom Tab", asset_types=["properties"])
@@ -659,3 +660,220 @@ class DynamicAssetTabIntegrationTests(TestCase):
     def test_settings_hub_has_asset_tabs_card(self):
         resp = self.client.get(reverse("dashboard:settings_hub"))
         self.assertContains(resp, "Manage Asset Tabs")
+
+
+class InsurancePolicyModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.carrier = Stakeholder.objects.create(name="Test Carrier", entity_type="lender")
+        cls.policy = InsurancePolicy.objects.create(
+            name="Home Policy",
+            policy_number="HP-001",
+            policy_type="homeowners",
+            status="active",
+            carrier=cls.carrier,
+            premium_amount=Decimal("2400.00"),
+            premium_frequency="annual",
+            deductible=Decimal("1000.00"),
+            coverage_limit=Decimal("500000.00"),
+        )
+        cls.stakeholder = Stakeholder.objects.create(name="Insured Person")
+        cls.holder = PolicyHolder.objects.create(
+            policy=cls.policy,
+            stakeholder=cls.stakeholder,
+            role="Named Insured",
+        )
+        cls.prop = RealEstate.objects.create(name="Insured House", address="100 Main")
+        cls.policy.covered_properties.add(cls.prop)
+
+    def test_defaults(self):
+        p = InsurancePolicy.objects.create(name="Basic Policy")
+        self.assertEqual(p.status, "active")
+        self.assertEqual(p.premium_frequency, "annual")
+        self.assertFalse(p.auto_renew)
+
+    def test_str(self):
+        self.assertEqual(str(self.policy), "Home Policy")
+
+    def test_get_absolute_url(self):
+        self.assertEqual(
+            self.policy.get_absolute_url(),
+            reverse("assets:policy_detail", kwargs={"pk": self.policy.pk}),
+        )
+
+    def test_policyholder_m2m(self):
+        self.assertIn(self.stakeholder, self.policy.stakeholders.all())
+
+    def test_covered_properties_m2m(self):
+        self.assertIn(self.prop, self.policy.covered_properties.all())
+        self.assertIn(self.policy, self.prop.insurance_policies.all())
+
+    def test_ordering(self):
+        InsurancePolicy.objects.create(name="Alpha Policy")
+        InsurancePolicy.objects.create(name="Zulu Policy")
+        names = list(InsurancePolicy.objects.values_list("name", flat=True))
+        self.assertEqual(names, sorted(names))
+
+    def test_policyholder_str(self):
+        self.assertEqual(str(self.holder), "Insured Person - Named Insured")
+
+    def test_carrier_set_null_on_delete(self):
+        carrier = Stakeholder.objects.create(name="Temp Carrier")
+        pol = InsurancePolicy.objects.create(name="Temp Policy", carrier=carrier)
+        carrier.delete()
+        pol.refresh_from_db()
+        self.assertIsNone(pol.carrier)
+
+
+class InsurancePolicyCRUDTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.carrier = Stakeholder.objects.create(name="CRUD Carrier", entity_type="lender")
+        cls.stakeholder = Stakeholder.objects.create(name="CRUD Holder", entity_type="contact")
+        cls.policy = InsurancePolicy.objects.create(
+            name="CRUD Test Policy",
+            policy_number="CTP-001",
+            policy_type="auto",
+            status="active",
+            carrier=cls.carrier,
+            premium_amount=Decimal("3600.00"),
+        )
+
+    def test_policy_list(self):
+        resp = self.client.get(reverse("assets:policy_list"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_policy_create(self):
+        resp = self.client.post(reverse("assets:policy_create"), {
+            "name": "New Policy",
+            "policy_type": "homeowners",
+            "status": "pending",
+            "premium_frequency": "annual",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(InsurancePolicy.objects.filter(name="New Policy").exists())
+
+    def test_policy_create_with_initial_stakeholder(self):
+        resp = self.client.post(reverse("assets:policy_create"), {
+            "name": "Stakeholder Policy",
+            "policy_type": "auto",
+            "status": "active",
+            "premium_frequency": "annual",
+            "initial_stakeholder": self.stakeholder.pk,
+            "initial_role": "Named Insured",
+        })
+        self.assertEqual(resp.status_code, 302)
+        pol = InsurancePolicy.objects.get(name="Stakeholder Policy")
+        holder = PolicyHolder.objects.get(policy=pol)
+        self.assertEqual(holder.stakeholder, self.stakeholder)
+        self.assertEqual(holder.role, "Named Insured")
+
+    def test_policy_detail(self):
+        resp = self.client.get(reverse("assets:policy_detail", args=[self.policy.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "CRUD Test Policy")
+
+    def test_policy_edit_hides_initial_fields(self):
+        resp = self.client.get(reverse("assets:policy_edit", args=[self.policy.pk]))
+        self.assertNotContains(resp, "Initial Policyholder")
+
+    def test_policy_csv(self):
+        resp = self.client.get(reverse("assets:policy_export_csv"))
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("Name", resp.content.decode())
+
+    def test_policy_pdf(self):
+        resp = self.client.get(reverse("assets:policy_export_pdf", args=[self.policy.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class InsurancePolicyInlineStatusTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.policy = InsurancePolicy.objects.create(
+            name="Status Test Policy", status="active",
+        )
+
+    def test_inline_status_update(self):
+        resp = self.client.post(
+            reverse("assets:policy_inline_status", args=[self.policy.pk]),
+            {"status": "expired"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.policy.refresh_from_db()
+        self.assertEqual(self.policy.status, "expired")
+        self.assertTemplateUsed(resp, "assets/partials/_policy_row.html")
+
+    def test_inline_status_invalid(self):
+        resp = self.client.post(
+            reverse("assets:policy_inline_status", args=[self.policy.pk]),
+            {"status": "bogus"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_status_404(self):
+        resp = self.client.post(
+            reverse("assets:policy_inline_status", args=[99999]),
+            {"status": "active"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+class InsurancePolicyBulkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.p1 = InsurancePolicy.objects.create(name="Bulk Policy 1", status="active")
+        cls.p2 = InsurancePolicy.objects.create(name="Bulk Policy 2", status="active")
+
+    def test_bulk_delete(self):
+        resp = self.client.post(reverse("assets:policy_bulk_delete"), {
+            "selected": [self.p1.pk, self.p2.pk],
+            "confirm": "1",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(InsurancePolicy.objects.filter(pk__in=[self.p1.pk, self.p2.pk]).exists())
+
+    def test_bulk_export(self):
+        resp = self.client.get(
+            reverse("assets:policy_bulk_export_csv"),
+            {"selected": [self.p1.pk]},
+        )
+        self.assertEqual(resp["Content-Type"], "text/csv")
+
+
+class InsurancePolicyUnifiedListTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="UL Prop", address="1 St", status="owned")
+        cls.policy = InsurancePolicy.objects.create(
+            name="UL Policy", status="active",
+            premium_amount=Decimal("1200.00"),
+        )
+
+    def test_all_tab_includes_policies(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "all"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "UL Policy")
+
+    def test_insurance_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "insurance"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "UL Policy")
+        self.assertNotContains(resp, "UL Prop")
+
+    def test_tab_counts_include_policies(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.context["tab_counts"]["policies"], 1)
+
+    def test_policies_htmx(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "insurance"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertContains(resp, "UL Policy")
+        self.assertTemplateUsed(resp, "assets/partials/_asset_tab_content.html")
+
+    def test_property_detail_shows_insurance(self):
+        self.policy.covered_properties.add(self.prop)
+        resp = self.client.get(reverse("assets:realestate_detail", args=[self.prop.pk]))
+        self.assertContains(resp, "UL Policy")

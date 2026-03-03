@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import RealEstate, Investment, Loan, PropertyOwnership, InvestmentParticipant, LoanParty
+from .models import (InsurancePolicy, Investment, Loan, LoanParty,
+                     PolicyHolder, PropertyOwnership, RealEstate, InvestmentParticipant)
 
 
 class PropertyOwnershipInline(admin.TabularInline):
@@ -42,3 +43,17 @@ class LoanAdmin(admin.ModelAdmin):
     list_filter = ["status"]
     search_fields = ["name", "borrower_description", "collateral", "notes_text"]
     inlines = [LoanPartyInline]
+
+
+class PolicyHolderInline(admin.TabularInline):
+    model = PolicyHolder
+    extra = 1
+    fields = ["stakeholder", "role", "notes"]
+
+
+@admin.register(InsurancePolicy)
+class InsurancePolicyAdmin(admin.ModelAdmin):
+    list_display = ["name", "policy_number", "policy_type", "carrier", "premium_amount", "status", "expiration_date"]
+    list_filter = ["status", "policy_type"]
+    search_fields = ["name", "policy_number", "notes_text"]
+    inlines = [PolicyHolderInline]
