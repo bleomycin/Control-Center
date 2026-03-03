@@ -126,11 +126,6 @@ class TaskListView(ListView):
                 return ["tasks/partials/_kanban_board.html"]
             if group_by:
                 return ["tasks/partials/_grouped_table_view.html"]
-            # Sort headers target #task-table-body — return just rows
-            hx_target = self.request.headers.get("HX-Target", "")
-            if hx_target == "task-table-body":
-                return ["tasks/partials/_task_table_rows.html"]
-            # Filters/view switch target #task-content — return full table
             return ["tasks/partials/_table_view.html"]
         return [self.template_name]
 

@@ -7,7 +7,7 @@
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide w-8"></th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                         <a href="#" hx-get="{% url 'tasks:list' %}?sort=title&dir={% if current_sort == 'title' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
-                           hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
                             Title
                             {% if current_sort == "title" %}
@@ -18,7 +18,7 @@
                     </th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">
                         <a href="#" hx-get="{% url 'tasks:list' %}?sort=status&dir={% if current_sort == 'status' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
-                           hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
                             Status
                             {% if current_sort == "status" %}
@@ -29,7 +29,7 @@
                     </th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden sm:table-cell">
                         <a href="#" hx-get="{% url 'tasks:list' %}?sort=priority&dir={% if current_sort == 'priority' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
-                           hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
                             Priority
                             {% if current_sort == "priority" %}
@@ -40,7 +40,7 @@
                     </th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden md:table-cell">
                         <a href="#" hx-get="{% url 'tasks:list' %}?sort=due_date&dir={% if current_sort == 'due_date' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
-                           hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
                             Due
                             {% if current_sort == "due_date" %}
@@ -52,7 +52,7 @@
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden lg:table-cell">Stakeholder</th>
                     <th class="px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide hidden xl:table-cell">
                         <a href="#" hx-get="{% url 'tasks:list' %}?sort=created_at&dir={% if current_sort == 'created_at' and current_dir != 'asc' %}asc{% else %}desc{% endif %}"
-                           hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                            class="hover:text-gray-200 cursor-pointer inline-flex items-center gap-1">
                             Created
                             {% if current_sort == "created_at" %}
