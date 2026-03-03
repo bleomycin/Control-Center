@@ -28,6 +28,7 @@ urlpatterns = [
     path("tags/<int:pk>/edit/", views.tag_edit, name="tag_edit"),
     path("tags/<int:pk>/delete/", views.tag_delete, name="tag_delete"),
     # Folder management
+    path("folders/tabs/", views.folder_tabs, name="folder_tabs"),
     path("folders/", views.folder_list, name="folder_list"),
     path("folders/add/", views.folder_add, name="folder_add"),
     path("folders/<int:pk>/edit/", views.folder_edit, name="folder_edit"),
