@@ -118,6 +118,7 @@ Seven Django apps, all relationally linked:
 - **Bulk ops**: Select-all + per-row checkboxes + sticky bulk bar. `static/js/bulk-actions.js` uses delegated events (works after HTMX swaps).
 - **Exports**: CSV via `legacy/export.py`; PDF via `legacy/pdf_export.py` (reportlab platypus) with section types: "info", "table", "text"
 - **Button colours**: Detail pages: purple (PDF), blue (Edit), green (Complete), red (Delete). List pages: purple (export), blue (+ New).
+- **Dropdown menus**: Multi-type asset tabs use `[data-dropdown]` toggle pattern (`toggleDropdown()`/`closeAllDropdowns()` in `asset_list.html`); single-type tabs render flat buttons instead.
 - **Currency**: `django.contrib.humanize` `intcomma` filter everywhere
 
 ### Editable Choices (DB-backed dropdowns)
