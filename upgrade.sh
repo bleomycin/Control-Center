@@ -382,6 +382,25 @@ restart_container() {
 
 # ─── Health check ─────────────────────────────────────────────────────────────
 
+_get_container_url() {
+    # Get the container's internal IP via docker inspect so the health check
+    # works even without host port mapping (e.g., behind Caddy reverse proxy).
+    local cid
+    cid=$(docker compose ps -q web 2>/dev/null)
+    if [[ -z "$cid" ]]; then
+        echo ""
+        return
+    fi
+    local ip
+    ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$cid" 2>/dev/null)
+    if [[ -n "$ip" ]]; then
+        echo "http://${ip}:${APP_PORT}/"
+    else
+        # Fallback to localhost if inspect fails
+        echo "http://localhost:${APP_PORT}/"
+    fi
+}
+
 health_check() {
     step "Health check (timeout: ${HEALTH_TIMEOUT}s)"
 
@@ -392,19 +411,14 @@ health_check() {
 
     local elapsed=0
     while [[ $elapsed -lt $HEALTH_TIMEOUT ]]; do
+        local url
+        url=$(_get_container_url)
         local http_code
-        # Exec inside the container — works regardless of host port mapping
-        # (e.g., behind Caddy reverse proxy with no ports: exposed).
-        # Uses Python since python:3.12-slim has no curl.
-        http_code=$(docker compose exec -T web python -c "
-import urllib.request
-try:
-    r = urllib.request.urlopen('http://localhost:${APP_PORT}/')
-    print(r.status)
-except Exception:
-    print('000')
-" 2>/dev/null || echo "000")
-        http_code=$(echo "$http_code" | tr -d '[:space:]')
+        if [[ -n "$url" ]]; then
+            http_code=$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+        else
+            http_code="000"
+        fi
 
         if [[ "$http_code" =~ ^(200|301|302)$ ]]; then
             success "Application responding (HTTP $http_code) after ${elapsed}s"
@@ -482,16 +496,14 @@ rollback() {
     log "Verifying rollback..."
     local elapsed=0
     while [[ $elapsed -lt 30 ]]; do
+        local url
+        url=$(_get_container_url)
         local http_code
-        http_code=$(docker compose exec -T web python -c "
-import urllib.request
-try:
-    r = urllib.request.urlopen('http://localhost:${APP_PORT}/')
-    print(r.status)
-except Exception:
-    print('000')
-" 2>/dev/null || echo "000")
-        http_code=$(echo "$http_code" | tr -d '[:space:]')
+        if [[ -n "$url" ]]; then
+            http_code=$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+        else
+            http_code="000"
+        fi
         if [[ "$http_code" =~ ^(200|301|302)$ ]]; then
             success "Rollback successful — application running on ${OLD_SHA:0:12}"
             return 0
