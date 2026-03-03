@@ -333,8 +333,13 @@ def bulk_export_csv(request):
         ("status", "Status"),
         ("priority", "Priority"),
         ("due_date", "Due Date"),
+        ("_due_time_str", "Time"),
     ]
-    return do_export(qs, fields, "tasks_selected")
+    tasks_list = []
+    for task in qs:
+        task._due_time_str = task.due_time.strftime("%-I:%M %p") if task.due_time else ""
+        tasks_list.append(task)
+    return do_export(tasks_list, fields, "tasks_selected")
 
 
 def bulk_complete(request):
