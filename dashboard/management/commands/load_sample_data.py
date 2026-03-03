@@ -751,6 +751,7 @@ class Command(BaseCommand):
             ("Properties", "blue", 2),
             ("Investments", "green", 3),
             ("Meetings", "purple", 4),
+            ("Healthcare", "cyan", 5),
         ]
         folders = {}
         for name, color, order in folder_data:

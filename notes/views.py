@@ -205,16 +205,26 @@ class NoteCreateView(CreateView):
             initial["related_aircraft"] = [self.request.GET["aircraft"]]
         if self.request.GET.get("lease"):
             initial["related_leases"] = [self.request.GET["lease"]]
+        healthcare_linked = False
         if self.request.GET.get("provider"):
             initial["related_providers"] = [self.request.GET["provider"]]
+            healthcare_linked = True
         if self.request.GET.get("prescription"):
             initial["related_prescriptions"] = [self.request.GET["prescription"]]
+            healthcare_linked = True
         if self.request.GET.get("appointment"):
             initial["related_appointments"] = [self.request.GET["appointment"]]
+            healthcare_linked = True
         if self.request.GET.get("visit"):
             initial["related_visits"] = [self.request.GET["visit"]]
+            healthcare_linked = True
         if self.request.GET.get("condition"):
             initial["related_conditions"] = [self.request.GET["condition"]]
+            healthcare_linked = True
+        if healthcare_linked and "folder" not in initial:
+            hc_folder = Folder.objects.filter(name="Healthcare").first()
+            if hc_folder:
+                initial["folder"] = hc_folder
         return initial
 
     def form_valid(self, form):
