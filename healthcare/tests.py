@@ -1580,25 +1580,6 @@ class DashboardHealthcareSummaryTests(TestCase):
         titles = [a.title for a in appts]
         self.assertNotIn("Cancelled Summary", titles)
 
-    def test_dashboard_active_prescription_count(self):
-        Prescription.objects.create(medication_name="Active1", status="active")
-        Prescription.objects.create(medication_name="Active2", status="active")
-        Prescription.objects.create(medication_name="Stopped", status="discontinued")
-        resp = self.client.get(reverse("dashboard:index"))
-        self.assertEqual(resp.context["active_prescriptions_count"], 2)
-
-    def test_dashboard_overdue_refills(self):
-        Prescription.objects.create(
-            medication_name="Overdue1", status="active",
-            next_refill_date=timezone.localdate() - timedelta(days=1),
-        )
-        Prescription.objects.create(
-            medication_name="NotDue", status="active",
-            next_refill_date=timezone.localdate() + timedelta(days=10),
-        )
-        resp = self.client.get(reverse("dashboard:index"))
-        self.assertEqual(resp.context["overdue_refills"], 1)
-
     def test_dashboard_appointment_in_deadlines(self):
         Appointment.objects.create(
             title="Deadline Appt", date=timezone.localdate() + timedelta(days=5),

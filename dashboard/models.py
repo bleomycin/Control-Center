@@ -122,6 +122,33 @@ class BackupSettings(models.Model):
         return obj
 
 
+class CalendarFeedSettings(models.Model):
+    """Singleton model for calendar ICS feed configuration. Always use pk=1."""
+
+    enabled = models.BooleanField("Enable calendar feed", default=False)
+    token = models.CharField("Feed token", max_length=64, blank=True, default="")
+
+    class Meta:
+        verbose_name = "Calendar Feed Settings"
+        verbose_name_plural = "Calendar Feed Settings"
+
+    def __str__(self):
+        return "Calendar Feed Settings"
+
+    @classmethod
+    def load(cls):
+        """Return the singleton instance, creating it if needed."""
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def regenerate_token(self):
+        import secrets
+
+        self.token = secrets.token_urlsafe(32)
+        self.save(update_fields=["token"])
+        return self.token
+
+
 class SampleDataStatus(models.Model):
     """Singleton model tracking whether sample data is loaded. Always use pk=1."""
 

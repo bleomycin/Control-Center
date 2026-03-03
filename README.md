@@ -24,6 +24,7 @@ A self-hosted personal management system built with Django. Designed as a single
 - [CSV & PDF Export](#csv--pdf-export)
 - [Search & Filtering](#search--filtering)
 - [Calendar](#calendar)
+- [Calendar Feed (ICS)](#calendar-feed-ics)
 - [Database Configuration](#database-configuration)
 - [Docker Deployment](#docker-deployment)
 - [Upgrading](#upgrading)
@@ -918,6 +919,63 @@ FullCalendar 6.x with color-coded events:
 - Task events prefixed with `[OUT]`/`[IN]` for directional tasks
 - JSON endpoint at `/calendar/events/` with `start`/`end` date filtering
 - Clickable events link to detail pages
+
+---
+
+## Calendar Feed (ICS)
+
+Subscribe to your Control Center calendar from any app that supports ICS feeds — iPhone, Google Calendar, macOS Calendar, Outlook, etc. Events are read-only; changes must be made in Control Center.
+
+### Setup
+
+1. Go to **Settings → Calendar Feed**
+2. Click **Enable**
+3. Copy the generated feed URL (contains a secret token)
+4. Subscribe in your calendar app:
+
+| App | Steps |
+|-----|-------|
+| **iPhone / iPad** | Settings → Apps → Calendar → Calendar Accounts → Add Account → Other → Add Subscribed Calendar → paste URL |
+| **Google Calendar** | Other calendars (+) → From URL → paste URL |
+| **macOS Calendar** | File → New Calendar Subscription → paste URL |
+
+### Feed Details
+
+- **Endpoint:** `/calendar/feed.ics?token=<secret>`
+- **Window:** 30 days past through 90 days ahead
+- **Format:** Standard iCalendar (RFC 5545)
+- **Auth:** Secret token in URL query parameter — no login required
+
+### Events Included
+
+| Event Type | Source |
+|------------|--------|
+| Tasks & meetings | `Task.due_date` / `Task.due_time` |
+| Loan payments | `Loan.next_payment_date` |
+| Follow-ups | `FollowUp.outreach_date` |
+| Legal matters & hearings | `LegalMatter.filing_date` / `next_hearing_date` |
+| Contact follow-ups | `ContactLog.follow_up_date` |
+| Healthcare appointments | `Appointment.date` |
+| Prescription refills | `Prescription.next_refill_date` |
+| Lease expiry dates | `Lease.end_date` |
+
+### iOS Fetch Behavior
+
+iOS polls subscribed calendars on a configurable schedule (Settings → Apps → Calendar → Fetch):
+
+| Setting | Behavior |
+|---------|----------|
+| **Automatically** (default) | Fetches only when on WiFi **and** charging |
+| **Every 15 / 30 / 60 minutes** | Fetches on any connection |
+| **Manually** | Only when you open Calendar and pull to refresh |
+
+The "Automatically" setting works well if your server is only reachable on your home WiFi — the phone will sync when you're home and charging, and skip requests when you're away.
+
+### Token Management
+
+- Click **Regenerate** in settings to create a new token (invalidates the old URL)
+- The token is a 32-byte URL-safe random string
+- Anyone with the feed URL can see your calendar events — treat it like a password
 
 ---
 

@@ -306,6 +306,7 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - **Plan-first for complex features**: For any feature touching 3+ files, read the existing implementation of the most similar feature and present a plan (models, views, templates, URLs) before writing code. Wait for user approval before implementing. This avoids wrong-approach rework.
 - **Bundle deployment into feature completion**: A feature is not "done" until all tests pass, changes are committed and pushed to GitHub, Docker is rebuilt and verified running, and a new alpha release tag is created. Don't stop at code — complete the full deploy pipeline. Use `/deploy` skill when ready.
 - **Test-driven iteration**: After each major component, write tests and run them before moving on. For any HTMX endpoint, write a test that verifies: 1) the partial renders correctly, 2) elements outside the swap target are preserved, 3) the feature works with and without sample data loaded.
+- **Always work in parallel**: Maximize use of parallel tool calls and background agents. Run independent operations concurrently (e.g., tests + Docker rebuild, multiple file reads, research agents). Never do sequentially what can be done in parallel.
 
 ## Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)

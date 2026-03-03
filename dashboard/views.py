@@ -577,6 +577,184 @@ def _parse_date(value):
         return None
 
 
+def calendar_feed(request):
+    """ICS feed endpoint for subscribing from iPhone/Google Calendar."""
+    from datetime import datetime
+    from django.http import HttpResponse
+    from icalendar import Calendar, Event
+    from dashboard.models import CalendarFeedSettings
+
+    settings = CalendarFeedSettings.load()
+    if not settings.enabled or not settings.token:
+        return HttpResponse("Feed not enabled", status=404)
+    if request.GET.get("token") != settings.token:
+        return HttpResponse("Invalid token", status=403)
+
+    cal = Calendar()
+    cal.add("prodid", "-//Control Center//EN")
+    cal.add("version", "2.0")
+    cal.add("calscale", "GREGORIAN")
+    cal.add("method", "PUBLISH")
+    cal.add("x-wr-calname", "Control Center")
+
+    today = timezone.localdate()
+    window_start = today - timedelta(days=30)
+    window_end = today + timedelta(days=90)
+
+    # Tasks (non-meetings)
+    tasks = Task.objects.exclude(status="complete").filter(
+        due_date__isnull=False, due_date__gte=window_start, due_date__lte=window_end,
+    )
+    direction_prefixes = {"outbound": "\u2197 ", "inbound": "\u2199 "}
+    for task in tasks:
+        prefix = direction_prefixes.get(task.direction, "")
+        if task.is_meeting:
+            ev = Event()
+            ev.add("summary", f"{prefix}{task.title}")
+            if task.due_time:
+                ev.add("dtstart", datetime.combine(task.due_date, task.due_time))
+            else:
+                ev.add("dtstart", task.due_date)
+            ev.add("uid", f"task-{task.pk}@controlcenter")
+            cal.add_component(ev)
+        else:
+            ev = Event()
+            ev.add("summary", f"{prefix}{task.title}")
+            ev.add("dtstart", task.due_date)
+            ev.add("uid", f"task-{task.pk}@controlcenter")
+            cal.add_component(ev)
+
+    # Loan payments
+    loans = Loan.objects.filter(
+        status="active", next_payment_date__isnull=False,
+        next_payment_date__gte=window_start, next_payment_date__lte=window_end,
+    )
+    for loan in loans:
+        ev = Event()
+        title = f"${loan.monthly_payment:,.0f} — {loan.name}" if loan.monthly_payment else f"Payment: {loan.name}"
+        ev.add("summary", title)
+        ev.add("dtstart", loan.next_payment_date)
+        ev.add("uid", f"loan-{loan.pk}@controlcenter")
+        cal.add_component(ev)
+
+    # Follow-ups
+    followups = FollowUp.objects.filter(
+        response_received=False,
+    ).select_related("stakeholder")
+    for fu in followups:
+        fu_date = timezone.localdate(fu.outreach_date)
+        if fu_date < window_start or fu_date > window_end:
+            continue
+        ev = Event()
+        ev.add("summary", f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}")
+        ev.add("dtstart", fu_date)
+        ev.add("uid", f"followup-{fu.pk}@controlcenter")
+        cal.add_component(ev)
+
+    # Legal matters
+    matters = LegalMatter.objects.exclude(status="resolved")
+    for matter in matters:
+        if matter.filing_date and window_start <= matter.filing_date <= window_end:
+            ev = Event()
+            ev.add("summary", f"Legal: {matter.title}")
+            ev.add("dtstart", matter.filing_date)
+            ev.add("uid", f"legal-{matter.pk}@controlcenter")
+            cal.add_component(ev)
+        if matter.next_hearing_date and window_start <= matter.next_hearing_date <= window_end:
+            ev = Event()
+            ev.add("summary", f"Hearing: {matter.title}")
+            ev.add("dtstart", matter.next_hearing_date)
+            ev.add("uid", f"hearing-{matter.pk}@controlcenter")
+            cal.add_component(ev)
+
+    # Contact follow-ups
+    contacts = ContactLog.objects.filter(
+        follow_up_needed=True, follow_up_date__isnull=False,
+        follow_up_date__gte=window_start, follow_up_date__lte=window_end,
+    ).select_related("stakeholder")
+    for log in contacts:
+        ev = Event()
+        ev.add("summary", f"Contact: {log.stakeholder.name if log.stakeholder else 'Unknown'}")
+        ev.add("dtstart", log.follow_up_date)
+        ev.add("uid", f"contact-{log.pk}@controlcenter")
+        cal.add_component(ev)
+
+    # Healthcare appointments
+    from healthcare.models import Appointment as HcAppointment, Prescription as HcPrescription
+    hc_appts = HcAppointment.objects.exclude(
+        status__in=["completed", "cancelled"],
+    ).filter(
+        date__gte=window_start, date__lte=window_end,
+    ).select_related("provider")
+    for appt in hc_appts:
+        ev = Event()
+        ev.add("summary", appt.title)
+        if appt.time:
+            ev.add("dtstart", datetime.combine(appt.date, appt.time))
+        else:
+            ev.add("dtstart", appt.date)
+        ev.add("uid", f"appt-{appt.pk}@controlcenter")
+        cal.add_component(ev)
+
+    # Prescription refills
+    hc_refills = HcPrescription.objects.filter(
+        status="active", next_refill_date__isnull=False,
+        next_refill_date__gte=window_start, next_refill_date__lte=window_end,
+    )
+    for rx in hc_refills:
+        ev = Event()
+        ev.add("summary", f"Refill: {rx.medication_name}")
+        ev.add("dtstart", rx.next_refill_date)
+        ev.add("uid", f"refill-{rx.pk}@controlcenter")
+        cal.add_component(ev)
+
+    # Lease expiry
+    from assets.models import Lease
+    lease_qs = Lease.objects.filter(
+        status__in=["active", "month_to_month"],
+        end_date__isnull=False,
+        end_date__gte=window_start, end_date__lte=window_end,
+    )
+    for lease in lease_qs:
+        ev = Event()
+        title = f"${lease.monthly_rent:,.0f}/mo — {lease.name}" if lease.monthly_rent else f"Lease expires: {lease.name}"
+        ev.add("summary", title)
+        ev.add("dtstart", lease.end_date)
+        ev.add("uid", f"lease-{lease.pk}@controlcenter")
+        cal.add_component(ev)
+
+    response = HttpResponse(cal.to_ical(), content_type="text/calendar; charset=utf-8")
+    response["Content-Disposition"] = 'inline; filename="controlcenter.ics"'
+    return response
+
+
+def calendar_feed_settings(request):
+    """Settings page for the ICS calendar feed."""
+    from dashboard.models import CalendarFeedSettings
+
+    settings = CalendarFeedSettings.load()
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "toggle":
+            settings.enabled = not settings.enabled
+            if settings.enabled and not settings.token:
+                settings.regenerate_token()
+            settings.save()
+        elif action == "regenerate":
+            settings.regenerate_token()
+        return redirect("dashboard:calendar_feed_settings")
+
+    feed_url = ""
+    if settings.enabled and settings.token:
+        feed_url = request.build_absolute_uri(
+            f"/calendar/feed.ics?token={settings.token}"
+        )
+    return render(request, "dashboard/calendar_feed_settings.html", {
+        "settings": settings,
+        "feed_url": feed_url,
+    })
+
+
 def calendar_events(request):
     """JSON endpoint for FullCalendar events."""
     start = _parse_date(request.GET.get("start", ""))
