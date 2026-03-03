@@ -47,6 +47,8 @@
             <div class="flex justify-between"><dt class="text-gray-400">Next Payment</dt><dd class="text-gray-200">{{ loan.next_payment_date|date:"M j, Y"|default:"N/A" }}</dd></div>
             <div class="flex justify-between"><dt class="text-gray-400">Maturity Date</dt><dd class="text-gray-200">{{ loan.maturity_date|date:"M j, Y"|default:"N/A" }}</dd></div>
             {% if loan.borrower_description %}<div class="flex justify-between"><dt class="text-gray-400">Borrower</dt><dd class="text-gray-200">{{ loan.borrower_description }}</dd></div>{% endif %}
+            {% if loan.related_property %}<div class="flex justify-between"><dt class="text-gray-400">Property</dt><dd><a href="{{ loan.related_property.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.related_property.name }}</a></dd></div>{% endif %}
+            {% if loan.related_investment %}<div class="flex justify-between"><dt class="text-gray-400">Investment</dt><dd><a href="{{ loan.related_investment.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.related_investment.name }}</a></dd></div>{% endif %}
         </dl>
     </div>
     {% if loan.collateral %}

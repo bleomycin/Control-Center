@@ -1,9 +1,22 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
+from stakeholders.models import Stakeholder
 from .models import RealEstate, Investment, Loan, PropertyOwnership, InvestmentParticipant, LoanParty
 
 
 class RealEstateForm(TailwindFormMixin, forms.ModelForm):
+    initial_stakeholder = forms.ModelChoiceField(
+        queryset=Stakeholder.objects.all(), required=False, label="Initial Owner",
+    )
+    initial_role = forms.CharField(max_length=100, required=False, label="Role")
+    initial_percentage = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Ownership %",
+    )
+
+    field_order = ["name", "address", "jurisdiction", "property_type",
+                   "estimated_value", "acquisition_date", "status", "notes_text",
+                   "initial_stakeholder", "initial_role", "initial_percentage"]
+
     class Meta:
         model = RealEstate
         fields = ["name", "address", "jurisdiction", "property_type",
@@ -25,6 +38,17 @@ class PropertyOwnershipForm(TailwindFormMixin, forms.ModelForm):
 
 
 class InvestmentForm(TailwindFormMixin, forms.ModelForm):
+    initial_stakeholder = forms.ModelChoiceField(
+        queryset=Stakeholder.objects.all(), required=False, label="Initial Participant",
+    )
+    initial_role = forms.CharField(max_length=100, required=False, label="Role")
+    initial_percentage = forms.DecimalField(
+        max_digits=5, decimal_places=2, required=False, label="Ownership %",
+    )
+
+    field_order = ["name", "investment_type", "institution", "current_value", "notes_text",
+                   "initial_stakeholder", "initial_role", "initial_percentage"]
+
     class Meta:
         model = Investment
         fields = ["name", "investment_type", "institution", "current_value", "notes_text"]
@@ -45,7 +69,8 @@ class InvestmentParticipantForm(TailwindFormMixin, forms.ModelForm):
 class LoanForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Loan
-        fields = ["name", "borrower_description", "original_amount",
+        fields = ["name", "related_property", "related_investment",
+                  "borrower_description", "original_amount",
                   "current_balance", "interest_rate", "monthly_payment",
                   "next_payment_date", "maturity_date", "collateral", "status", "notes_text"]
         widgets = {
@@ -53,6 +78,10 @@ class LoanForm(TailwindFormMixin, forms.ModelForm):
             "maturity_date": forms.DateInput(attrs={"type": "date"}),
             "collateral": forms.Textarea(attrs={"rows": 2}),
             "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+        labels = {
+            "related_property": "Property",
+            "related_investment": "Investment",
         }
 
 
