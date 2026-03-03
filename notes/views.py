@@ -89,7 +89,16 @@ class NoteCreateView(CreateView):
 
     def get_initial(self):
         initial = super().get_initial()
-        initial["date"] = self.request.GET.get("date") or timezone.now()
+        date_param = self.request.GET.get("date", "").strip()
+        if date_param:
+            from datetime import datetime as dt
+            try:
+                parsed = dt.fromisoformat(date_param)
+                initial["date"] = timezone.make_aware(parsed) if timezone.is_naive(parsed) else parsed
+            except (ValueError, TypeError):
+                initial["date"] = timezone.now()
+        else:
+            initial["date"] = timezone.now()
         for field in ("title", "content", "note_type"):
             if self.request.GET.get(field):
                 initial[field] = self.request.GET[field]
