@@ -7,12 +7,23 @@
 {% endif %}
 {% endblock %}
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex items-center justify-between mb-4 sm:mb-6">
     <div>
         <h1 class="text-2xl font-bold text-white">Tasks</h1>
     </div>
-    <div class="flex flex-wrap items-center gap-2">
-        <a href="{% url 'tasks:export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
+    <div class="flex items-center gap-1.5 sm:gap-2">
+        <!-- View toggle: visible on all sizes, in the header row -->
+        <div class="flex items-center gap-1">
+            <button type="button" onclick="switchView('table')" id="view-btn-table"
+                    class="px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-md transition-colors {% if current_view == 'table' %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+                <svg class="w-3.5 h-3.5 inline-block sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg><span class="hidden sm:inline">Table</span>
+            </button>
+            <button type="button" onclick="switchView('board')" id="view-btn-board"
+                    class="px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-md transition-colors {% if current_view == 'board' %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
+                <svg class="w-3.5 h-3.5 inline-block sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg><span class="hidden sm:inline">Board</span>
+            </button>
+        </div>
+        <a href="{% url 'tasks:export_csv' %}" class="hidden sm:inline-block px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
         <a href="{% url 'tasks:create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ New</a>
     </div>
 </div>
@@ -20,94 +31,94 @@
 {% with filter_count=selected_statuses|length|add:selected_directions|length|add:selected_types|length %}
 <form id="filter-form" onsubmit="return false;">
     <input type="hidden" name="view" value="{{ current_view }}">
-    <!-- Always-visible row: search + dropdowns + filters button + view toggle -->
-    <div class="flex flex-col sm:flex-row gap-3 mb-3">
+    <!-- Search bar -->
+    <div class="mb-2 sm:mb-3">
         <input type="text" name="q" value="{{ search_query }}" placeholder="Search tasks..."
                hx-get="{% url 'tasks:list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-               class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
-        <div class="flex flex-wrap gap-2">
-            <select name="priority" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                    class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
-                <option value="">All Priorities</option>
-                {% for val, label in priority_choices %}<option value="{{ val }}" {% if selected_priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-            </select>
-            <select name="stakeholder" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                    class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
-                <option value="">All People</option>
-                {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_stakeholder == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
-            </select>
-            <select name="group" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                    class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
-                {% for val, label in group_choices %}<option value="{{ val }}" {% if current_group == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-            </select>
-            <button type="button" id="filter-toggle-btn" onclick="toggleFilters()"
-                    class="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors {% if selected_statuses or selected_directions or selected_types or date_from or date_to %}bg-blue-600/20 border border-blue-500 text-blue-300{% else %}bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600{% endif %}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
-                Filters
-                {% if filter_count or date_from or date_to %}
-                <span class="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-500 text-white rounded-full" id="filter-count">{% if filter_count %}{{ filter_count }}{% else %}&bull;{% endif %}</span>
-                {% endif %}
-            </button>
-            <div class="flex items-center gap-1 sm:ml-auto">
-                <button type="button" onclick="switchView('table')" id="view-btn-table"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {% if current_view == 'table' %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
-                    <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>Table
-                </button>
-                <button type="button" onclick="switchView('board')" id="view-btn-board"
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors {% if current_view == 'board' %}bg-blue-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
-                    <svg class="w-3.5 h-3.5 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>Board
-                </button>
-            </div>
-        </div>
+               class="w-full rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
+    </div>
+    <!-- Dropdowns row: 2-col grid on mobile, inline flex on desktop -->
+    <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:gap-2 mb-2 sm:mb-3">
+        <select name="priority" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
+            <option value="">All Priorities</option>
+            {% for val, label in priority_choices %}<option value="{{ val }}" {% if selected_priority == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <select name="stakeholder" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
+            <option value="">All People</option>
+            {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_stakeholder == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+        <select name="group" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
+            {% for val, label in group_choices %}<option value="{{ val }}" {% if current_group == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        <button type="button" id="filter-toggle-btn" onclick="toggleFilters()"
+                class="inline-flex items-center justify-center gap-1.5 px-2 py-2 sm:px-3 text-sm font-medium rounded-md transition-colors {% if selected_statuses or selected_directions or selected_types or date_from or date_to %}bg-blue-600/20 border border-blue-500 text-blue-300{% else %}bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600{% endif %}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            Filters
+            {% if filter_count or date_from or date_to %}
+            <span class="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-500 text-white rounded-full" id="filter-count">{% if filter_count %}{{ filter_count }}{% else %}&bull;{% endif %}</span>
+            {% endif %}
+        </button>
     </div>
 
     <!-- Collapsible filter panel -->
-    <div id="filter-panel" class="{% if not selected_statuses and not selected_directions and not selected_types and not date_from and not date_to %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-4">
-        <div class="flex flex-wrap gap-x-6 gap-y-3 items-center">
-            <div class="flex flex-wrap gap-2 items-center">
+    <div id="filter-panel" class="{% if not selected_statuses and not selected_directions and not selected_types and not date_from and not date_to %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+        <!-- Desktop: horizontal flex wrap. Mobile: vertical stack -->
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
+            <div>
                 <span class="text-xs text-gray-400 font-medium">Status:</span>
-                {% for val, label in status_choices %}
-                <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
-                    <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
-                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                           class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                    {{ label }}
-                </label>
-                {% endfor %}
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                    {% for val, label in status_choices %}
+                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                        <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
+                               hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                               class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
             </div>
-            <div class="flex flex-wrap gap-2 items-center">
+            <div>
                 <span class="text-xs text-gray-400 font-medium">Direction:</span>
-                {% for val, label in direction_choices %}
-                <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
-                    <input type="checkbox" name="direction" value="{{ val }}" {% if val in selected_directions %}checked{% endif %}
-                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                           class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                    {{ label }}
-                </label>
-                {% endfor %}
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                    {% for val, label in direction_choices %}
+                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                        <input type="checkbox" name="direction" value="{{ val }}" {% if val in selected_directions %}checked{% endif %}
+                               hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                               class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
             </div>
-            <div class="flex flex-wrap gap-2 items-center">
+            <div>
                 <span class="text-xs text-gray-400 font-medium">Type:</span>
-                {% for val, label in type_choices %}
-                <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
-                    <input type="checkbox" name="task_type" value="{{ val }}" {% if val in selected_types %}checked{% endif %}
-                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                           class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                    {{ label }}
-                </label>
-                {% endfor %}
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                    {% for val, label in type_choices %}
+                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                        <input type="checkbox" name="task_type" value="{{ val }}" {% if val in selected_types %}checked{% endif %}
+                               hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                               class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
             </div>
-            <div class="flex flex-wrap gap-2 items-center">
+            <div class="w-full sm:w-auto">
                 <span class="text-xs text-gray-400 font-medium">Due:</span>
-                <input type="date" name="date_from" value="{{ date_from }}"
-                       hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                       class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
-                <span class="text-xs text-gray-500">to</span>
-                <input type="date" name="date_to" value="{{ date_to }}"
-                       hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                       class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+                <div class="flex items-center gap-2 mt-1 sm:mt-0 sm:inline-flex">
+                    <input type="date" name="date_from" value="{{ date_from }}"
+                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="flex-1 sm:flex-none rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-1.5">
+                    <span class="text-xs text-gray-500">to</span>
+                    <input type="date" name="date_to" value="{{ date_to }}"
+                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="flex-1 sm:flex-none rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-1.5">
+                </div>
             </div>
-            <button type="button" onclick="clearFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2">Clear</button>
+            <button type="button" onclick="clearFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2 self-start sm:self-center">Clear</button>
         </div>
     </div>
 </form>
@@ -130,6 +141,25 @@
                 class="px-3 py-1 bg-green-900/50 hover:bg-green-900 text-green-300 text-xs font-medium rounded-md transition-colors">Mark Complete</button>
     </form>
 </div>
+
+<!-- Mobile sort control (outside swap target so it doesn't re-render) -->
+{% if current_view != "board" %}
+<div id="mobile-sort-bar" class="sm:hidden flex items-center gap-2 mb-2">
+    <span class="text-xs text-gray-400 font-medium">Sort:</span>
+    <select id="mobile-sort" onchange="applyMobileSort(this.value)"
+            class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-1.5">
+        <option value="created_at-desc" {% if current_sort == "created_at" and current_dir == "desc" %}selected{% endif %}>Newest First</option>
+        <option value="created_at-asc" {% if current_sort == "created_at" and current_dir == "asc" %}selected{% endif %}>Oldest First</option>
+        <option value="due_date-asc" {% if current_sort == "due_date" and current_dir == "asc" %}selected{% endif %}>Due Date (Soonest)</option>
+        <option value="due_date-desc" {% if current_sort == "due_date" and current_dir == "desc" %}selected{% endif %}>Due Date (Latest)</option>
+        <option value="priority-asc" {% if current_sort == "priority" and current_dir == "asc" %}selected{% endif %}>Priority (High-Low)</option>
+        <option value="priority-desc" {% if current_sort == "priority" and current_dir == "desc" %}selected{% endif %}>Priority (Low-High)</option>
+        <option value="status-asc" {% if current_sort == "status" and current_dir == "asc" %}selected{% endif %}>Status</option>
+        <option value="title-asc" {% if current_sort == "title" and current_dir == "asc" %}selected{% endif %}>Title (A-Z)</option>
+        <option value="title-desc" {% if current_sort == "title" and current_dir == "desc" %}selected{% endif %}>Title (Z-A)</option>
+    </select>
+</div>
+{% endif %}
 
 <div id="task-content">
 {% if current_view == "board" %}
@@ -175,6 +205,19 @@ function clearFilters() {
         swap: 'innerHTML',
         source: document.getElementById('filter-form'),
     });
+}
+
+function applyMobileSort(val) {
+    var parts = val.split('-');
+    var dir = parts.pop();
+    var sort = parts.join('-');
+    var form = document.getElementById('filter-form');
+    // Remove any existing hidden sort/dir inputs
+    form.querySelectorAll('input[name="sort"], input[name="dir"]').forEach(function(el) { el.remove(); });
+    var si = document.createElement('input'); si.type = 'hidden'; si.name = 'sort'; si.value = sort;
+    var di = document.createElement('input'); di.type = 'hidden'; di.name = 'dir'; di.value = dir;
+    form.appendChild(si); form.appendChild(di);
+    htmx.ajax('GET', '{% url "tasks:list" %}', { target: '#task-content', swap: 'innerHTML', source: form });
 }
 
 function switchView(mode) {
