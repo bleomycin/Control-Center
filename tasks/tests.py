@@ -667,3 +667,71 @@ class TaskDirectionTests(TestCase):
         t = Task.objects.create(title="PDF Direction", direction="outbound")
         resp = self.client.get(reverse("tasks:export_pdf", args=[t.pk]))
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class FollowUpResponseNotesTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Response Notes Person")
+        cls.task = Task.objects.create(title="Response Notes Task")
+
+    def test_followup_respond_get_returns_form(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=2),
+            method="email",
+            response_received=False,
+        )
+        resp = self.client.get(reverse("tasks:followup_respond", args=[fu.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_followup_respond_form.html")
+        self.assertContains(resp, "response_notes")
+
+    def test_followup_respond_post_saves_notes(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=2),
+            method="email",
+            response_received=False,
+        )
+        resp = self.client.post(
+            reverse("tasks:followup_respond", args=[fu.pk]),
+            {"response_notes": "They agreed to the terms"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        fu.refresh_from_db()
+        self.assertTrue(fu.response_received)
+        self.assertIsNotNone(fu.response_date)
+        self.assertEqual(fu.response_notes, "They agreed to the terms")
+
+    def test_followup_respond_undo_preserves_notes(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now() - timedelta(days=2),
+            method="email",
+            response_received=True,
+            response_date=timezone.now(),
+            response_notes="Original response notes",
+        )
+        resp = self.client.post(reverse("tasks:followup_respond", args=[fu.pk]))
+        self.assertEqual(resp.status_code, 200)
+        fu.refresh_from_db()
+        self.assertFalse(fu.response_received)
+        self.assertIsNone(fu.response_date)
+        self.assertEqual(fu.response_notes, "Original response notes")
+
+    def test_response_notes_displayed_in_list(self):
+        fu = FollowUp.objects.create(
+            task=self.task,
+            stakeholder=self.stakeholder,
+            outreach_date=timezone.now(),
+            method="call",
+            response_received=True,
+            response_date=timezone.now(),
+            response_notes="Said they will send the docs Friday",
+        )
+        resp = self.client.get(reverse("tasks:detail", args=[self.task.pk]))
+        self.assertContains(resp, "Said they will send the docs Friday")
