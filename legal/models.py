@@ -56,6 +56,15 @@ class LegalMatter(models.Model):
     related_leases = models.ManyToManyField(
         "assets.Lease", blank=True, related_name="legal_matters",
     )
+    related_providers = models.ManyToManyField(
+        "healthcare.Provider", blank=True, related_name="legal_matters",
+    )
+    related_prescriptions = models.ManyToManyField(
+        "healthcare.Prescription", blank=True, related_name="legal_matters",
+    )
+    related_conditions = models.ManyToManyField(
+        "healthcare.Condition", blank=True, related_name="legal_matters",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

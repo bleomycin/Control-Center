@@ -217,6 +217,12 @@ class StakeholderDetailView(DetailView):
         ctx["policyholder_roles"] = PolicyHolder.objects.filter(stakeholder=obj).select_related("policy")
         ctx["policies_as_carrier"] = InsurancePolicy.objects.filter(carrier=obj)
         ctx["policies_as_agent"] = InsurancePolicy.objects.filter(agent=obj)
+        from healthcare.models import Provider as HcProvider, Appointment as HcAppt
+        ctx["healthcare_providers"] = HcProvider.objects.filter(stakeholder=obj)
+        ctx["healthcare_appointments"] = HcAppt.objects.filter(
+            provider__stakeholder=obj,
+        ).exclude(status__in=["completed", "cancelled"]).order_by("date", "time")
+
         cf_qs = CashFlowEntry.objects.filter(related_stakeholder=obj)
         cf_totals = cf_qs.aggregate(
             inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
@@ -255,6 +261,7 @@ class StakeholderDetailView(DetailView):
             "notes": ctx["all_notes"].count(),
             "cashflow": ctx["all_cashflow"].count(),
             "employees": employee_count,
+            "healthcare": ctx["healthcare_providers"].count() + ctx["healthcare_appointments"].count(),
         }
 
         return ctx
@@ -542,6 +549,12 @@ def relationship_graph_data(request, pk):
         node_id = f"ins-{pol.pk}"
         add_node(node_id, pol.name, "Insurance Policy", "octagon", pol.get_absolute_url())
         edges.append({"source": f"s-{center.pk}", "target": node_id, "label": "agent"})
+
+    # Healthcare providers linked to this stakeholder
+    from healthcare.models import Provider as HcProv
+    for prov in HcProv.objects.filter(stakeholder=center):
+        add_node(f"hc-{prov.pk}", prov.name, "Healthcare Provider", "hexagon", prov.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"hc-{prov.pk}", "label": prov.specialty or "provider"})
 
     return JsonResponse({"nodes": list(nodes.values()), "edges": edges})
 

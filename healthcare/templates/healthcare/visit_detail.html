@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ visit.get_visit_type_display }} Visit - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'healthcare:healthcare_list' %}" class="hover:text-gray-300">Healthcare</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ visit.get_visit_type_display }} Visit</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ visit.get_visit_type_display }} Visit</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ visit.date|date:"M j, Y" }}{% if visit.time %} at {{ visit.time|time:"g:i A" }}{% endif %}</p>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'healthcare:visit_edit' visit.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'healthcare:visit_delete' visit.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Provider</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">
+            {% if visit.provider %}<a href="{{ visit.provider.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ visit.provider.name }}</a>{% else %}N/A{% endif %}
+        </p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Type</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ visit.get_visit_type_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Facility</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ visit.facility|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Copay</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{% if visit.copay %}&dollar;{{ visit.copay|intcomma }}{% else %}N/A{% endif %}</p>
+    </div>
+</div>
+
+{% if visit.reason %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Reason</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ visit.reason }}</p>
+</div>
+{% endif %}
+
+{% if visit.diagnosis %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Diagnosis</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ visit.diagnosis }}</p>
+</div>
+{% endif %}
+
+{% if visit.summary %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Summary</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ visit.summary }}</p>
+</div>
+{% endif %}
+
+{% if visit.vitals %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Vitals</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ visit.vitals }}</p>
+</div>
+{% endif %}
+
+{% if visit.follow_up_instructions %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Follow-up Instructions</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ visit.follow_up_instructions }}</p>
+</div>
+{% endif %}
+
+{% if visit.next_visit_date %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Next Visit</p>
+    <p class="text-sm text-gray-200">{{ visit.next_visit_date|date:"M j, Y" }}</p>
+</div>
+{% endif %}
+
+{% if visit.related_condition %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Related Condition</p>
+    <a href="{{ visit.related_condition.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ visit.related_condition.name }}</a>
+</div>
+{% endif %}
+
+{% if visit.health_insurance %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Insurance Policy</p>
+    <a href="{{ visit.health_insurance.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ visit.health_insurance.name }}</a>
+</div>
+{% endif %}
+
+{% if advice %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Advice Records</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for a in advice %}
+        <a href="{{ a.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ a.title }}</span>
+            <span class="text-xs text-gray-400">{{ a.get_category_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=visit edit_url=internal_notes_url %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <button hx-get="{% url 'healthcare:visit_note_link' visit.pk %}"
+                    hx-target="#note-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+        </div>
+        <div id="note-form-container"></div>
+        <div id="note-list">
+            {% include "healthcare/partials/_healthcare_note_list.html" with notes=visit.notes.all unlink_url_name="healthcare:visit_note_unlink" asset_pk=visit.pk %}
+        </div>
+    </div>
+</div>
+{% endblock %}

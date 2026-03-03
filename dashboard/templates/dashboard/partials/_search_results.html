@@ -174,4 +174,61 @@
 </div>
 {% endif %}
 
+{% if hc_providers %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Healthcare Providers ({{ hc_providers|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for p in hc_providers %}
+        <a href="{{ p.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ p.name }}</p>
+                {% if p.specialty %}<p class="text-xs text-gray-400">{{ p.specialty }}</p>{% endif %}
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ p.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if hc_prescriptions %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Prescriptions ({{ hc_prescriptions|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for rx in hc_prescriptions %}
+        <a href="{{ rx.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ rx.medication_name }}</p>
+                {% if rx.dosage %}<p class="text-xs text-gray-400">{{ rx.dosage }} — {{ rx.get_frequency_display }}</p>{% endif %}
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ rx.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% if hc_appointments %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Appointments ({{ hc_appointments|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for a in hc_appointments %}
+        <a href="{{ a.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ a.title }}</p>
+                <p class="text-xs text-gray-400">{{ a.date|date:"M j, Y" }}{% if a.time %} at {{ a.time|time:"g:i A" }}{% endif %}</p>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ a.get_status_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% endif %}

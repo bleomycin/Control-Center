@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ appointment.title }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'healthcare:healthcare_list' %}" class="hover:text-gray-300">Healthcare</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ appointment.title }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ appointment.title }}</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ appointment.date|date:"M j, Y" }}{% if appointment.time %} at {{ appointment.time|time:"g:i A" }}{% endif %}</p>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'healthcare:appointment_export_pdf' appointment.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'healthcare:appointment_edit' appointment.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'healthcare:appointment_delete' appointment.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Date</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ appointment.date|date:"M j, Y" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Time</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{% if appointment.time %}{{ appointment.time|time:"g:i A" }}{% else %}N/A{% endif %}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Duration</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{% if appointment.duration_minutes %}{{ appointment.duration_minutes }} min{% else %}N/A{% endif %}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if appointment.status == 'scheduled' %}text-blue-400{% elif appointment.status == 'confirmed' %}text-green-400{% elif appointment.status == 'completed' %}text-gray-400{% elif appointment.status == 'cancelled' %}text-red-400{% elif appointment.status == 'no_show' %}text-orange-400{% elif appointment.status == 'rescheduled' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ appointment.get_status_display }}</p>
+    </div>
+</div>
+
+{% if appointment.provider or appointment.facility or appointment.visit_type %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Details</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        {% if appointment.provider %}<div><span class="text-gray-400">Provider:</span> <a href="{{ appointment.provider.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ appointment.provider.name }}</a></div>{% endif %}
+        {% if appointment.facility %}<div><span class="text-gray-400">Facility:</span> <span class="text-gray-200">{{ appointment.facility }}</span></div>{% endif %}
+        {% if appointment.visit_type %}<div><span class="text-gray-400">Type:</span> <span class="text-gray-200">{{ appointment.get_visit_type_display }}</span></div>{% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if appointment.purpose %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Purpose</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ appointment.purpose }}</p>
+</div>
+{% endif %}
+
+{% if appointment.preparation %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Preparation</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ appointment.preparation }}</p>
+</div>
+{% endif %}
+
+{% if appointment.related_condition %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Related Condition</p>
+    <a href="{{ appointment.related_condition.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ appointment.related_condition.name }}</a>
+</div>
+{% endif %}
+
+{% if appointment.health_insurance %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Insurance Policy</p>
+    <a href="{{ appointment.health_insurance.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ appointment.health_insurance.name }}</a>
+</div>
+{% endif %}
+
+{% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=appointment edit_url=internal_notes_url %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <button hx-get="{% url 'healthcare:appointment_note_link' appointment.pk %}"
+                    hx-target="#note-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+        </div>
+        <div id="note-form-container"></div>
+        <div id="note-list">
+            {% include "healthcare/partials/_healthcare_note_list.html" with notes=appointment.notes.all unlink_url_name="healthcare:appointment_note_unlink" asset_pk=appointment.pk %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -181,6 +181,9 @@
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="cashflow">
             Cash Flow <span class="text-xs opacity-70">({{ counts.cashflow }})</span>
         </button>
+        <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="healthcare">
+            Healthcare <span class="text-xs opacity-70">({{ counts.healthcare }})</span>
+        </button>
     </div>
 
     <!-- Tab Content -->
@@ -378,6 +381,42 @@
         <div id="sh-cashflow-form-container"></div>
         <div id="inline-cashflow-list">
             {% include "cashflow/partials/_inline_cashflow_list.html" %}
+        </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab-healthcare">
+        <div class="px-4 py-2 border-b border-gray-700">
+            <span class="text-xs text-gray-400">Healthcare providers and appointments linked to this stakeholder</span>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% if healthcare_providers %}
+            <div class="px-4 py-3">
+                <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2">Providers</h3>
+                {% for p in healthcare_providers %}
+                <a href="{{ p.get_absolute_url }}" class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-gray-700/50 transition-colors">
+                    <span class="text-sm text-gray-200">{{ p.name }}</span>
+                    <span class="text-xs text-gray-400">{{ p.specialty }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if healthcare_appointments %}
+            <div class="px-4 py-3">
+                <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2">Upcoming Appointments</h3>
+                {% for a in healthcare_appointments %}
+                <a href="{{ a.get_absolute_url }}" class="flex items-center justify-between px-2 py-1.5 rounded hover:bg-gray-700/50 transition-colors">
+                    <div>
+                        <span class="text-sm text-gray-200">{{ a.title }}</span>
+                        <span class="text-xs text-gray-400 ml-2">{{ a.date|date:"M j, Y" }}</span>
+                    </div>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-teal-900/50 text-teal-300">{{ a.get_status_display }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if not healthcare_providers and not healthcare_appointments %}
+            <p class="px-4 py-6 text-sm text-gray-500 text-center">No healthcare connections</p>
+            {% endif %}
         </div>
     </div>
 </div>

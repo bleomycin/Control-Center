@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ advice.title }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'healthcare:healthcare_list' %}" class="hover:text-gray-300">Healthcare</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ advice.title }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ advice.title }}</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ advice.date|date:"M j, Y" }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'healthcare:advice_edit' advice.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'healthcare:advice_delete' advice.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Category</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ advice.get_category_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if advice.status == 'active' %}text-green-400{% elif advice.status == 'superseded' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ advice.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Date</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ advice.date|date:"M j, Y" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Provider</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">
+            {% if advice.given_by %}<a href="{{ advice.given_by.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ advice.given_by.name }}</a>{% else %}N/A{% endif %}
+        </p>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Advice</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ advice.advice_text }}</p>
+</div>
+
+{% if advice.related_visit %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Related Visit</p>
+    <a href="{{ advice.related_visit.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ advice.related_visit.get_visit_type_display }} &mdash; {{ advice.related_visit.date|date:"M j, Y" }}</a>
+</div>
+{% endif %}
+
+{% if advice.related_condition %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Related Condition</p>
+    <a href="{{ advice.related_condition.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ advice.related_condition.name }}</a>
+</div>
+{% endif %}
+
+{% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=advice edit_url=internal_notes_url %}
+{% endblock %}

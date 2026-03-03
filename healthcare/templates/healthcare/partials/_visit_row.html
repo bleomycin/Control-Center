@@ -1,0 +1,14 @@
+{% load humanize choice_labels %}
+<tr id="visit-row-{{ visit.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ visit.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    {% endif %}
+    <td class="px-4 py-3">
+        <a href="{{ visit.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ visit.get_visit_type_display }} — {{ visit.provider|default:"Unknown" }}</a>
+        <p class="text-xs text-gray-400 truncate max-w-xs">{{ visit.date|date:"M j, Y" }}{% if visit.time %} at {{ visit.time|time:"g:i A" }}{% endif %}</p>
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ visit.reason|default:"-"|truncatewords:6 }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{% if visit.copay %}<span>${{ visit.copay|floatformat:0|intcomma }}</span>{% else %}-{% endif %}</td>
+</tr>
