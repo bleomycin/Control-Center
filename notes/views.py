@@ -392,10 +392,14 @@ def bulk_apply_tags(request):
     if request.method == "POST":
         pks = request.POST.getlist("selected")
         tag_pks = request.POST.getlist("tags")
+        mode = request.POST.get("mode", "add")
         if pks and tag_pks:
             tags = Tag.objects.filter(pk__in=tag_pks)
             for note in Note.objects.filter(pk__in=pks):
-                note.tags.add(*tags)
+                if mode == "remove":
+                    note.tags.remove(*tags)
+                else:
+                    note.tags.add(*tags)
         response = HttpResponse(status=204)
         response["HX-Trigger"] = "noteListChanged"
         return response
