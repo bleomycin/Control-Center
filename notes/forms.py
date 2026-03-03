@@ -27,6 +27,7 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "content": forms.Textarea(attrs={"rows": 6}),
+            "note_type": forms.Select(),
             "participants": forms.SelectMultiple(attrs={"size": 4}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": 4}),
             "related_legal_matters": forms.SelectMultiple(attrs={"size": 4}),
@@ -42,7 +43,7 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["note_type"].widget = forms.Select(choices=get_choices("note_type"))
+        self.fields["note_type"].widget.choices = get_choices("note_type")
 
 
 class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
@@ -64,12 +65,13 @@ class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "content": forms.Textarea(attrs={"rows": 4}),
+            "note_type": forms.Select(),
             "tags": forms.CheckboxSelectMultiple(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["note_type"].widget = forms.Select(choices=get_choices("note_type"))
+        self.fields["note_type"].widget.choices = get_choices("note_type")
         from stakeholders.models import Stakeholder
         from tasks.models import Task
         self.fields["stakeholder"].queryset = Stakeholder.objects.all().order_by("name")

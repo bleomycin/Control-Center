@@ -72,6 +72,7 @@ class FollowUpForm(TailwindFormMixin, forms.ModelForm):
         fields = ["stakeholder", "outreach_date", "method", "reminder_enabled", "follow_up_days", "notes_text"]
         widgets = {
             "outreach_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "method": forms.Select(),
             "notes_text": forms.Textarea(attrs={"rows": 2}),
         }
         labels = {
@@ -81,7 +82,7 @@ class FollowUpForm(TailwindFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["method"].widget = forms.Select(choices=get_choices("contact_method"))
+        self.fields["method"].widget.choices = get_choices("contact_method")
 
 
 class SubTaskForm(TailwindFormMixin, forms.ModelForm):
