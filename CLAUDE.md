@@ -144,8 +144,9 @@ Seven Django apps, all relationally linked:
 - `PolicyHolder` through model (role, notes — no percentage); `covered_properties` M2M → RealEstate, `covered_vehicles` M2M → Vehicle, `covered_aircraft` M2M → Aircraft
 - Integrated into unified `/assets/` page as "policies" asset type; "Insurance" seed tab
 - HTMX inline policyholder add/delete on detail page; inline status editing on list
+- Asset detail pages: HTMX inline policy link/unlink (`AssetPolicyLinkForm`); shared partials `_asset_policy_form.html`/`_asset_policy_list.html`; "+ New Policy" pre-selects asset via query param
 - Graph shows octagon nodes (prefix `ins-`) for carrier, agent, and policyholder edges
-- Notes link via `related_policies` M2M; asset detail pages show linked policies
+- Notes link via `related_policies` M2M
 
 ### Vehicle & Aircraft Tracking
 - `Vehicle`: `vehicle_type` (DB-backed ChoiceOption), `status` (hardcoded: active/stored/sold/in_dispute); fields for VIN, make/model, mileage, license plate, registration state
