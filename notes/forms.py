@@ -23,6 +23,8 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
         "related_properties", "related_investments", "related_loans",
         "related_tasks", "related_policies", "related_vehicles",
         "related_aircraft", "related_leases",
+        "related_providers", "related_prescriptions", "related_appointments",
+        "related_visits", "related_conditions",
     ]
 
     class Meta:
@@ -31,7 +33,9 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
                   "participants", "related_stakeholders", "related_legal_matters",
                   "related_properties", "related_investments", "related_loans",
                   "related_tasks", "related_policies", "related_vehicles",
-                  "related_aircraft", "related_leases"]
+                  "related_aircraft", "related_leases",
+                  "related_providers", "related_prescriptions", "related_appointments",
+                  "related_visits", "related_conditions"]
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "content": forms.Textarea(attrs={"rows": 6}),
@@ -47,6 +51,11 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
             "related_vehicles": forms.SelectMultiple(attrs={"size": 4}),
             "related_aircraft": forms.SelectMultiple(attrs={"size": 4}),
             "related_leases": forms.SelectMultiple(attrs={"size": 4}),
+            "related_providers": forms.SelectMultiple(attrs={"size": 4}),
+            "related_prescriptions": forms.SelectMultiple(attrs={"size": 4}),
+            "related_appointments": forms.SelectMultiple(attrs={"size": 4}),
+            "related_visits": forms.SelectMultiple(attrs={"size": 4}),
+            "related_conditions": forms.SelectMultiple(attrs={"size": 4}),
             "tags": forms.CheckboxSelectMultiple(),
         }
 
