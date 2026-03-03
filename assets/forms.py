@@ -1,5 +1,5 @@
 from django import forms
-from legacy.forms import TailwindFormMixin
+from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from stakeholders.models import Stakeholder
 from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
@@ -104,9 +104,11 @@ class InvestmentParticipantForm(TailwindFormMixin, forms.ModelForm):
 class LoanForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Loan
-        fields = ["name", "related_property", "related_investment",
+        fields = ["name", "is_hard_money", "related_property", "related_investment",
+                  "related_vehicle", "related_aircraft",
                   "borrower_description", "original_amount",
-                  "current_balance", "interest_rate", "monthly_payment",
+                  "current_balance", "interest_rate", "default_interest_rate",
+                  "monthly_payment",
                   "next_payment_date", "maturity_date", "collateral", "status", "notes_text"]
         widgets = {
             "next_payment_date": forms.DateInput(attrs={"type": "date"}),
@@ -117,6 +119,8 @@ class LoanForm(TailwindFormMixin, forms.ModelForm):
         labels = {
             "related_property": "Property",
             "related_investment": "Investment",
+            "related_vehicle": "Vehicle",
+            "related_aircraft": "Aircraft",
         }
 
 
@@ -261,4 +265,11 @@ class AssetPolicyLinkForm(TailwindFormMixin, forms.Form):
     policy = forms.ModelChoiceField(
         queryset=InsurancePolicy.objects.all(),
         label="Insurance Policy",
+    )
+
+
+class AssetLoanLinkForm(TailwindFormMixin, forms.Form):
+    loan = forms.ModelChoiceField(
+        queryset=Loan.objects.all(),
+        label="Loan",
     )

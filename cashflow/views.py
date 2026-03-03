@@ -57,7 +57,7 @@ def chart_data(request):
 
 
 def export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = CashFlowEntry.objects.all()
     fields = [
         ("date", "Date"),
@@ -181,7 +181,7 @@ def bulk_delete(request):
 
 
 def bulk_export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = CashFlowEntry.objects.filter(pk__in=pks) if pks else CashFlowEntry.objects.none()
     fields = [

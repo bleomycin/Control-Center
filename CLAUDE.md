@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Control Center** is a self-hosted personal management system designed as a single-user command center for managing complex personal affairs. Built for Legacy. Accessed via VPN on a private server (currently demoed via ngrok). No team collaboration features needed.
+**Control Center** is a self-hosted personal management system designed as a single-user command center for managing complex personal affairs. Accessed via VPN on a private server (currently demoed via ngrok). No team collaboration features needed.
 
 ## Tech Stack
 
@@ -15,8 +15,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Database | SQLite (WAL mode) |
 | Frontend | Django Templates + HTMX 2.0.4 |
 | CSS | Tailwind CSS 3.4 (standalone CLI) |
-| Charts | Chart.js 4.x (CDN) |
-| Markdown | EasyMDE 2.20 (CDN) + Python markdown 3.10 |
+| Charts | Chart.js 4.x (self-hosted) |
+| Markdown | EasyMDE 2.20 (self-hosted) + Python markdown 3.10 |
 | PDF Export | reportlab 4.4.9 (platypus engine) |
 | Background Jobs | Django-Q2 (ORM broker) |
 | Static Files | WhiteNoise 6.9.0 |
@@ -98,9 +98,9 @@ Seven Django apps, all relationally linked:
 
 | App | Models | Purpose |
 |-----|--------|---------|
-| **dashboard** | ChoiceOption, EmailSettings, Notification, SampleDataStatus | Homepage, global search, timeline, calendar, email/SMTP, notifications, choice management, settings hub, sample data toggle |
+| **dashboard** | ChoiceOption, EmailSettings, BackupSettings, Notification, SampleDataStatus | Homepage, global search, timeline, calendar, email/SMTP, notifications, choice management, settings hub, backup config, sample data toggle |
 | **stakeholders** | Stakeholder, StakeholderTab, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationships, contact logs; firm/employee hierarchy via `parent_organization` self-FK; dynamic DB-backed list tabs |
-| **assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty, InsurancePolicy, PolicyHolder, Vehicle, VehicleOwner, Aircraft, AircraftOwner | Unified `/assets/` page with dynamic DB-backed tabs; M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing; insurance policy tracking; vehicle tracking (VIN, make/model, mileage); aircraft tracking (tail number, total hours, base airport) |
+| **assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty, InsurancePolicy, PolicyHolder, Vehicle, VehicleOwner, Aircraft, AircraftOwner | Unified `/assets/` page with dynamic DB-backed tabs; M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing; insurance policy tracking; loan-to-asset linking (property/investment/vehicle/aircraft); hard money loan tracking; vehicle tracking (VIN, make/model, mileage); aircraft tracking (tail number, total hours, base airport) |
 | **legal** | LegalMatter, Evidence | Case status, attorneys (M2M), evidence, related stakeholders/properties |
 | **tasks** | Task, FollowUp, SubTask | Deadlines, priorities, follow-ups, subtask checklists; bidirectional direction; multi-stakeholder M2M; meetings with time; kanban board; recurring tasks; grouped views |
 | **cashflow** | CashFlowEntry | Actual + projected inflows/outflows with category filtering and charts |
@@ -110,13 +110,13 @@ Seven Django apps, all relationally linked:
 
 ### General Conventions
 - **Views**: CBVs for CRUD, function views for HTMX partials
-- **Forms**: `TailwindFormMixin` in `legacy/forms.py` auto-applies dark-mode classes; forms load choices dynamically in `__init__`
+- **Forms**: `TailwindFormMixin` in `config/forms.py` auto-applies dark-mode classes; forms load choices dynamically in `__init__`
 - **HTMX**: `hx-get` with `delay:300ms` for search/filter; inline add/delete for child records; partials in `partials/` subdirs; CSRF via `hx-headers` on `<body>`
 - **Templates**: `base.html` with sidebar + modal container; shared `partials/_confirm_delete.html` for all DeleteViews
 - **FKs**: `SET_NULL` for optional, `CASCADE` for required; string references for cross-app FKs
 - **Filtering**: All list pages use `<form id="filter-form">`. Sortable column headers with `sort`/`dir` params. Priority/status sort use `Case/When` for logical order.
 - **Bulk ops**: Select-all + per-row checkboxes + sticky bulk bar. `static/js/bulk-actions.js` uses delegated events (works after HTMX swaps).
-- **Exports**: CSV via `legacy/export.py`; PDF via `legacy/pdf_export.py` (reportlab platypus) with section types: "info", "table", "text"
+- **Exports**: CSV via `config/export.py`; PDF via `config/pdf_export.py` (reportlab platypus) with section types: "info", "table", "text"
 - **Button colours**: Detail pages: purple (PDF), blue (Edit), green (Complete), red (Delete). List pages: purple (export), blue (+ New).
 - **Dropdown menus**: Multi-type asset tabs use `[data-dropdown]` toggle pattern (`toggleDropdown()`/`closeAllDropdowns()` in `asset_list.html`); single-type tabs render flat buttons instead.
 - **Currency**: `django.contrib.humanize` `intcomma` filter everywhere
@@ -152,6 +152,14 @@ Seven Django apps, all relationally linked:
 - Graph shows octagon nodes (prefix `ins-`) for carrier, agent, and policyholder edges
 - Notes link via `related_policies` M2M
 
+### Loan Tracking
+- `Loan` has FKs to all 4 asset types: `related_property`, `related_investment`, `related_vehicle`, `related_aircraft` (all SET_NULL, nullable)
+- `is_hard_money` BooleanField + `default_interest_rate` DecimalField for hard money loans; orange "HM" badge on list/detail
+- Asset detail pages: HTMX inline loan link/unlink (`AssetLoanLinkForm`); shared partials `_asset_loan_form.html`/`_asset_loan_list.html`; "+ New Loan" pre-selects asset via query param
+- Same pattern as policy link/unlink but uses FK (set `loan.related_X = asset` / `= None`) instead of M2M `.add()`/`.remove()`
+- Unlink views verify FK ownership before clearing (prevents unlinking a loan that belongs to a different asset)
+- Asset list rows show orange loan count/balance subtitle via `Count`/`Sum` annotations
+
 ### Vehicle & Aircraft Tracking
 - `Vehicle`: `vehicle_type` (DB-backed ChoiceOption), `status` (hardcoded: active/stored/sold/in_dispute); fields for VIN, make/model, mileage, license plate, registration state
 - `Aircraft`: `aircraft_type` (DB-backed ChoiceOption), `status` (adds in_maintenance); fields for tail number, serial number, total hours, base airport, registration country, num_engines
@@ -180,9 +188,23 @@ Seven Django apps, all relationally linked:
 - `EmailSettings` singleton (pk=1) stores SMTP config; `dashboard/email.py` provides connection helpers
 - `Notification` model with levels (info/warning/critical); sidebar bell with HTMX badge polling (60s)
 
+### Scheduled Tasks (Django-Q2)
+All registered via `python manage.py setup_schedules`; executed by `python manage.py qcluster`:
+
+| Task | Frequency | Function |
+|------|-----------|----------|
+| Check Overdue Tasks | Daily | `tasks.notifications.check_overdue_tasks` |
+| Check Upcoming Reminders | Hourly | `tasks.notifications.check_upcoming_reminders` |
+| Check Stale Follow-ups | Daily | `tasks.notifications.check_stale_followups` |
+| Automated Backup | Configurable (Settings UI) | `dashboard.backup_task.run_backup` |
+
+- Backup schedule is configurable via `/settings/backups/` — `BackupSettings` singleton (frequency, time, retention count, enabled/disabled)
+- Saving backup config from the UI immediately syncs the live `Schedule` record (no restart needed)
+- The 3 notification schedules are hardcoded (not user-configurable)
+
 ### Infrastructure
 - **SQLite**: WAL mode + pragmas via `connection_created` signal in `dashboard/apps.py` (weak=False). Indexes on frequently-filtered fields.
-- **Backup**: `sqlite3.backup()` API + media → `.tar.gz`; django-q2 daily auto-backup (keeps 7)
+- **Backup**: `sqlite3.backup()` API + media → `.tar.gz`; configurable automated backup via `BackupSettings` singleton; web UI at `/settings/backups/` for schedule config + manual create/download/restore/upload
 - **Docker**: Single container — Gunicorn (2 workers, 30s timeout) foreground + qcluster background. `entrypoint.sh` handles migrate/collectstatic/createsuperuser.
 - **Tailwind**: Standalone CLI v3.4.17; config in `tailwind.config.js`, output at `static/css/tailwind.css`. Rebuild after adding/changing classes: `make tailwind-build`
 - **Environment**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks; production security headers gated behind `not DEBUG`
@@ -195,7 +217,7 @@ Seven Django apps, all relationally linked:
 - Tag/AssetTab slug collision: uniqueness loop generates `base-slug-1`, `-2`, etc.
 - `bulk-actions.js` looks up `#select-all` dynamically and uses fully delegated change events (works after HTMX swaps)
 - `switchView()` uses `source: form` (not `values: getFilterValues()`) for proper multi-select serialization
-- **Timezone**: `TIME_ZONE = 'America/Chicago'` with `USE_TZ = True`. Always use `timezone.localdate()` (not `date.today()`) and `timezone.localdate(dt)` (not `dt.date()`) when comparing dates from DateTimeFields — UTC vs local mismatch causes wrong results
+- **Timezone**: `TIME_ZONE = 'America/Los_Angeles'` with `USE_TZ = True`. Always use `timezone.localdate()` (not `date.today()`) and `timezone.localdate(dt)` (not `dt.date()`) when comparing dates from DateTimeFields — UTC vs local mismatch causes wrong results
 - Django test runner uses in-memory SQLite — WAL mode returns 'memory', not 'wal'
 - Backup/restore tests must use temp file-based DBs, not the in-memory test DB
 

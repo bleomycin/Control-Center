@@ -7,6 +7,7 @@
     <td class="px-4 py-3">
         <a href="{{ prop.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ prop.name }}</a>
         <p class="text-xs text-gray-400 truncate max-w-xs">{{ prop.address|truncatewords:8 }}</p>
+        {% if prop.loan_count %}<p class="text-xs text-orange-400">{{ prop.loan_count }} loan{{ prop.loan_count|pluralize }} · ${{ prop.loan_balance|floatformat:0|intcomma }}</p>{% endif %}
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ prop.property_type|default:"-" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">${{ prop.estimated_value|floatformat:0|intcomma|default:"-" }}</td>

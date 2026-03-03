@@ -1,5 +1,5 @@
 from django import forms
-from legacy.forms import TailwindFormMixin
+from config.forms import TailwindFormMixin
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
 from .models import Task, FollowUp, SubTask

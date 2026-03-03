@@ -52,8 +52,8 @@ class Migration(migrations.Migration):
                 ('use_ssl', models.BooleanField(default=False, verbose_name='Use SSL')),
                 ('username', models.CharField(blank=True, default='', max_length=255, verbose_name='Username')),
                 ('password', models.CharField(blank=True, default='', max_length=255, verbose_name='Password')),
-                ('from_email', models.EmailField(default='noreply@legacy.local', max_length=254, verbose_name='From email')),
-                ('admin_email', models.EmailField(default='admin@legacy.local', max_length=254, verbose_name='Admin email (recipient)')),
+                ('from_email', models.EmailField(default='noreply@controlcenter.local', max_length=254, verbose_name='From email')),
+                ('admin_email', models.EmailField(default='admin@controlcenter.local', max_length=254, verbose_name='Admin email (recipient)')),
                 ('notifications_enabled', models.BooleanField(default=False, verbose_name='Enable email notifications')),
             ],
             options={

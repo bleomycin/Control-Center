@@ -112,7 +112,7 @@ class LegalMatterDeleteView(DeleteView):
 
 
 def export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = LegalMatter.objects.all()
     fields = [
         ("title", "Title"),
@@ -130,7 +130,7 @@ def export_csv(request):
 
 
 def export_pdf_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     m = get_object_or_404(LegalMatter, pk=pk)
     sections = [
         {"heading": "Case Information", "type": "info", "rows": [
@@ -214,7 +214,7 @@ def bulk_delete(request):
 
 
 def bulk_export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = LegalMatter.objects.filter(pk__in=pks) if pks else LegalMatter.objects.none()
     fields = [

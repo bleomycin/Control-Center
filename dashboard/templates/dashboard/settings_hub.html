@@ -98,6 +98,19 @@
             <p class="text-sm text-gray-400">Customize the tab categories on the asset list page.</p>
         </a>
 
+        <!-- Backup & Restore -->
+        <a href="{% url 'dashboard:backup_settings' %}" class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-gray-500 transition-colors group">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="p-2 bg-teal-900/50 rounded-lg">
+                    <svg class="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                    </svg>
+                </div>
+                <h2 class="text-lg font-semibold text-white group-hover:text-teal-400 transition-colors">Backup &amp; Restore</h2>
+            </div>
+            <p class="text-sm text-gray-400">Create, download, and restore full backups of the database and media files.</p>
+        </a>
+
         <!-- Django Admin -->
         <a href="/admin/" class="bg-gray-800 rounded-lg border border-gray-700 p-6 hover:border-gray-500 transition-colors group">
             <div class="flex items-center gap-3 mb-3">

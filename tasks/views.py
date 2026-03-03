@@ -288,7 +288,7 @@ def quick_create(request):
 
 
 def export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = Task.objects.prefetch_related("related_stakeholders").annotate(
         _st_count=Count("subtasks", distinct=True),
         _st_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
@@ -318,7 +318,7 @@ def export_csv(request):
 
 
 def export_pdf_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     t = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
     direction_label = t.get_direction_display()
     stakeholder_label = "Stakeholders"
@@ -576,7 +576,7 @@ def bulk_delete(request):
 
 
 def bulk_export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = Task.objects.filter(pk__in=pks) if pks else Task.objects.none()
     fields = [

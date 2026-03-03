@@ -3,8 +3,8 @@ import re
 from django import forms
 from django.core.exceptions import ValidationError
 
-from legacy.forms import TailwindFormMixin
-from dashboard.models import ChoiceOption, EmailSettings
+from config.forms import TailwindFormMixin
+from dashboard.models import BackupSettings, ChoiceOption, EmailSettings
 
 
 class EmailSettingsForm(TailwindFormMixin, forms.ModelForm):
@@ -44,6 +44,24 @@ class EmailSettingsForm(TailwindFormMixin, forms.ModelForm):
         if not password and self.instance:
             return self.instance.password
         return password
+
+
+class BackupSettingsForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = BackupSettings
+        fields = ["enabled", "frequency", "time_hour", "time_minute", "retention_count"]
+
+    def clean_time_hour(self):
+        hour = self.cleaned_data.get("time_hour")
+        if hour is not None and not (0 <= hour <= 23):
+            raise ValidationError("Hour must be between 0 and 23.")
+        return hour
+
+    def clean_time_minute(self):
+        minute = self.cleaned_data.get("time_minute")
+        if minute is not None and not (0 <= minute <= 59):
+            raise ValidationError("Minute must be between 0 and 59.")
+        return minute
 
 
 class ChoiceOptionForm(TailwindFormMixin, forms.ModelForm):

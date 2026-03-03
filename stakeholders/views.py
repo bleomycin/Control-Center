@@ -263,7 +263,7 @@ class StakeholderDeleteView(DeleteView):
 
 
 def export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = Stakeholder.objects.select_related("parent_organization").all()
     fields = [
         ("name", "Name"),
@@ -279,7 +279,7 @@ def export_csv(request):
 
 
 def export_pdf_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     s = get_object_or_404(Stakeholder, pk=pk)
     firm_name = s.parent_organization.name if s.parent_organization else None
     sections = [
@@ -537,7 +537,7 @@ def bulk_delete(request):
 
 
 def bulk_export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = Stakeholder.objects.filter(pk__in=pks).select_related("parent_organization") if pks else Stakeholder.objects.none()
     fields = [

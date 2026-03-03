@@ -16,7 +16,7 @@ from .models import Attachment, Folder, Link, Note, Tag
 
 
 def export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     qs = Note.objects.select_related("folder").prefetch_related("tags").all()
     for n in qs:
         n._tag_names = ", ".join(t.name for t in n.tags.all())
@@ -253,7 +253,7 @@ def _strip_markdown(text):
 
 
 def export_pdf_detail(request, pk):
-    from legacy.pdf_export import render_pdf
+    from config.pdf_export import render_pdf
     n = get_object_or_404(Note, pk=pk)
     info_rows = [
         ("Type", get_choice_label("note_type", n.note_type)),
@@ -464,7 +464,7 @@ def bulk_move_folder(request):
 
 
 def bulk_export_csv(request):
-    from legacy.export import export_csv as do_export
+    from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
     qs = Note.objects.filter(pk__in=pks) if pks else Note.objects.none()
     qs = qs.select_related("folder").prefetch_related("tags")
