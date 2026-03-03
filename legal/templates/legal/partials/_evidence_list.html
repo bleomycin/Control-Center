@@ -10,11 +10,18 @@
             <div class="flex items-center gap-3 mt-1">
                 {% if ev.date_obtained %}<span class="text-xs text-gray-400">{{ ev.date_obtained|date:"M j, Y" }}</span>{% endif %}
                 {% if ev.file %}<a href="{{ ev.file.url }}" class="text-xs text-blue-400 hover:text-blue-300" target="_blank">View file</a>{% endif %}
+                {% if ev.url %}<a href="{{ ev.url }}" class="text-xs text-blue-400 hover:text-blue-300" target="_blank" rel="noopener">View link</a>{% endif %}
             </div>
         </div>
-        <button hx-post="{% url 'legal:evidence_delete' ev.pk %}" hx-target="#evidence-list" hx-swap="innerHTML"
-                hx-confirm="Delete this evidence?"
-                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button hx-get="{% url 'legal:evidence_edit' ev.pk %}"
+                    hx-target="#evidence-form-container"
+                    hx-swap="innerHTML"
+                    class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+            <button hx-post="{% url 'legal:evidence_delete' ev.pk %}" hx-target="#evidence-list" hx-swap="innerHTML"
+                    hx-confirm="Delete this evidence?"
+                    class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+        </div>
     </div>
     {% empty %}
     <p class="px-4 py-4 text-sm text-gray-500 text-center">No evidence</p>

@@ -160,9 +160,10 @@ def export_pdf_detail(request, pk):
     evidence = m.evidence.all()
     if evidence:
         sections.append({"heading": "Evidence", "type": "table",
-                         "headers": ["Title", "Type", "Date Obtained"],
+                         "headers": ["Title", "Type", "Date Obtained", "URL"],
                          "rows": [[e.title, e.evidence_type or "-",
-                                   e.date_obtained.strftime("%b %d, %Y") if e.date_obtained else "-"] for e in evidence]})
+                                   e.date_obtained.strftime("%b %d, %Y") if e.date_obtained else "-",
+                                   e.url or "-"] for e in evidence]})
     tasks = m.tasks.exclude(status="complete")
     if tasks:
         sections.append({"heading": "Related Tasks", "type": "table",
@@ -187,6 +188,24 @@ def evidence_add(request, pk):
         form = EvidenceForm()
     return render(request, "legal/partials/_evidence_form.html",
                   {"form": form, "matter": matter})
+
+
+def evidence_edit(request, pk):
+    ev = get_object_or_404(Evidence, pk=pk)
+    matter = ev.legal_matter
+    if request.method == "POST":
+        form = EvidenceForm(request.POST, request.FILES, instance=ev)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            if request.POST.get("clear_file"):
+                obj.file = ""
+            obj.save()
+            return render(request, "legal/partials/_evidence_list.html",
+                          {"evidence_list": matter.evidence.all(), "matter": matter})
+    else:
+        form = EvidenceForm(instance=ev)
+    return render(request, "legal/partials/_evidence_form.html",
+                  {"form": form, "matter": matter, "editing": ev})
 
 
 def evidence_delete(request, pk):
