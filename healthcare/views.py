@@ -491,6 +491,12 @@ class ProviderCreateView(CreateView):
     form_class = ProviderForm
     template_name = "healthcare/provider_form.html"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("stakeholder"):
+            initial["stakeholder"] = self.request.GET["stakeholder"]
+        return initial
+
     def form_valid(self, form):
         messages.success(self.request, "Provider created.")
         return super().form_valid(form)
@@ -504,12 +510,12 @@ class ProviderDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         obj = self.object
-        ctx["prescriptions"] = obj.prescriptions.filter(status="active")
-        ctx["appointments"] = obj.appointments.exclude(status__in=["completed", "cancelled"])
-        ctx["visits"] = obj.visits.all()[:5]
-        ctx["test_results"] = obj.ordered_tests.all()[:5]
-        ctx["supplements"] = obj.recommended_supplements.filter(status="active")
-        ctx["advice"] = obj.advice_given.filter(status="active")
+        ctx["prescriptions"] = obj.prescriptions.all()
+        ctx["appointments"] = obj.appointments.all()
+        ctx["visits"] = obj.visits.all()
+        ctx["test_results"] = obj.ordered_tests.all()
+        ctx["supplements"] = obj.recommended_supplements.all()
+        ctx["advice"] = obj.advice_given.all()
         ctx["conditions"] = obj.diagnosed_conditions.all()
         ctx["notes"] = obj.notes.all() if hasattr(obj, "notes") else []
         ctx["internal_notes_url"] = reverse("healthcare:provider_internal_notes", args=[obj.pk])
@@ -542,6 +548,12 @@ class ConditionCreateView(CreateView):
     model = Condition
     form_class = ConditionForm
     template_name = "healthcare/condition_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("provider"):
+            initial["diagnosed_by"] = self.request.GET["provider"]
+        return initial
 
     def form_valid(self, form):
         messages.success(self.request, "Condition created.")
@@ -593,6 +605,14 @@ class PrescriptionCreateView(CreateView):
     form_class = PrescriptionForm
     template_name = "healthcare/prescription_form.html"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("provider"):
+            initial["prescribing_provider"] = self.request.GET["provider"]
+        if self.request.GET.get("condition"):
+            initial["related_condition"] = self.request.GET["condition"]
+        return initial
+
     def form_valid(self, form):
         messages.success(self.request, "Prescription created.")
         return super().form_valid(form)
@@ -636,6 +656,14 @@ class SupplementCreateView(CreateView):
     model = Supplement
     form_class = SupplementForm
     template_name = "healthcare/supplement_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("provider"):
+            initial["recommended_by"] = self.request.GET["provider"]
+        if self.request.GET.get("condition"):
+            initial["related_condition"] = self.request.GET["condition"]
+        return initial
 
     def form_valid(self, form):
         messages.success(self.request, "Supplement created.")
@@ -681,6 +709,14 @@ class TestResultCreateView(CreateView):
     form_class = TestResultForm
     template_name = "healthcare/testresult_form.html"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("provider"):
+            initial["ordering_provider"] = self.request.GET["provider"]
+        if self.request.GET.get("condition"):
+            initial["related_condition"] = self.request.GET["condition"]
+        return initial
+
     def form_valid(self, form):
         messages.success(self.request, "Test result created.")
         return super().form_valid(form)
@@ -724,6 +760,14 @@ class VisitCreateView(CreateView):
     model = Visit
     form_class = VisitForm
     template_name = "healthcare/visit_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("provider"):
+            initial["provider"] = self.request.GET["provider"]
+        if self.request.GET.get("condition"):
+            initial["related_condition"] = self.request.GET["condition"]
+        return initial
 
     def form_valid(self, form):
         messages.success(self.request, "Visit recorded.")
@@ -769,6 +813,16 @@ class AdviceCreateView(CreateView):
     model = Advice
     form_class = AdviceForm
     template_name = "healthcare/advice_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("provider"):
+            initial["given_by"] = self.request.GET["provider"]
+        if self.request.GET.get("visit"):
+            initial["related_visit"] = self.request.GET["visit"]
+        if self.request.GET.get("condition"):
+            initial["related_condition"] = self.request.GET["condition"]
+        return initial
 
     def form_valid(self, form):
         messages.success(self.request, "Advice created.")
@@ -820,6 +874,10 @@ class AppointmentCreateView(CreateView):
             initial["date"] = self.request.GET["date"]
         if self.request.GET.get("time"):
             initial["time"] = self.request.GET["time"]
+        if self.request.GET.get("provider"):
+            initial["provider"] = self.request.GET["provider"]
+        if self.request.GET.get("condition"):
+            initial["related_condition"] = self.request.GET["condition"]
         return initial
 
     def form_valid(self, form):
@@ -955,6 +1013,294 @@ def appointment_internal_notes(request, pk):
 
 def condition_internal_notes(request, pk):
     return _internal_notes_edit(request, Condition, pk, "healthcare:condition_internal_notes")
+
+
+# --- FK-Based Link/Unlink (Provider & Condition hubs) ---
+
+def _fk_link(request, parent_class, parent_pk, child_class, fk_field, form_class,
+             list_template, link_url_name, unlink_url_name, list_id):
+    """Generic handler for FK-based inline linking on detail pages."""
+    parent = get_object_or_404(parent_class, pk=parent_pk)
+    if request.method == "POST":
+        form = form_class(request.POST)
+        if form.is_valid():
+            item = form.cleaned_data["item"]
+            setattr(item, fk_field, parent)
+            item.save(update_fields=[fk_field])
+            items = child_class.objects.filter(**{fk_field: parent})
+            return render(request, list_template, {
+                "items": items,
+                "unlink_url_name": unlink_url_name,
+                "parent_pk": parent.pk,
+            })
+    else:
+        form = form_class()
+    return render(request, "healthcare/partials/_healthcare_fk_link_form.html", {
+        "form": form,
+        "link_url": reverse(link_url_name, args=[parent_pk]),
+        "list_id": list_id,
+    })
+
+
+def _fk_unlink(request, parent_class, parent_pk, child_class, child_pk, fk_field,
+               list_template, unlink_url_name):
+    """Generic handler for FK-based inline unlinking on detail pages."""
+    parent = get_object_or_404(parent_class, pk=parent_pk)
+    child = get_object_or_404(child_class, pk=child_pk)
+    if request.method == "POST":
+        if getattr(child, f"{fk_field}_id") == parent.pk:
+            setattr(child, fk_field, None)
+            child.save(update_fields=[fk_field])
+    items = child_class.objects.filter(**{fk_field: parent})
+    return render(request, list_template, {
+        "items": items,
+        "unlink_url_name": unlink_url_name,
+        "parent_pk": parent.pk,
+    })
+
+
+# Provider FK link/unlink wrappers
+
+def provider_prescription_link(request, pk):
+    from .forms import PrescriptionLinkForm
+    return _fk_link(request, Provider, pk, Prescription, "prescribing_provider",
+                    PrescriptionLinkForm,
+                    "healthcare/partials/_linked_prescriptions_list.html",
+                    "healthcare:provider_prescription_link",
+                    "healthcare:provider_prescription_unlink",
+                    "prescription-list")
+
+
+def provider_prescription_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, Prescription, item_pk,
+                      "prescribing_provider",
+                      "healthcare/partials/_linked_prescriptions_list.html",
+                      "healthcare:provider_prescription_unlink")
+
+
+def provider_supplement_link(request, pk):
+    from .forms import SupplementLinkForm
+    return _fk_link(request, Provider, pk, Supplement, "recommended_by",
+                    SupplementLinkForm,
+                    "healthcare/partials/_linked_supplements_list.html",
+                    "healthcare:provider_supplement_link",
+                    "healthcare:provider_supplement_unlink",
+                    "supplement-list")
+
+
+def provider_supplement_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, Supplement, item_pk,
+                      "recommended_by",
+                      "healthcare/partials/_linked_supplements_list.html",
+                      "healthcare:provider_supplement_unlink")
+
+
+def provider_testresult_link(request, pk):
+    from .forms import TestResultLinkForm
+    return _fk_link(request, Provider, pk, TestResult, "ordering_provider",
+                    TestResultLinkForm,
+                    "healthcare/partials/_linked_testresults_list.html",
+                    "healthcare:provider_testresult_link",
+                    "healthcare:provider_testresult_unlink",
+                    "testresult-list")
+
+
+def provider_testresult_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, TestResult, item_pk,
+                      "ordering_provider",
+                      "healthcare/partials/_linked_testresults_list.html",
+                      "healthcare:provider_testresult_unlink")
+
+
+def provider_visit_link(request, pk):
+    from .forms import VisitLinkForm
+    return _fk_link(request, Provider, pk, Visit, "provider",
+                    VisitLinkForm,
+                    "healthcare/partials/_linked_visits_list.html",
+                    "healthcare:provider_visit_link",
+                    "healthcare:provider_visit_unlink",
+                    "visit-list")
+
+
+def provider_visit_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, Visit, item_pk,
+                      "provider",
+                      "healthcare/partials/_linked_visits_list.html",
+                      "healthcare:provider_visit_unlink")
+
+
+def provider_appointment_link(request, pk):
+    from .forms import AppointmentLinkForm
+    return _fk_link(request, Provider, pk, Appointment, "provider",
+                    AppointmentLinkForm,
+                    "healthcare/partials/_linked_appointments_list.html",
+                    "healthcare:provider_appointment_link",
+                    "healthcare:provider_appointment_unlink",
+                    "appointment-list")
+
+
+def provider_appointment_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, Appointment, item_pk,
+                      "provider",
+                      "healthcare/partials/_linked_appointments_list.html",
+                      "healthcare:provider_appointment_unlink")
+
+
+def provider_condition_link(request, pk):
+    from .forms import ConditionLinkForm
+    return _fk_link(request, Provider, pk, Condition, "diagnosed_by",
+                    ConditionLinkForm,
+                    "healthcare/partials/_linked_conditions_list.html",
+                    "healthcare:provider_condition_link",
+                    "healthcare:provider_condition_unlink",
+                    "condition-list")
+
+
+def provider_condition_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, Condition, item_pk,
+                      "diagnosed_by",
+                      "healthcare/partials/_linked_conditions_list.html",
+                      "healthcare:provider_condition_unlink")
+
+
+def provider_advice_link(request, pk):
+    from .forms import AdviceLinkForm
+    return _fk_link(request, Provider, pk, Advice, "given_by",
+                    AdviceLinkForm,
+                    "healthcare/partials/_linked_advice_list.html",
+                    "healthcare:provider_advice_link",
+                    "healthcare:provider_advice_unlink",
+                    "advice-list")
+
+
+def provider_advice_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Provider, pk, Advice, item_pk,
+                      "given_by",
+                      "healthcare/partials/_linked_advice_list.html",
+                      "healthcare:provider_advice_unlink")
+
+
+# Condition FK link/unlink wrappers
+
+def condition_prescription_link(request, pk):
+    from .forms import PrescriptionLinkForm
+    return _fk_link(request, Condition, pk, Prescription, "related_condition",
+                    PrescriptionLinkForm,
+                    "healthcare/partials/_linked_prescriptions_list.html",
+                    "healthcare:condition_prescription_link",
+                    "healthcare:condition_prescription_unlink",
+                    "prescription-list")
+
+
+def condition_prescription_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Condition, pk, Prescription, item_pk,
+                      "related_condition",
+                      "healthcare/partials/_linked_prescriptions_list.html",
+                      "healthcare:condition_prescription_unlink")
+
+
+def condition_supplement_link(request, pk):
+    from .forms import SupplementLinkForm
+    return _fk_link(request, Condition, pk, Supplement, "related_condition",
+                    SupplementLinkForm,
+                    "healthcare/partials/_linked_supplements_list.html",
+                    "healthcare:condition_supplement_link",
+                    "healthcare:condition_supplement_unlink",
+                    "supplement-list")
+
+
+def condition_supplement_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Condition, pk, Supplement, item_pk,
+                      "related_condition",
+                      "healthcare/partials/_linked_supplements_list.html",
+                      "healthcare:condition_supplement_unlink")
+
+
+def condition_testresult_link(request, pk):
+    from .forms import TestResultLinkForm
+    return _fk_link(request, Condition, pk, TestResult, "related_condition",
+                    TestResultLinkForm,
+                    "healthcare/partials/_linked_testresults_list.html",
+                    "healthcare:condition_testresult_link",
+                    "healthcare:condition_testresult_unlink",
+                    "testresult-list")
+
+
+def condition_testresult_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Condition, pk, TestResult, item_pk,
+                      "related_condition",
+                      "healthcare/partials/_linked_testresults_list.html",
+                      "healthcare:condition_testresult_unlink")
+
+
+def condition_visit_link(request, pk):
+    from .forms import VisitLinkForm
+    return _fk_link(request, Condition, pk, Visit, "related_condition",
+                    VisitLinkForm,
+                    "healthcare/partials/_linked_visits_list.html",
+                    "healthcare:condition_visit_link",
+                    "healthcare:condition_visit_unlink",
+                    "visit-list")
+
+
+def condition_visit_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Condition, pk, Visit, item_pk,
+                      "related_condition",
+                      "healthcare/partials/_linked_visits_list.html",
+                      "healthcare:condition_visit_unlink")
+
+
+def condition_advice_link(request, pk):
+    from .forms import AdviceLinkForm
+    return _fk_link(request, Condition, pk, Advice, "related_condition",
+                    AdviceLinkForm,
+                    "healthcare/partials/_linked_advice_list.html",
+                    "healthcare:condition_advice_link",
+                    "healthcare:condition_advice_unlink",
+                    "advice-list")
+
+
+def condition_advice_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Condition, pk, Advice, item_pk,
+                      "related_condition",
+                      "healthcare/partials/_linked_advice_list.html",
+                      "healthcare:condition_advice_unlink")
+
+
+def condition_appointment_link(request, pk):
+    from .forms import AppointmentLinkForm
+    return _fk_link(request, Condition, pk, Appointment, "related_condition",
+                    AppointmentLinkForm,
+                    "healthcare/partials/_linked_appointments_list.html",
+                    "healthcare:condition_appointment_link",
+                    "healthcare:condition_appointment_unlink",
+                    "appointment-list")
+
+
+def condition_appointment_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Condition, pk, Appointment, item_pk,
+                      "related_condition",
+                      "healthcare/partials/_linked_appointments_list.html",
+                      "healthcare:condition_appointment_unlink")
+
+
+# Visit FK link/unlink wrappers (advice)
+
+def visit_advice_link(request, pk):
+    from .forms import AdviceLinkForm
+    return _fk_link(request, Visit, pk, Advice, "related_visit",
+                    AdviceLinkForm,
+                    "healthcare/partials/_linked_advice_list.html",
+                    "healthcare:visit_advice_link",
+                    "healthcare:visit_advice_unlink",
+                    "advice-list")
+
+
+def visit_advice_unlink(request, pk, item_pk):
+    return _fk_unlink(request, Visit, pk, Advice, item_pk,
+                      "related_visit",
+                      "healthcare/partials/_linked_advice_list.html",
+                      "healthcare:visit_advice_unlink")
 
 
 # --- Note Link/Unlink ---

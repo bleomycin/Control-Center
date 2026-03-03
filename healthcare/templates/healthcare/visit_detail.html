@@ -97,21 +97,23 @@
 </div>
 {% endif %}
 
-{% if advice %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Advice Records</h2>
+        <div class="flex items-center gap-3">
+            <button hx-get="{% url 'healthcare:visit_advice_link' visit.pk %}"
+                    hx-target="#advice-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+            <a href="{% url 'healthcare:advice_create' %}?visit={{ visit.pk }}&provider={% if visit.provider %}{{ visit.provider.pk }}{% endif %}"
+               class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+        </div>
     </div>
-    <div class="divide-y divide-gray-700">
-        {% for a in advice %}
-        <a href="{{ a.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-            <span class="text-sm text-gray-200">{{ a.title }}</span>
-            <span class="text-xs text-gray-400">{{ a.get_category_display }}</span>
-        </a>
-        {% endfor %}
+    <div id="advice-form-container"></div>
+    <div id="advice-list">
+        {% include "healthcare/partials/_linked_advice_list.html" with items=advice unlink_url_name="healthcare:visit_advice_unlink" parent_pk=visit.pk %}
     </div>
 </div>
-{% endif %}
 
 {% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=visit edit_url=internal_notes_url %}
 
@@ -119,10 +121,14 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
-            <button hx-get="{% url 'healthcare:visit_note_link' visit.pk %}"
-                    hx-target="#note-form-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:visit_note_link' visit.pk %}"
+                        hx-target="#note-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'notes:create' %}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
         <div id="note-form-container"></div>
         <div id="note-list">

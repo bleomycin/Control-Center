@@ -1,0 +1,16 @@
+<div class="divide-y divide-gray-700">
+    {% for v in items %}
+    <div class="flex items-center justify-between px-4 py-3 group hover:bg-gray-700/50">
+        <a href="{{ v.get_absolute_url }}" class="text-sm text-gray-200 hover:text-blue-400 truncate">{{ v.get_visit_type_display }}{% if v.reason %} &mdash; {{ v.reason|truncatechars:30 }}{% endif %}</a>
+        <div class="flex items-center gap-3 shrink-0">
+            <span class="text-xs text-gray-400">{{ v.date|date:"M j, Y" }}</span>
+            <button hx-post="{% url unlink_url_name parent_pk v.pk %}"
+                    hx-target="#visit-list" hx-swap="innerHTML"
+                    hx-confirm="Unlink this visit?"
+                    class="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 text-xs transition-opacity">Unlink</button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+    {% endfor %}
+</div>

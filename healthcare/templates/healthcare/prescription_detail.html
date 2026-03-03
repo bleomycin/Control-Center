@@ -107,10 +107,14 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
-            <button hx-get="{% url 'healthcare:prescription_note_link' prescription.pk %}"
-                    hx-target="#note-form-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:prescription_note_link' prescription.pk %}"
+                        hx-target="#note-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'notes:create' %}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
         <div id="note-form-container"></div>
         <div id="note-list">
@@ -121,10 +125,14 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
-            <button hx-get="{% url 'healthcare:prescription_legal_link' prescription.pk %}"
-                    hx-target="#legal-form-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Matter</button>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:prescription_legal_link' prescription.pk %}"
+                        hx-target="#legal-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'legal:create' %}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
         <div id="legal-form-container"></div>
         <div id="legal-list">

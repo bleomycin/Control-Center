@@ -1,0 +1,17 @@
+<div class="divide-y divide-gray-700">
+    {% for a in items %}
+    <div class="flex items-center justify-between px-4 py-3 group hover:bg-gray-700/50">
+        <a href="{{ a.get_absolute_url }}" class="text-sm text-gray-200 hover:text-blue-400 truncate">{{ a.title }}</a>
+        <div class="flex items-center gap-3 shrink-0">
+            <span class="text-xs text-gray-400">{{ a.get_category_display }}</span>
+            <span class="text-xs {% if a.status == 'active' %}text-green-400{% elif a.status == 'superseded' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ a.get_status_display }}</span>
+            <button hx-post="{% url unlink_url_name parent_pk a.pk %}"
+                    hx-target="#advice-list" hx-swap="innerHTML"
+                    hx-confirm="Unlink this advice?"
+                    class="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 text-xs transition-opacity">Unlink</button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+    {% endfor %}
+</div>
