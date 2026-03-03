@@ -121,6 +121,18 @@
                 <div class="w-3 h-3 bg-yellow-500" style="clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></div>
                 <span>High-Priority Tasks</span>
             </div>
+            <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 bg-teal-500" style="clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);"></div>
+                <span>Vehicles</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 bg-sky-500" style="clip-path: polygon(50% 0%, 100% 50%, 50% 30%, 0% 50%);"></div>
+                <span>Aircraft</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <div class="w-3 h-3 bg-pink-500" style="clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);"></div>
+                <span>Insurance</span>
+            </div>
         </div>
     </div>
 </div>
@@ -144,6 +156,15 @@
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="loans">
             Loans <span class="text-xs opacity-70">({{ counts.loans }})</span>
+        </button>
+        <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="vehicles">
+            Vehicles <span class="text-xs opacity-70">({{ counts.vehicles }})</span>
+        </button>
+        <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="aircraft">
+            Aircraft <span class="text-xs opacity-70">({{ counts.aircraft }})</span>
+        </button>
+        <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="policies">
+            Insurance <span class="text-xs opacity-70">({{ counts.policies }})</span>
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="legal">
             Legal <span class="text-xs opacity-70">({{ counts.legal_matters }})</span>
@@ -225,6 +246,48 @@
         <div id="sh-party-form-container"></div>
         <div id="sh-party-list">
             {% include "stakeholders/partials/_sh_party_list.html" with parties=loan_parties %}
+        </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab-vehicles">
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Vehicles owned by this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:vehicle_ownership_add' stakeholder.pk %}"
+                    hx-target="#sh-vehicle-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Vehicle</button>
+        </div>
+        <div id="sh-vehicle-form-container"></div>
+        <div id="sh-vehicle-list">
+            {% include "stakeholders/partials/_sh_vehicle_list.html" with vehicle_ownerships=vehicle_ownerships %}
+        </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab-aircraft">
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Aircraft owned by this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:aircraft_ownership_add' stakeholder.pk %}"
+                    hx-target="#sh-aircraft-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Aircraft</button>
+        </div>
+        <div id="sh-aircraft-form-container"></div>
+        <div id="sh-aircraft-list">
+            {% include "stakeholders/partials/_sh_aircraft_list.html" with aircraft_ownerships=aircraft_ownerships %}
+        </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab-policies">
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Insurance policies linked to this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:policyholder_add' stakeholder.pk %}"
+                    hx-target="#sh-policy-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Policy</button>
+        </div>
+        <div id="sh-policy-form-container"></div>
+        <div id="sh-policy-list">
+            {% include "stakeholders/partials/_sh_policy_list.html" %}
         </div>
     </div>
 
@@ -445,6 +508,27 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                         selector: 'node[shape = "star"]',
                         style: {
                             'background-color': '#eab308',
+                        }
+                    },
+                    // Vehicle nodes (teal pentagons)
+                    {
+                        selector: 'node[shape = "pentagon"]',
+                        style: {
+                            'background-color': '#14b8a6',
+                        }
+                    },
+                    // Aircraft nodes (sky vees)
+                    {
+                        selector: 'node[shape = "vee"]',
+                        style: {
+                            'background-color': '#0ea5e9',
+                        }
+                    },
+                    // Insurance policy nodes (pink octagons)
+                    {
+                        selector: 'node[shape = "octagon"]',
+                        style: {
+                            'background-color': '#ec4899',
                         }
                     },
                     // Edge styles
