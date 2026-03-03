@@ -188,50 +188,44 @@
     </div>
 
     <div class="tab-content hidden" id="tab-properties">
-        <div class="divide-y divide-gray-700">
-            {% for prop in all_properties %}
-            <a href="{{ prop.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <div>
-                    <span class="text-sm text-gray-200">{{ prop.name }}</span>
-                    <span class="text-xs text-gray-400 ml-2">{{ prop.get_status_display }}</span>
-                </div>
-                <span class="text-xs text-gray-400">${{ prop.estimated_value|floatformat:0|intcomma|default:"-" }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-8 text-sm text-gray-500 text-center">No properties</p>
-            {% endfor %}
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Properties owned by this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:property_ownership_add' stakeholder.pk %}"
+                    hx-target="#sh-ownership-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Property</button>
+        </div>
+        <div id="sh-ownership-form-container"></div>
+        <div id="sh-ownership-list">
+            {% include "stakeholders/partials/_sh_ownership_list.html" with ownerships=property_ownerships %}
         </div>
     </div>
 
     <div class="tab-content hidden" id="tab-investments">
-        <div class="divide-y divide-gray-700">
-            {% for inv in all_investments %}
-            <a href="{{ inv.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <div>
-                    <span class="text-sm text-gray-200">{{ inv.name }}</span>
-                    <span class="text-xs text-gray-400 ml-2">{{ inv.investment_type }}</span>
-                </div>
-                <span class="text-xs text-gray-400">${{ inv.current_value|floatformat:0|intcomma|default:"-" }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-8 text-sm text-gray-500 text-center">No investments</p>
-            {% endfor %}
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Investments held by this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:investment_participant_add' stakeholder.pk %}"
+                    hx-target="#sh-participant-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Investment</button>
+        </div>
+        <div id="sh-participant-form-container"></div>
+        <div id="sh-participant-list">
+            {% include "stakeholders/partials/_sh_participant_list.html" with participants=investment_participants %}
         </div>
     </div>
 
     <div class="tab-content hidden" id="tab-loans">
-        <div class="divide-y divide-gray-700">
-            {% for loan in all_loans %}
-            <a href="{{ loan.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <div>
-                    <span class="text-sm text-gray-200">{{ loan.name }}</span>
-                    <span class="text-xs text-gray-400 ml-2">{{ loan.get_status_display }}</span>
-                </div>
-                <span class="text-xs text-gray-400">${{ loan.current_balance|floatformat:0|intcomma|default:"-" }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-8 text-sm text-gray-500 text-center">No loans</p>
-            {% endfor %}
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Loans involving this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:loan_party_add' stakeholder.pk %}"
+                    hx-target="#sh-party-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Loan</button>
+        </div>
+        <div id="sh-party-form-container"></div>
+        <div id="sh-party-list">
+            {% include "stakeholders/partials/_sh_party_list.html" with parties=loan_parties %}
         </div>
     </div>
 

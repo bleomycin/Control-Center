@@ -1,6 +1,7 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
 from dashboard.choices import get_choices
+from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty
 from .models import Stakeholder, ContactLog
 
 
@@ -35,3 +36,30 @@ class ContactLogForm(TailwindFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["method"].widget = forms.Select(choices=get_choices("contact_method"))
+
+
+class StakeholderPropertyForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = PropertyOwnership
+        fields = ["property", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class StakeholderInvestmentForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = InvestmentParticipant
+        fields = ["investment", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class StakeholderLoanForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = LoanParty
+        fields = ["loan", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
