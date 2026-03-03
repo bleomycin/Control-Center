@@ -17,6 +17,10 @@ from legal.models import LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
 from notes.models import Folder, Note, Tag
+from healthcare.models import (
+    Provider, Condition, Prescription, Supplement, TestResult,
+    Visit, Advice, Appointment,
+)
 
 
 class Command(BaseCommand):
@@ -930,6 +934,259 @@ class Command(BaseCommand):
             for tag_slug in note_tags.get(title, []):
                 note.tags.add(tags[tag_slug])
 
+        self.stdout.write("Creating healthcare data...")
+        # Providers
+        providers = {}
+        provider_data = [
+            ("Dr. Sarah Mitchell", "primary_care", "Internal Medicine", "Pacific Primary Care",
+             "1234567890", "CA-MD-45678", "415-555-0101", "415-555-0102",
+             "smitchell@pacificprimary.com", "2200 Pacific Ave, San Francisco, CA 94115",
+             "active", "Dr. Helen Park", None,
+             "PCP since 2020. Excellent bedside manner. Accepts Blue Cross PPO."),
+            ("Dr. James Wong", "specialist", "Cardiology", "Bay Area Heart Group",
+             "2345678901", "CA-MD-56789", "415-555-0201", "",
+             "jwong@bayareaheart.com", "1800 Post St, San Francisco, CA 94115",
+             "active", None, None,
+             "Referred by Dr. Mitchell. Annual cardiac checkup."),
+            ("Dr. Emily Chen", "dentist", "General Dentistry", "Sunset Dental",
+             "3456789012", "CA-DDS-67890", "415-555-0301", "",
+             "echen@sunsetdental.com", "3456 Sunset Blvd, San Francisco, CA 94122",
+             "active", None, None,
+             "Biannual cleanings. Good with anxious patients."),
+            ("Dr. Michael Torres", "specialist", "Orthopedics", "Sports Medicine Associates",
+             "4567890123", "CA-MD-78901", "415-555-0401", "",
+             "mtorres@sportsmedicine.com", "500 Parnassus Ave, San Francisco, CA 94143",
+             "past", None, None,
+             "Treated knee injury in 2023. No longer seeing."),
+            ("Dr. Lisa Pham", "specialist", "Dermatology", "Pham Dermatology",
+             "5678901234", "CA-MD-89012", "415-555-0501", "",
+             "lpham@phamderm.com", "1600 Divisadero St, San Francisco, CA 94115",
+             "active", None, None,
+             "Annual skin check. Great reviews."),
+        ]
+        hc_pks = {"providers": [], "conditions": [], "prescriptions": [],
+                   "supplements": [], "testresults": [], "visits": [],
+                   "advice": [], "appointments": []}
+        for (name, ptype, spec, practice, npi, lic, phone, fax, email, addr,
+             status, sh_name, policy_name, notes) in provider_data:
+            prov = Provider.objects.create(
+                name=name, provider_type=ptype, specialty=spec,
+                practice_name=practice, npi=npi, license_number=lic,
+                phone=phone, fax=fax, email=email, address=addr,
+                status=status,
+                stakeholder=stakeholders.get(sh_name),
+                notes_text=notes,
+            )
+            providers[name] = prov
+            hc_pks["providers"].append(prov.pk)
+
+        # Conditions
+        conditions = {}
+        condition_data = [
+            ("Essential Hypertension", "I10", today - timedelta(days=730),
+             "active", "moderate", "Dr. Sarah Mitchell",
+             "Blood pressure consistently elevated. Well-controlled with medication.",
+             "Lisinopril 10mg daily. Monitor BP at home. Low sodium diet."),
+            ("Seasonal Allergies", "J30.1", today - timedelta(days=1825),
+             "managed", "mild", "Dr. Sarah Mitchell",
+             "Spring/fall seasonal allergic rhinitis.",
+             "Cetirizine as needed. Nasal spray during peak season."),
+        ]
+        for name, icd, diag_date, status, severity, prov_name, desc, plan in condition_data:
+            cond = Condition.objects.create(
+                name=name, icd_code=icd, diagnosed_date=diag_date,
+                status=status, severity=severity,
+                diagnosed_by=providers.get(prov_name),
+                description=desc, treatment_plan=plan,
+            )
+            conditions[name] = cond
+            hc_pks["conditions"].append(cond.pk)
+
+        # Prescriptions
+        prescriptions = {}
+        rx_data = [
+            ("Lisinopril", "Lisinopril", "10mg", "once_daily", "oral",
+             "CVS Pharmacy", "415-555-0901", "RX-2024-001",
+             today - timedelta(days=365), None, 6, 3,
+             today + timedelta(days=15), False,
+             "Blood pressure control", "Dry cough (rare), dizziness",
+             "active", "Dr. Sarah Mitchell", "Essential Hypertension"),
+            ("Atorvastatin", "Atorvastatin Calcium", "20mg", "once_daily", "oral",
+             "CVS Pharmacy", "415-555-0901", "RX-2024-002",
+             today - timedelta(days=180), None, 6, 5,
+             today + timedelta(days=45), False,
+             "Cholesterol management", "Muscle aches, liver enzyme changes",
+             "active", "Dr. Sarah Mitchell", "Essential Hypertension"),
+            ("Amoxicillin", "Amoxicillin", "500mg", "three_times_daily", "oral",
+             "Walgreens", "415-555-0902", "RX-2025-010",
+             today - timedelta(days=14), today - timedelta(days=4), 0, 0,
+             None, False,
+             "Sinus infection", "Nausea, diarrhea",
+             "completed", "Dr. Sarah Mitchell", None),
+        ]
+        for (med, generic, dose, freq, route, pharmacy, ph_phone, rx_num,
+             start, end, ref_total, ref_remain, next_refill, controlled,
+             purpose, side_effects, status, prov_name, cond_name) in rx_data:
+            rx = Prescription.objects.create(
+                medication_name=med, generic_name=generic, dosage=dose,
+                frequency=freq, route=route, pharmacy=pharmacy,
+                pharmacy_phone=ph_phone, rx_number=rx_num,
+                start_date=start, end_date=end,
+                refills_total=ref_total, refills_remaining=ref_remain,
+                next_refill_date=next_refill, is_controlled=controlled,
+                purpose=purpose, side_effects=side_effects, status=status,
+                prescribing_provider=providers.get(prov_name),
+                related_condition=conditions.get(cond_name),
+            )
+            prescriptions[med] = rx
+            hc_pks["prescriptions"].append(rx.pk)
+
+        # Supplements
+        supplement_data = [
+            ("Vitamin D3", "Nature Made", "5000 IU", "once_daily",
+             "Bone health and immune support", today - timedelta(days=365), None,
+             "active", "Dr. Sarah Mitchell", None),
+            ("Fish Oil (Omega-3)", "Nordic Naturals", "1000mg", "twice_daily",
+             "Heart health and inflammation", today - timedelta(days=200), None,
+             "active", "Dr. Sarah Mitchell", "Essential Hypertension"),
+            ("Magnesium Glycinate", "NOW Foods", "400mg", "once_daily",
+             "Sleep quality and muscle relaxation", today - timedelta(days=90), None,
+             "active", None, None),
+        ]
+        for name, brand, dose, freq, purpose, start, end, status, prov_name, cond_name in supplement_data:
+            s = Supplement.objects.create(
+                name=name, brand=brand, dosage=dose, frequency=freq,
+                purpose=purpose, start_date=start, end_date=end, status=status,
+                recommended_by=providers.get(prov_name),
+                related_condition=conditions.get(cond_name),
+            )
+            hc_pks["supplements"].append(s.pk)
+
+        # Test Results
+        test_data = [
+            ("Comprehensive Metabolic Panel", "lab", today - timedelta(days=30),
+             "UCSF Medical Center", "All within range", "See reference ranges",
+             "", "normal", "Annual lab work. All values normal.",
+             "Dr. Sarah Mitchell", None),
+            ("Lipid Panel", "lab", today - timedelta(days=30),
+             "UCSF Medical Center", "Total: 195, LDL: 118, HDL: 55, Trig: 110",
+             "Total <200, LDL <130, HDL >40, Trig <150", "mg/dL",
+             "normal", "Cholesterol well-controlled with statin therapy.",
+             "Dr. Sarah Mitchell", "Essential Hypertension"),
+            ("Chest X-Ray", "imaging", today - timedelta(days=90),
+             "Bay Area Heart Group", "Normal cardiac silhouette",
+             "Normal", "", "normal",
+             "Annual cardiac screening. No abnormalities detected.",
+             "Dr. James Wong", None),
+        ]
+        for (name, ttype, dt, facility, result, ref_range, unit,
+             status, summary, prov_name, cond_name) in test_data:
+            tr = TestResult.objects.create(
+                test_name=name, test_type=ttype, date=dt,
+                facility=facility, result_value=result,
+                reference_range=ref_range, unit=unit, status=status,
+                result_summary=summary,
+                ordering_provider=providers.get(prov_name),
+                related_condition=conditions.get(cond_name),
+            )
+            hc_pks["testresults"].append(tr.pk)
+
+        # Visits
+        visit_data = [
+            (today - timedelta(days=30), "10:00", "Dr. Sarah Mitchell",
+             "Pacific Primary Care", "routine",
+             "Annual physical exam", "Good overall health. Continue current medications.",
+             "Comprehensive exam performed. All vitals within normal range.",
+             "BP: 128/82, HR: 72, Temp: 98.6F, Weight: 180lbs",
+             "Continue medications. Return in 6 months for BP check.",
+             today + timedelta(days=150), Decimal("40.00"),
+             "Essential Hypertension"),
+            (today - timedelta(days=90), "14:30", "Dr. James Wong",
+             "Bay Area Heart Group", "specialist",
+             "Annual cardiac evaluation", "No cardiac concerns.",
+             "EKG normal sinus rhythm. Heart sounds normal. Exercise tolerance good.",
+             "BP: 130/80, HR: 68",
+             "Continue statin. Annual follow-up.",
+             today + timedelta(days=275), Decimal("60.00"),
+             None),
+            (today - timedelta(days=14), "09:00", "Dr. Sarah Mitchell",
+             "Pacific Primary Care", "follow_up",
+             "Sinus infection", "Bacterial sinusitis diagnosed.",
+             "Patient presented with 10 days of congestion, facial pain, purulent discharge.",
+             "BP: 126/80, HR: 74, Temp: 99.1F",
+             "10-day course of amoxicillin. Follow up if not improved.",
+             None, Decimal("40.00"),
+             None),
+        ]
+        for (dt, time_str, prov_name, facility, vtype, reason, diagnosis,
+             summary, vitals, followup, next_visit, copay, cond_name) in visit_data:
+            from datetime import time as time_type
+            h, m = map(int, time_str.split(":"))
+            v = Visit.objects.create(
+                date=dt, time=time_type(h, m),
+                provider=providers.get(prov_name),
+                facility=facility, visit_type=vtype,
+                reason=reason, diagnosis=diagnosis, summary=summary,
+                vitals=vitals, follow_up_instructions=followup,
+                next_visit_date=next_visit, copay=copay,
+                related_condition=conditions.get(cond_name),
+            )
+            hc_pks["visits"].append(v.pk)
+
+        # Advice
+        advice_data = [
+            ("Reduce sodium intake", "Limit daily sodium to under 2,300mg.\n\n"
+             "Tips:\n- Read nutrition labels\n- Cook at home more\n- Use herbs/spices instead of salt\n"
+             "- Avoid processed foods\n- Choose low-sodium options when eating out",
+             "diet", today - timedelta(days=30), "active",
+             "Dr. Sarah Mitchell", None, "Essential Hypertension"),
+            ("Regular cardiovascular exercise",
+             "30 minutes of moderate cardio exercise, 5 days per week.\n\n"
+             "Recommended activities:\n- Brisk walking\n- Swimming\n- Cycling\n- Elliptical\n\n"
+             "Avoid: Heavy weightlifting without proper warm-up. Monitor heart rate during exercise.",
+             "exercise", today - timedelta(days=90), "active",
+             "Dr. James Wong", None, "Essential Hypertension"),
+        ]
+        for title, text, category, dt, status, prov_name, visit_pk, cond_name in advice_data:
+            adv = Advice.objects.create(
+                title=title, advice_text=text, category=category,
+                date=dt, status=status,
+                given_by=providers.get(prov_name),
+                related_condition=conditions.get(cond_name),
+            )
+            hc_pks["advice"].append(adv.pk)
+
+        # Appointments
+        appt_data = [
+            ("Annual Physical Exam", today + timedelta(days=60), "09:30", 60,
+             "Pacific Primary Care", "routine",
+             "Annual comprehensive physical exam",
+             "Fast for 12 hours before appointment for lab work.",
+             "scheduled", "Dr. Sarah Mitchell", "Essential Hypertension"),
+            ("Dental Cleaning", today + timedelta(days=14), "10:00", 60,
+             "Sunset Dental", "routine",
+             "Biannual dental cleaning and exam", "",
+             "confirmed", "Dr. Emily Chen", None),
+            ("Dermatology Annual Skin Check", today + timedelta(days=45), "14:00", 30,
+             "Pham Dermatology", "specialist",
+             "Annual full-body skin exam",
+             "Avoid applying any lotions on the day of the appointment.",
+             "scheduled", "Dr. Lisa Pham", None),
+        ]
+        for (title, dt, time_str, duration, facility, vtype, purpose,
+             prep, status, prov_name, cond_name) in appt_data:
+            from datetime import time as time_type
+            h, m = map(int, time_str.split(":"))
+            appt = Appointment.objects.create(
+                title=title, date=dt, time=time_type(h, m),
+                duration_minutes=duration, facility=facility,
+                visit_type=vtype, purpose=purpose,
+                preparation=prep, status=status,
+                provider=providers.get(prov_name),
+                related_condition=conditions.get(cond_name),
+            )
+            hc_pks["appointments"].append(appt.pk)
+
         # Build manifest of created PKs
         manifest = {
             "stakeholders.stakeholder": [s.pk for s in stakeholders.values()],
@@ -997,6 +1254,14 @@ class Command(BaseCommand):
             "notes.tag": [t.pk for t in tags.values()],
             "notes.folder": [f.pk for f in folders.values()],
             "notes.note": note_pks,
+            "healthcare.provider": hc_pks["providers"],
+            "healthcare.condition": hc_pks["conditions"],
+            "healthcare.prescription": hc_pks["prescriptions"],
+            "healthcare.supplement": hc_pks["supplements"],
+            "healthcare.testresult": hc_pks["testresults"],
+            "healthcare.visit": hc_pks["visits"],
+            "healthcare.advice": hc_pks["advice"],
+            "healthcare.appointment": hc_pks["appointments"],
         }
 
         # Save manifest to SampleDataStatus
@@ -1025,5 +1290,13 @@ class Command(BaseCommand):
             f"  Cash Flow:      {len(manifest['cashflow.cashflowentry'])}\n"
             f"  Tags:           {len(manifest['notes.tag'])}\n"
             f"  Folders:        {len(manifest['notes.folder'])}\n"
-            f"  Notes:          {len(manifest['notes.note'])}"
+            f"  Notes:          {len(manifest['notes.note'])}\n"
+            f"  HC Providers:   {len(manifest['healthcare.provider'])}\n"
+            f"  HC Conditions:  {len(manifest['healthcare.condition'])}\n"
+            f"  Prescriptions:  {len(manifest['healthcare.prescription'])}\n"
+            f"  Supplements:    {len(manifest['healthcare.supplement'])}\n"
+            f"  Test Results:   {len(manifest['healthcare.testresult'])}\n"
+            f"  Visits:         {len(manifest['healthcare.visit'])}\n"
+            f"  Advice:         {len(manifest['healthcare.advice'])}\n"
+            f"  Appointments:   {len(manifest['healthcare.appointment'])}"
         ))

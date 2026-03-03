@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ condition.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'healthcare:healthcare_list' %}" class="hover:text-gray-300">Healthcare</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ condition.name }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ condition.name }}</h1>
+        {% if condition.icd_code %}<p class="text-sm text-gray-400 mt-1">ICD: {{ condition.icd_code }}</p>{% endif %}
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'healthcare:condition_edit' condition.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'healthcare:condition_delete' condition.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if condition.status == 'active' %}text-green-400{% elif condition.status == 'managed' %}text-blue-400{% elif condition.status == 'monitoring' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ condition.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Severity</p>
+        {% if condition.severity %}
+        <p class="text-sm font-medium mt-1 {% if condition.severity == 'mild' %}text-green-400{% elif condition.severity == 'moderate' %}text-yellow-400{% elif condition.severity == 'severe' %}text-red-400{% else %}text-gray-400{% endif %}">{{ condition.get_severity_display }}</p>
+        {% else %}
+        <p class="text-sm font-medium text-gray-400 mt-1">N/A</p>
+        {% endif %}
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Diagnosed Date</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{% if condition.diagnosed_date %}{{ condition.diagnosed_date|date:"M j, Y" }}{% else %}N/A{% endif %}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Diagnosed By</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">
+            {% if condition.diagnosed_by %}<a href="{{ condition.diagnosed_by.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ condition.diagnosed_by.name }}</a>{% else %}N/A{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if condition.description %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Description</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ condition.description }}</p>
+</div>
+{% endif %}
+
+{% if condition.treatment_plan %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Treatment Plan</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ condition.treatment_plan }}</p>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Prescriptions</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for rx in prescriptions %}
+            <a href="{{ rx.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ rx.medication_name }}</span>
+                <span class="text-xs {% if rx.status == 'active' %}text-green-400{% elif rx.status == 'on_hold' %}text-yellow-400{% elif rx.status == 'discontinued' %}text-red-400{% else %}text-gray-400{% endif %}">{{ rx.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Supplements</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for s in supplements %}
+            <a href="{{ s.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ s.name }}</span>
+                <span class="text-xs {% if s.status == 'active' %}text-green-400{% elif s.status == 'paused' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ s.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Test Results</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for tr in test_results %}
+            <a href="{{ tr.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ tr.test_name }}</span>
+                <span class="text-xs {% if tr.status == 'normal' %}text-green-400{% elif tr.status == 'abnormal' %}text-yellow-400{% elif tr.status == 'critical' %}text-red-400{% elif tr.status == 'pending' %}text-blue-400{% else %}text-gray-400{% endif %}">{{ tr.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Visits</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for v in visits %}
+            <a href="{{ v.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ v.get_visit_type_display }}</span>
+                <span class="text-xs text-gray-400">{{ v.date|date:"M j, Y" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Advice</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for a in advice %}
+            <a href="{{ a.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ a.title }}</span>
+                <span class="text-xs {% if a.status == 'active' %}text-green-400{% elif a.status == 'superseded' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ a.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Appointments</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for appt in appointments %}
+            <a href="{{ appt.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ appt.title }}</span>
+                <span class="text-xs text-gray-400">{{ appt.date|date:"M j" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=condition edit_url=internal_notes_url %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <button hx-get="{% url 'healthcare:condition_note_link' condition.pk %}"
+                    hx-target="#note-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+        </div>
+        <div id="note-form-container"></div>
+        <div id="note-list">
+            {% include "healthcare/partials/_healthcare_note_list.html" with notes=condition.notes.all unlink_url_name="healthcare:condition_note_unlink" asset_pk=condition.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+            <button hx-get="{% url 'healthcare:condition_legal_link' condition.pk %}"
+                    hx-target="#legal-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Matter</button>
+        </div>
+        <div id="legal-form-container"></div>
+        <div id="legal-list">
+            {% include "healthcare/partials/_healthcare_legal_list.html" with legal_matters=condition.legal_matters.all unlink_url_name="healthcare:condition_legal_unlink" asset_pk=condition.pk %}
+        </div>
+    </div>
+</div>
+{% endblock %}

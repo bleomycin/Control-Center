@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ prescription.medication_name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'healthcare:healthcare_list' %}" class="hover:text-gray-300">Healthcare</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ prescription.medication_name }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ prescription.medication_name }}</h1>
+        {% if prescription.generic_name %}<p class="text-sm text-gray-400 mt-1">{{ prescription.generic_name }}</p>{% endif %}
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'healthcare:prescription_export_pdf' prescription.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'healthcare:prescription_edit' prescription.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'healthcare:prescription_delete' prescription.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Dosage</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ prescription.dosage|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Frequency</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ prescription.get_frequency_display|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if prescription.status == 'active' %}text-green-400{% elif prescription.status == 'on_hold' %}text-yellow-400{% elif prescription.status == 'discontinued' %}text-red-400{% else %}text-gray-400{% endif %}">{{ prescription.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Controlled</p>
+        <p class="text-sm font-medium mt-1 {% if prescription.is_controlled %}text-red-400{% else %}text-gray-200{% endif %}">{% if prescription.is_controlled %}Yes{% else %}No{% endif %}</p>
+    </div>
+</div>
+
+{% if prescription.route or prescription.pharmacy or prescription.pharmacy_phone or prescription.rx_number or prescription.start_date or prescription.end_date %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Details</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        {% if prescription.route %}<div><span class="text-gray-400">Route:</span> <span class="text-gray-200">{{ prescription.route }}</span></div>{% endif %}
+        {% if prescription.pharmacy %}<div><span class="text-gray-400">Pharmacy:</span> <span class="text-gray-200">{{ prescription.pharmacy }}</span></div>{% endif %}
+        {% if prescription.pharmacy_phone %}<div><span class="text-gray-400">Pharmacy Phone:</span> <span class="text-gray-200">{{ prescription.pharmacy_phone }}</span></div>{% endif %}
+        {% if prescription.rx_number %}<div><span class="text-gray-400">Rx Number:</span> <span class="text-gray-200">{{ prescription.rx_number }}</span></div>{% endif %}
+        {% if prescription.start_date %}<div><span class="text-gray-400">Start Date:</span> <span class="text-gray-200">{{ prescription.start_date|date:"M j, Y" }}</span></div>{% endif %}
+        {% if prescription.end_date %}<div><span class="text-gray-400">End Date:</span> <span class="text-gray-200">{{ prescription.end_date|date:"M j, Y" }}</span></div>{% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if prescription.refills_total %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Refill Information</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        <div><span class="text-gray-400">Refills:</span> <span class="text-gray-200">{{ prescription.refills_remaining|default:"0" }} / {{ prescription.refills_total }}</span></div>
+        {% if prescription.next_refill_date %}
+        <div><span class="text-gray-400">Next Refill:</span> <span class="{% if prescription.is_refill_due %}text-red-400 font-medium{% else %}text-gray-200{% endif %}">{{ prescription.next_refill_date|date:"M j, Y" }}</span></div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if prescription.purpose %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Purpose</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ prescription.purpose }}</p>
+</div>
+{% endif %}
+
+{% if prescription.side_effects %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Side Effects</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ prescription.side_effects }}</p>
+</div>
+{% endif %}
+
+{% if prescription.prescribing_provider %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Prescribing Provider</p>
+    <a href="{{ prescription.prescribing_provider.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ prescription.prescribing_provider.name }}</a>
+</div>
+{% endif %}
+
+{% if prescription.related_condition %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Related Condition</p>
+    <a href="{{ prescription.related_condition.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ prescription.related_condition.name }}</a>
+</div>
+{% endif %}
+
+{% if prescription.health_insurance %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Insurance Policy</p>
+    <a href="{{ prescription.health_insurance.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ prescription.health_insurance.name }}</a>
+</div>
+{% endif %}
+
+{% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=prescription edit_url=internal_notes_url %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <button hx-get="{% url 'healthcare:prescription_note_link' prescription.pk %}"
+                    hx-target="#note-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+        </div>
+        <div id="note-form-container"></div>
+        <div id="note-list">
+            {% include "healthcare/partials/_healthcare_note_list.html" with notes=prescription.notes.all unlink_url_name="healthcare:prescription_note_unlink" asset_pk=prescription.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+            <button hx-get="{% url 'healthcare:prescription_legal_link' prescription.pk %}"
+                    hx-target="#legal-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Matter</button>
+        </div>
+        <div id="legal-form-container"></div>
+        <div id="legal-list">
+            {% include "healthcare/partials/_healthcare_legal_list.html" with legal_matters=prescription.legal_matters.all unlink_url_name="healthcare:prescription_legal_unlink" asset_pk=prescription.pk %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -12,6 +12,8 @@ CATEGORY_CHOICES = [
     ("aircraft_type", "Aircraft Type"),
     ("cashflow_category", "Cash Flow Category"),
     ("lease_type", "Lease Type"),
+    ("provider_type", "Provider Type"),
+    ("test_type", "Test Type"),
 ]
 
 

@@ -117,7 +117,28 @@ def dashboard(request):
             "date": matter.next_hearing_date, "type": "hearing", "color": "purple",
             "title": f"Hearing: {matter.title}", "url": matter.get_absolute_url(),
         })
+    from healthcare.models import Appointment as HcDeadlineAppt
+    for appt in HcDeadlineAppt.objects.filter(
+        date__gte=today, date__lte=deadline_horizon,
+    ).exclude(status__in=["completed", "cancelled"]).select_related("provider"):
+        title = appt.title
+        if appt.time:
+            title = f"{appt.title} — {appt.time.strftime('%-I:%M %p')}"
+        upcoming_deadlines.append({
+            "date": appt.date, "type": "appointment", "color": "teal",
+            "title": title, "url": appt.get_absolute_url(),
+        })
     upcoming_deadlines.sort(key=lambda x: x["date"])
+
+    # Healthcare summary
+    from healthcare.models import Appointment as HcAppt, Prescription as HcRx
+    upcoming_appointments = HcAppt.objects.filter(
+        date__gte=today, date__lte=today + timedelta(days=14),
+    ).exclude(status__in=["completed", "cancelled"]).select_related("provider").order_by("date", "time")
+    active_prescriptions_count = HcRx.objects.filter(status="active").count()
+    overdue_refills = HcRx.objects.filter(
+        status="active", next_refill_date__isnull=False, next_refill_date__lte=today,
+    ).count()
 
     # Asset Risk
     at_risk_properties = RealEstate.objects.filter(
@@ -148,6 +169,9 @@ def dashboard(request):
         "at_risk_properties": at_risk_properties,
         "at_risk_loans": at_risk_loans,
         "has_asset_risks": has_asset_risks,
+        "upcoming_appointments": upcoming_appointments,
+        "active_prescriptions_count": active_prescriptions_count,
+        "overdue_refills": overdue_refills,
     }
 
     return render(request, "dashboard/index.html", context)
@@ -179,6 +203,16 @@ def global_search(request):
         )[:limit]
         from assets.models import Lease
         context["leases"] = Lease.objects.filter(name__icontains=q).select_related("related_property")[:limit]
+        from healthcare.models import Provider, Prescription, Appointment
+        context["hc_providers"] = Provider.objects.filter(
+            Q(name__icontains=q) | Q(specialty__icontains=q) | Q(practice_name__icontains=q)
+        )[:limit]
+        context["hc_prescriptions"] = Prescription.objects.filter(
+            Q(medication_name__icontains=q) | Q(generic_name__icontains=q)
+        )[:limit]
+        context["hc_appointments"] = Appointment.objects.filter(
+            Q(title__icontains=q) | Q(purpose__icontains=q)
+        )[:limit]
         context["has_results"] = any([
             context["stakeholders"],
             context["tasks_results"],
@@ -189,6 +223,9 @@ def global_search(request):
             context["loans"],
             context["cashflow_entries"],
             context["leases"],
+            context["hc_providers"],
+            context["hc_prescriptions"],
+            context["hc_appointments"],
         ])
     else:
         context["has_results"] = False
@@ -272,6 +309,28 @@ def get_activity_timeline(limit=50):
             "title": ev.title,
             "summary": f"Added to {ev.legal_matter.title}",
             "url": ev.get_absolute_url(),
+        })
+
+    from healthcare.models import Visit, Appointment
+    for visit in Visit.objects.select_related("provider").order_by("-created_at")[:limit]:
+        items.append({
+            "date": visit.created_at,
+            "type": "visit",
+            "color": "teal",
+            "icon": "heart",
+            "title": f"Visit: {visit.provider.name if visit.provider else visit.facility or 'Office visit'}",
+            "summary": visit.reason[:120] if visit.reason else visit.get_visit_type_display(),
+            "url": visit.get_absolute_url(),
+        })
+    for appt in Appointment.objects.select_related("provider").order_by("-created_at")[:limit]:
+        items.append({
+            "date": appt.created_at,
+            "type": "appointment",
+            "color": "teal",
+            "icon": "heart",
+            "title": appt.title,
+            "summary": f"{appt.get_status_display()} — {appt.provider.name if appt.provider else 'No provider'}",
+            "url": appt.get_absolute_url(),
         })
 
     items.sort(key=lambda x: x["date"], reverse=True)
@@ -646,6 +705,42 @@ def calendar_events(request):
             "extendedProps": {"type": "contact"},
         })
 
+    # Healthcare appointment events (teal)
+    from healthcare.models import Appointment as HcAppointment, Prescription as HcPrescription
+    hc_appts = HcAppointment.objects.exclude(status__in=["completed", "cancelled"]).select_related("provider")
+    if start:
+        hc_appts = hc_appts.filter(date__gte=start)
+    if end:
+        hc_appts = hc_appts.filter(date__lte=end)
+    for appt in hc_appts:
+        event = {
+            "title": appt.title,
+            "start": appt.scheduled_datetime_str,
+            "url": appt.get_absolute_url(),
+            "color": "#14b8a6",
+            "extendedProps": {"type": "appointment"},
+        }
+        if appt.time:
+            event["allDay"] = False
+        events.append(event)
+
+    # Prescription refill events (amber)
+    hc_refills = HcPrescription.objects.filter(
+        status="active", next_refill_date__isnull=False,
+    )
+    if start:
+        hc_refills = hc_refills.filter(next_refill_date__gte=start)
+    if end:
+        hc_refills = hc_refills.filter(next_refill_date__lte=end)
+    for rx in hc_refills:
+        events.append({
+            "title": f"Refill: {rx.medication_name}",
+            "start": str(rx.next_refill_date),
+            "url": rx.get_absolute_url(),
+            "color": "#f59e0b",
+            "extendedProps": {"type": "refill"},
+        })
+
     # Lease expiry events (emerald)
     from assets.models import Lease
     lease_qs = Lease.objects.filter(
@@ -864,6 +959,14 @@ def sample_data_remove(request):
 
     # Delete in reverse-dependency order (children before parents)
     deletion_order = [
+        "healthcare.appointment",
+        "healthcare.advice",
+        "healthcare.visit",
+        "healthcare.testresult",
+        "healthcare.supplement",
+        "healthcare.prescription",
+        "healthcare.condition",
+        "healthcare.provider",
         "notes.note",
         "notes.tag",
         "notes.folder",

@@ -1,0 +1,31 @@
+{% load humanize choice_labels %}
+<tr id="prescription-row-{{ prescription.pk }}" class="hover:bg-gray-700/50 transition-colors">
+    {% if not hide_checkboxes %}
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ prescription.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
+    {% endif %}
+    <td class="px-4 py-3">
+        <a href="{{ prescription.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">
+            {{ prescription.medication_name }}
+        </a>
+        {% if prescription.is_controlled %}<span class="text-xs text-orange-400 ml-1">Controlled</span>{% endif %}
+        <p class="text-xs text-gray-400 truncate max-w-xs">{{ prescription.dosage }} — {{ prescription.get_frequency_display }}</p>
+        {% if prescription.is_refill_due %}<span class="text-xs text-red-400">Refill Due</span>{% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ prescription.provider|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ prescription.refills_remaining|default:"0" }}/{{ prescription.refills_total|default:"0" }}</td>
+    <td class="px-4 py-3 hidden lg:table-cell">
+        <select onchange="htmx.ajax('POST','{% url 'healthcare:prescription_inline_status' prescription.pk %}',{target:'#prescription-row-{{ prescription.pk }}',swap:'outerHTML',values:{'status':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"
+                class="bg-transparent border-0 text-xs cursor-pointer hover:text-white focus:ring-0 p-0 pr-6 -ml-1 rounded-full
+                    {% if prescription.status == 'active' %}text-green-300
+                    {% elif prescription.status == 'on_hold' %}text-yellow-300
+                    {% elif prescription.status == 'discontinued' %}text-red-300
+                    {% elif prescription.status == 'completed' %}text-gray-300
+                    {% else %}text-gray-300{% endif %}">
+            {% for val, label in prescription.STATUS_CHOICES %}
+            <option value="{{ val }}" {% if prescription.status == val %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </td>
+</tr>

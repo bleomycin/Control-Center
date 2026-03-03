@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ provider.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'healthcare:healthcare_list' %}" class="hover:text-gray-300">Healthcare</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ provider.name }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ provider.name }}</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ provider.specialty|default:provider.practice_name }}</p>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'healthcare:provider_export_pdf' provider.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'healthcare:provider_edit' provider.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'healthcare:provider_delete' provider.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Type</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ provider.provider_type|choice_label:"provider_type" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if provider.status == 'active' %}text-green-400{% elif provider.status == 'inactive' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ provider.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Phone</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ provider.phone|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">NPI</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ provider.npi|default:"N/A" }}</p>
+    </div>
+</div>
+
+{% if provider.address or provider.email or provider.fax %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Contact Details</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+        {% if provider.email %}<div><span class="text-gray-400">Email:</span> <span class="text-gray-200">{{ provider.email }}</span></div>{% endif %}
+        {% if provider.fax %}<div><span class="text-gray-400">Fax:</span> <span class="text-gray-200">{{ provider.fax }}</span></div>{% endif %}
+        {% if provider.license_number %}<div><span class="text-gray-400">License #:</span> <span class="text-gray-200">{{ provider.license_number }}</span></div>{% endif %}
+        {% if provider.address %}<div class="sm:col-span-2"><span class="text-gray-400">Address:</span> <span class="text-gray-200">{{ provider.address }}</span></div>{% endif %}
+    </div>
+</div>
+{% endif %}
+
+{% if provider.stakeholder %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Linked Stakeholder</p>
+    <a href="{{ provider.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ provider.stakeholder.name }}</a>
+</div>
+{% endif %}
+
+{% if provider.health_insurance %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Insurance Policy</p>
+    <a href="{{ provider.health_insurance.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ provider.health_insurance.name }}</a>
+</div>
+{% endif %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Active Prescriptions</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for rx in prescriptions %}
+            <a href="{{ rx.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ rx.medication_name }}</span>
+                <span class="text-xs text-gray-400">{{ rx.dosage }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Upcoming Appointments</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for appt in appointments %}
+            <a href="{{ appt.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ appt.title }}</span>
+                <span class="text-xs text-gray-400">{{ appt.date|date:"M j" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Recent Visits</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for v in visits %}
+            <a href="{{ v.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ v.get_visit_type_display }}</span>
+                <span class="text-xs text-gray-400">{{ v.date|date:"M j, Y" }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Conditions</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for c in conditions %}
+            <a href="{{ c.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+                <span class="text-sm text-gray-200">{{ c.name }}</span>
+                <span class="text-xs {% if c.status == 'active' %}text-green-400{% elif c.status == 'managed' %}text-blue-400{% else %}text-gray-400{% endif %}">{{ c.get_status_display }}</span>
+            </a>
+            {% empty %}
+            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% include "healthcare/partials/_healthcare_internal_notes_display.html" with asset=provider edit_url=internal_notes_url %}
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+            <button hx-get="{% url 'healthcare:provider_note_link' provider.pk %}"
+                    hx-target="#note-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+        </div>
+        <div id="note-form-container"></div>
+        <div id="note-list">
+            {% include "healthcare/partials/_healthcare_note_list.html" with notes=notes unlink_url_name="healthcare:provider_note_unlink" asset_pk=provider.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
+            <button hx-get="{% url 'healthcare:provider_legal_link' provider.pk %}"
+                    hx-target="#legal-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Matter</button>
+        </div>
+        <div id="legal-form-container"></div>
+        <div id="legal-list">
+            {% include "healthcare/partials/_healthcare_legal_list.html" with legal_matters=provider.legal_matters.all unlink_url_name="healthcare:provider_legal_unlink" asset_pk=provider.pk %}
+        </div>
+    </div>
+</div>
+{% endblock %}

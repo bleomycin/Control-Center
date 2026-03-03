@@ -1,0 +1,13 @@
+<div id="internal-notes-block" class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <div class="flex items-center justify-between mb-2">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Internal Notes</p>
+        <button hx-get="{{ edit_url }}"
+                hx-target="#internal-notes-block" hx-swap="outerHTML"
+                class="text-xs text-gray-500 hover:text-blue-400">Edit</button>
+    </div>
+    {% if asset.notes_text %}
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ asset.notes_text }}</p>
+    {% else %}
+    <p class="text-sm text-gray-500 italic">No internal notes</p>
+    {% endif %}
+</div>

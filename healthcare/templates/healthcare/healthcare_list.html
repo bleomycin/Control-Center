@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Healthcare - Control Center{% endblock %}
+{% block content %}
+<div class="flex items-start justify-between mb-6">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Healthcare</h1>
+        <p class="text-sm text-gray-400 mt-1">{{ total_count }} total</p>
+    </div>
+    <div class="flex items-center gap-2 shrink-0">
+        {% with type_count=current_healthcare_types|length %}
+        {# Export dropdown/button #}
+        {% if type_count == 1 %}
+            {% if "providers" in current_healthcare_types %}<a href="{% url 'healthcare:provider_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "prescriptions" in current_healthcare_types %}<a href="{% url 'healthcare:prescription_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "supplements" in current_healthcare_types %}<a href="{% url 'healthcare:supplement_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "test_results" in current_healthcare_types %}<a href="{% url 'healthcare:testresult_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "visits" in current_healthcare_types %}<a href="{% url 'healthcare:visit_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "advice" in current_healthcare_types %}<a href="{% url 'healthcare:advice_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "appointments" in current_healthcare_types %}<a href="{% url 'healthcare:appointment_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+            {% if "conditions" in current_healthcare_types %}<a href="{% url 'healthcare:condition_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export</a>{% endif %}
+        {% else %}
+        <div class="relative" data-dropdown>
+            <button type="button" onclick="toggleDropdown(this)" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap inline-flex items-center gap-1">
+                Export
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="hidden absolute right-0 mt-1 w-44 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30 py-1" data-dropdown-menu>
+                {% if "providers" in current_healthcare_types %}<a href="{% url 'healthcare:provider_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Providers</a>{% endif %}
+                {% if "prescriptions" in current_healthcare_types %}<a href="{% url 'healthcare:prescription_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Prescriptions</a>{% endif %}
+                {% if "supplements" in current_healthcare_types %}<a href="{% url 'healthcare:supplement_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Supplements</a>{% endif %}
+                {% if "test_results" in current_healthcare_types %}<a href="{% url 'healthcare:testresult_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Test Results</a>{% endif %}
+                {% if "visits" in current_healthcare_types %}<a href="{% url 'healthcare:visit_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Visits</a>{% endif %}
+                {% if "advice" in current_healthcare_types %}<a href="{% url 'healthcare:advice_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Advice</a>{% endif %}
+                {% if "appointments" in current_healthcare_types %}<a href="{% url 'healthcare:appointment_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Appointments</a>{% endif %}
+                {% if "conditions" in current_healthcare_types %}<a href="{% url 'healthcare:condition_export_csv' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Conditions</a>{% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {# New healthcare item dropdown/button #}
+        {% if type_count == 1 %}
+            {% if "providers" in current_healthcare_types %}<a href="{% url 'healthcare:provider_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Provider</a>{% endif %}
+            {% if "prescriptions" in current_healthcare_types %}<a href="{% url 'healthcare:prescription_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Prescription</a>{% endif %}
+            {% if "supplements" in current_healthcare_types %}<a href="{% url 'healthcare:supplement_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Supplement</a>{% endif %}
+            {% if "test_results" in current_healthcare_types %}<a href="{% url 'healthcare:testresult_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Test Result</a>{% endif %}
+            {% if "visits" in current_healthcare_types %}<a href="{% url 'healthcare:visit_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Visit</a>{% endif %}
+            {% if "advice" in current_healthcare_types %}<a href="{% url 'healthcare:advice_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Advice</a>{% endif %}
+            {% if "appointments" in current_healthcare_types %}<a href="{% url 'healthcare:appointment_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Appointment</a>{% endif %}
+            {% if "conditions" in current_healthcare_types %}<a href="{% url 'healthcare:condition_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Condition</a>{% endif %}
+        {% else %}
+        <div class="relative" data-dropdown>
+            <button type="button" onclick="toggleDropdown(this)" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap inline-flex items-center gap-1">
+                + New
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="hidden absolute right-0 mt-1 w-44 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30 py-1" data-dropdown-menu>
+                {% if "providers" in current_healthcare_types %}<a href="{% url 'healthcare:provider_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Provider</a>{% endif %}
+                {% if "prescriptions" in current_healthcare_types %}<a href="{% url 'healthcare:prescription_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Prescription</a>{% endif %}
+                {% if "supplements" in current_healthcare_types %}<a href="{% url 'healthcare:supplement_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Supplement</a>{% endif %}
+                {% if "test_results" in current_healthcare_types %}<a href="{% url 'healthcare:testresult_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Test Result</a>{% endif %}
+                {% if "visits" in current_healthcare_types %}<a href="{% url 'healthcare:visit_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Visit</a>{% endif %}
+                {% if "advice" in current_healthcare_types %}<a href="{% url 'healthcare:advice_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Advice</a>{% endif %}
+                {% if "appointments" in current_healthcare_types %}<a href="{% url 'healthcare:appointment_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Appointment</a>{% endif %}
+                {% if "conditions" in current_healthcare_types %}<a href="{% url 'healthcare:condition_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Condition</a>{% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endwith %}
+    </div>
+</div>
+
+<!-- Tab bar -->
+<div class="border-b border-gray-700 mb-4">
+    <nav id="healthcare-tabs" class="flex gap-0 -mb-px overflow-x-auto">
+        {% for tab in tabs %}
+        <a href="{% url 'healthcare:healthcare_list' %}?tab={{ tab.key }}"
+           hx-get="{% url 'healthcare:healthcare_list' %}?tab={{ tab.key }}"
+           hx-target="#healthcare-content" hx-push-url="{% url 'healthcare:healthcare_list' %}?tab={{ tab.key }}"
+           hx-indicator="#loading-spinner"
+           class="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors {% if current_tab == tab.key %}border-blue-500 text-blue-400{% else %}border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600{% endif %}"
+           onclick="switchHealthcareTab(this, '{{ tab.key }}')">
+            {{ tab.label }}
+            <span class="ml-1 text-xs {% if current_tab == tab.key %}text-blue-400/70{% else %}text-gray-500{% endif %}">({{ tab.count }})</span>
+        </a>
+        {% endfor %}
+        <a href="{% url 'healthcare:healthcare_tab_settings' %}"
+           class="px-3 py-2.5 text-gray-500 hover:text-gray-300 transition-colors ml-auto"
+           title="Manage tabs">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+        </a>
+    </nav>
+</div>
+
+<form id="filter-form" class="flex flex-col gap-3 mb-4">
+    <input type="hidden" name="tab" id="current-tab" value="{{ current_tab }}">
+    <div class="flex flex-col sm:flex-row gap-3">
+        <input type="text" name="q" value="{{ search_query }}"
+               placeholder="Search healthcare..."
+               hx-get="{% url 'healthcare:healthcare_list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#healthcare-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+               class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
+    </div>
+    {% if status_choices %}
+    <div id="status-filters" class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-400">Status:</span>
+        {% for val, label in status_choices %}
+        <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+            <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
+                   hx-get="{% url 'healthcare:healthcare_list' %}" hx-trigger="change" hx-target="#healthcare-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+            {{ label }}
+        </label>
+        {% endfor %}
+    </div>
+    <div id="date-filters" class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-400">Date:</span>
+        <input type="date" name="date_from" value="{{ date_from }}"
+               hx-get="{% url 'healthcare:healthcare_list' %}" hx-trigger="change" hx-target="#healthcare-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+               class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+        <span class="text-xs text-gray-500">to</span>
+        <input type="date" name="date_to" value="{{ date_to }}"
+               hx-get="{% url 'healthcare:healthcare_list' %}" hx-trigger="change" hx-target="#healthcare-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+               class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+    </div>
+    {% endif %}
+</form>
+
+<div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>
+
+<div id="healthcare-content">
+    {% include "healthcare/partials/_healthcare_tab_content.html" %}
+</div>
+
+<script>
+function switchHealthcareTab(el, key) {
+    document.getElementById('current-tab').value = key;
+    document.querySelectorAll('#healthcare-tabs a[hx-get]').forEach(function(a) {
+        a.classList.remove('border-blue-500', 'text-blue-400');
+        a.classList.add('border-transparent', 'text-gray-400');
+        var badge = a.querySelector('span');
+        if (badge) { badge.classList.remove('text-blue-400/70'); badge.classList.add('text-gray-500'); }
+    });
+    el.classList.remove('border-transparent', 'text-gray-400');
+    el.classList.add('border-blue-500', 'text-blue-400');
+    var badge = el.querySelector('span');
+    if (badge) { badge.classList.remove('text-gray-500'); badge.classList.add('text-blue-400/70'); }
+}
+function toggleDropdown(btn) {
+    var menu = btn.parentElement.querySelector('[data-dropdown-menu]');
+    var isOpen = !menu.classList.contains('hidden');
+    closeAllDropdowns();
+    if (!isOpen) menu.classList.remove('hidden');
+}
+function closeAllDropdowns() {
+    document.querySelectorAll('[data-dropdown-menu]').forEach(function(m) { m.classList.add('hidden'); });
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('[data-dropdown]')) closeAllDropdowns();
+});
+</script>
+{% endblock %}

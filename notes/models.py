@@ -97,6 +97,21 @@ class Note(models.Model):
     related_leases = models.ManyToManyField(
         "assets.Lease", blank=True, related_name="notes",
     )
+    related_providers = models.ManyToManyField(
+        "healthcare.Provider", blank=True, related_name="notes",
+    )
+    related_prescriptions = models.ManyToManyField(
+        "healthcare.Prescription", blank=True, related_name="notes",
+    )
+    related_appointments = models.ManyToManyField(
+        "healthcare.Appointment", blank=True, related_name="notes",
+    )
+    related_visits = models.ManyToManyField(
+        "healthcare.Visit", blank=True, related_name="notes",
+    )
+    related_conditions = models.ManyToManyField(
+        "healthcare.Condition", blank=True, related_name="notes",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -1,0 +1,326 @@
+{% load humanize choice_labels %}
+
+{# --- PROVIDERS --- #}
+{% if "providers" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Providers ({{ providers|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_provider' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Name</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Type</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Phone</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for provider in providers %}
+                {% include "healthcare/partials/_provider_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No providers found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- PRESCRIPTIONS --- #}
+{% if "prescriptions" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Prescriptions ({{ prescriptions|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_prescription' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Medication</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Provider</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Refills</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for prescription in prescriptions %}
+                {% include "healthcare/partials/_prescription_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No prescriptions found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- SUPPLEMENTS --- #}
+{% if "supplements" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Supplements ({{ supplements|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_supplement' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Name</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Frequency</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for supplement in supplements %}
+                {% include "healthcare/partials/_supplement_row.html" %}
+                {% empty %}
+                <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">No supplements found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- CONDITIONS --- #}
+{% if "conditions" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Conditions ({{ conditions|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_condition' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Condition</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Severity</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Diagnosed</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for condition in conditions %}
+                {% include "healthcare/partials/_condition_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No conditions found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- TEST RESULTS --- #}
+{% if "test_results" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Test Results ({{ test_results|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_testresult' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Test</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Type</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Result</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for result in test_results %}
+                {% include "healthcare/partials/_testresult_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No test results found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- VISITS --- #}
+{% if "visits" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Visits ({{ visits|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_visit' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Visit</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Reason</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Copay</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for visit in visits %}
+                {% include "healthcare/partials/_visit_row.html" %}
+                {% empty %}
+                <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">No visits found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- APPOINTMENTS --- #}
+{% if "appointments" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Appointments ({{ appointments|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_appointment' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Appointment</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Provider</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Type</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for appt in appointments %}
+                {% include "healthcare/partials/_appointment_row.html" %}
+                {% empty %}
+                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No appointments found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{# --- ADVICE --- #}
+{% if "advice" in current_healthcare_types %}
+{% if current_healthcare_types|length > 1 %}
+<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Advice ({{ advice_list|length }})</h3>
+{% endif %}
+{% if current_healthcare_types|length == 1 %}
+<div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
+    <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+    <form method="post" action="{% url 'healthcare:bulk_delete_advice' %}" class="inline">
+        {% csrf_token %}
+        <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                class="px-3 py-1 bg-red-900/50 hover:bg-red-900 text-red-300 text-xs font-medium rounded-md transition-colors">Delete Selected</button>
+    </form>
+</div>
+{% endif %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-gray-700 text-left">
+                    {% if current_healthcare_types|length == 1 %}
+                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
+                    {% endif %}
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Title</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Provider</th>
+                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-700/50">
+                {% for adv in advice_list %}
+                {% include "healthcare/partials/_advice_row.html" %}
+                {% empty %}
+                <tr><td colspan="4" class="px-4 py-8 text-center text-sm text-gray-500">No advice found</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
