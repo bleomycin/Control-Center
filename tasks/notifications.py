@@ -147,7 +147,7 @@ def check_stale_followups():
     for fu in stale:
         days = (now - fu.outreach_date).days
         lines.append(
-            f"  - {fu.stakeholder.name} re: {fu.task.title} "
+            f"  - {fu.stakeholder.name if fu.stakeholder else 'Unknown'} re: {fu.task.title} "
             f"({get_choice_label('contact_method', fu.method)}, {days} day(s) ago, "
             f"remind after {fu.follow_up_days})"
         )
@@ -165,7 +165,7 @@ def check_stale_followups():
     from dashboard.models import Notification
     for fu in stale:
         Notification.objects.create(
-            message=f"Stale follow-up: {fu.stakeholder.name} re: {fu.task.title}",
+            message=f"Stale follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'} re: {fu.task.title}",
             level="warning",
             link=fu.get_absolute_url(),
         )

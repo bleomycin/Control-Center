@@ -22,7 +22,7 @@
                 <div class="flex-1">
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ fu.method|choice_label:"contact_method" }}</span>
-                        <a href="{{ fu.stakeholder.get_absolute_url }}" class="text-xs text-blue-400 hover:text-blue-300">{{ fu.stakeholder }}</a>
+                        {% if fu.stakeholder %}<a href="{{ fu.stakeholder.get_absolute_url }}" class="text-xs text-blue-400 hover:text-blue-300">{{ fu.stakeholder }}</a>{% else %}<span class="text-xs text-gray-500">(deleted stakeholder)</span>{% endif %}
                         <span class="text-xs text-gray-400">{{ fu.outreach_date|date:"M j, Y g:i A" }}</span>
                     </div>
                     {% if fu.notes_text %}<p class="text-sm text-gray-300 mt-1">{{ fu.notes_text }}</p>{% endif %}
@@ -40,7 +40,7 @@
                 <div class="flex items-center gap-2 ml-2 flex-shrink-0">
                     {% if fu.response_received %}
                     {% if fu.response_notes %}
-                    <a href="{% url 'notes:create' %}?title=Response from {{ fu.stakeholder|urlencode }}&content={{ fu.response_notes|urlencode }}&task={{ task.pk }}&stakeholder={{ fu.stakeholder.pk }}&date={{ fu.response_date|date:'Y-m-d\TH:i' }}"
+                    <a href="{% url 'notes:create' %}?title=Response from {{ fu.stakeholder.name|default:'Unknown'|urlencode }}&content={{ fu.response_notes|urlencode }}&task={{ task.pk }}{% if fu.stakeholder %}&stakeholder={{ fu.stakeholder.pk }}{% endif %}&date={{ fu.response_date|date:'Y-m-d\TH:i' }}"
                        class="text-xs px-2 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Create Note</a>
                     {% endif %}
                     <button hx-post="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"

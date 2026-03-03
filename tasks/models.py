@@ -83,10 +83,16 @@ class Task(models.Model):
             day = min(d.day, calendar.monthrange(year, month)[1])
             return d.replace(year=year, month=month, day=day)
         if rule == "yearly":
+            next_year = d.year + 1
+            # If current date is last day of Feb, use last day of Feb in target year
+            # so Feb 29 tasks recover to Feb 29 in future leap years
+            if d.month == 2 and d.day == calendar.monthrange(d.year, 2)[1]:
+                last_feb = calendar.monthrange(next_year, 2)[1]
+                return d.replace(year=next_year, day=last_feb)
             try:
-                return d.replace(year=d.year + 1)
+                return d.replace(year=next_year)
             except ValueError:
-                return d.replace(year=d.year + 1, month=2, day=28)
+                return d.replace(year=next_year, month=2, day=28)
         return None
 
     def create_next_recurrence(self):
@@ -162,7 +168,8 @@ class FollowUp(models.Model):
 
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="follow_ups")
     stakeholder = models.ForeignKey(
-        "stakeholders.Stakeholder", on_delete=models.CASCADE, related_name="follow_ups",
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="follow_ups",
     )
     outreach_date = models.DateTimeField()
     method = models.CharField(max_length=30)
