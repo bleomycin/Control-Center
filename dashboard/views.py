@@ -130,15 +130,11 @@ def dashboard(request):
         })
     upcoming_deadlines.sort(key=lambda x: x["date"])
 
-    # Healthcare summary
-    from healthcare.models import Appointment as HcAppt, Prescription as HcRx
+    # Healthcare summary — only show when upcoming appointments exist
+    from healthcare.models import Appointment as HcAppt
     upcoming_appointments = HcAppt.objects.filter(
         date__gte=today, date__lte=today + timedelta(days=14),
     ).exclude(status__in=["completed", "cancelled"]).select_related("provider").order_by("date", "time")
-    active_prescriptions_count = HcRx.objects.filter(status="active").count()
-    overdue_refills = HcRx.objects.filter(
-        status="active", next_refill_date__isnull=False, next_refill_date__lte=today,
-    ).count()
 
     # Asset Risk
     at_risk_properties = RealEstate.objects.filter(
@@ -170,8 +166,6 @@ def dashboard(request):
         "at_risk_loans": at_risk_loans,
         "has_asset_risks": has_asset_risks,
         "upcoming_appointments": upcoming_appointments,
-        "active_prescriptions_count": active_prescriptions_count,
-        "overdue_refills": overdue_refills,
     }
 
     return render(request, "dashboard/index.html", context)
