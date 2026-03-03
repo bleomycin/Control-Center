@@ -136,8 +136,9 @@ Seven Django apps, all relationally linked:
 - Multi-type asset tabs render stacked sections with `<h3>` headers; single-type tabs get sort controls and bulk actions
 
 ### Multi-Stakeholder Ownership
-- Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty`, `VehicleOwner`, `AircraftOwner` — each stores percentage and role
+- Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty`, `VehicleOwner`, `AircraftOwner` — each stores percentage, role, and notes
 - HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern for all 5 through models + PolicyHolder)
+- Inline notes: `_inline_notes.html`/`_inline_notes_form.html` shared partials; click-to-edit, save/cancel/clear; `get_notes_url()`/`get_notes_id()` on each through model
 - Stakeholder detail "All Connections" tabs: Stakeholders, Properties, Investments, Loans, Vehicles, Aircraft, Insurance, Legal, Tasks, Notes, Cash Flow
 - `StakeholderVehicleForm`, `StakeholderAircraftForm`, `StakeholderPolicyForm` in `stakeholders/forms.py`
 - Create forms include optional "Initial Owner/Participant" fields, hidden on edit via `get_form()` field deletion
