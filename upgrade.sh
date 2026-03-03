@@ -322,17 +322,33 @@ pull_latest() {
         success "Changes stashed"
     fi
 
-    # Fast-forward merge only
-    git merge --ff-only "origin/$BRANCH" || {
-        error "Cannot fast-forward merge. Branch has diverged."
-        error "Resolve manually: git merge origin/$BRANCH"
-        if [[ "$STASHED" == "true" ]]; then
-            warn "Restoring stashed changes..."
-            git stash pop || true
-            STASHED=false
+    # Fast-forward merge, with fallback for force-pushed (rewritten) history
+    if ! git merge --ff-only "origin/$BRANCH" 2>/dev/null; then
+        # Check if remote history was rewritten (force push) — local HEAD
+        # is not an ancestor of the remote, meaning history diverged
+        if ! git merge-base --is-ancestor HEAD "origin/$BRANCH" 2>/dev/null; then
+            warn "Remote history was rewritten (force push detected)."
+            warn "Resetting local branch to match origin/$BRANCH."
+            git reset --hard "origin/$BRANCH" || {
+                error "Failed to reset to origin/$BRANCH."
+                if [[ "$STASHED" == "true" ]]; then
+                    warn "Restoring stashed changes..."
+                    git stash pop || true
+                    STASHED=false
+                fi
+                exit 1
+            }
+        else
+            error "Cannot fast-forward merge. Branch has diverged."
+            error "Resolve manually: git merge origin/$BRANCH"
+            if [[ "$STASHED" == "true" ]]; then
+                warn "Restoring stashed changes..."
+                git stash pop || true
+                STASHED=false
+            fi
+            exit 1
         fi
-        exit 1
-    }
+    fi
 
     local new_sha
     new_sha=$(git rev-parse HEAD)
