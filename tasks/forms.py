@@ -1,7 +1,20 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
-from dashboard.choices import get_choices
+from dashboard.choices import get_choice_label, get_choices
+from stakeholders.models import Stakeholder
 from .models import Task, FollowUp
+
+
+def _grouped_stakeholder_choices():
+    """Build optgroup-style choices grouped by entity type."""
+    groups = {}
+    for s in Stakeholder.objects.order_by("name"):
+        label = get_choice_label("entity_type", s.entity_type)
+        groups.setdefault(label, []).append((s.pk, s.name))
+    choices = [("", "---------")]
+    for group_label in sorted(groups):
+        choices.append((group_label, groups[group_label]))
+    return choices
 
 
 class TaskForm(TailwindFormMixin, forms.ModelForm):
@@ -17,17 +30,19 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Task
         fields = ["title", "direction", "description", "due_date", "reminder_date", "status",
-                  "priority", "task_type", "related_stakeholder",
+                  "priority", "task_type", "related_stakeholders",
                   "related_legal_matter", "related_property"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "reminder_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "description": forms.Textarea(attrs={"rows": 3}),
+            "related_stakeholders": forms.SelectMultiple(attrs={"size": "5"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["fu_method"].choices = get_choices("contact_method")
+        self.fields["related_stakeholders"].choices = _grouped_stakeholder_choices()
 
 
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):

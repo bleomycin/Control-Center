@@ -27,7 +27,7 @@ def dashboard(request):
         due_date__lt=today,
     ).exclude(
         status="complete",
-    ).select_related("related_stakeholder")
+    ).prefetch_related("related_stakeholders")
 
     # Upcoming tasks: due between today and today+14 days, not complete
     upcoming_tasks = Task.objects.filter(
@@ -35,7 +35,7 @@ def dashboard(request):
         due_date__lte=today + timedelta(days=14),
     ).exclude(
         status="complete",
-    ).select_related("related_stakeholder")
+    ).prefetch_related("related_stakeholders")
 
     # Active legal matters: status is 'active' or 'pending'
     active_legal_matters = LegalMatter.objects.filter(
@@ -96,7 +96,7 @@ def dashboard(request):
     upcoming_deadlines = []
     for task in Task.objects.filter(
         due_date__gte=today, due_date__lte=deadline_horizon,
-    ).exclude(status="complete").select_related("related_stakeholder"):
+    ).exclude(status="complete").prefetch_related("related_stakeholders"):
         upcoming_deadlines.append({
             "date": task.due_date, "type": "task", "color": "yellow",
             "title": task.title, "url": task.get_absolute_url(),
