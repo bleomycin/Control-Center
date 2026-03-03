@@ -14,107 +14,168 @@
     </div>
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
-        {% for field in form %}
-        {% if field.name|slice:":3" != "fu_" and field.name != "reminder_date" and field.name != "due_time" and field.name != "is_recurring" and field.name != "recurrence_rule" %}
-        {% if field.name == "due_date" %}
-        <div class="flex gap-4">
-            <div class="flex-1">
-                <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="due-date-label">{{ field.label }}</label>
-                {{ field }}
-                {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+
+        <!-- Title (full width) -->
+        <div>
+            <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                {{ form.title.label }} <span class="text-red-400">*</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.errors %}<p class="mt-1 text-sm text-red-400">{{ form.title.errors.0 }}</p>{% endif %}
+        </div>
+
+        <!-- Description (full width) -->
+        <div>
+            <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                {{ form.description.label }}
+            </label>
+            {{ form.description }}
+            {% if form.description.errors %}<p class="mt-1 text-sm text-red-400">{{ form.description.errors.0 }}</p>{% endif %}
+        </div>
+
+        <!-- Direction + Task type (2-col on desktop) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.direction.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.direction.label }} <span class="text-red-400">*</span>
+                </label>
+                {{ form.direction }}
+                {% if form.direction.errors %}<p class="mt-1 text-sm text-red-400">{{ form.direction.errors.0 }}</p>{% endif %}
             </div>
-            <div id="due-time-wrapper" class="flex-1 hidden">
+            <div>
+                <label for="{{ form.task_type.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.task_type.label }} <span class="text-red-400">*</span>
+                </label>
+                {{ form.task_type }}
+                {% if form.task_type.errors %}<p class="mt-1 text-sm text-red-400">{{ form.task_type.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+
+        <!-- Due date + time -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.due_date.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="due-date-label">{{ form.due_date.label }}</label>
+                {{ form.due_date }}
+                {% if form.due_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_date.errors.0 }}</p>{% endif %}
+            </div>
+            <div id="due-time-wrapper" class="hidden">
                 <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Time</label>
                 {{ form.due_time }}
                 {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
             </div>
         </div>
-        {% else %}
-        <div{% if field.name == "related_stakeholders" %} id="stakeholder-field-wrapper"{% endif %}>
-            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1"{% if field.name == "related_stakeholders" %} id="stakeholder-label"{% endif %}>
-                {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
-            </label>
-            {{ field }}
-            {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
-        </div>
-        {% endif %}
-        {% endif %}
-        {% endfor %}
 
-        <!-- Collapsible Options: reminder, recurring, follow-up -->
-        <details class="border-t border-gray-700 pt-4 mt-4"{% if form.reminder_date.value or form.is_recurring.value %} open{% endif %}>
-            <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300 select-none">
-                Options
-                <span class="inline-block transition-transform details-open-rotate">&#9654;</span>
-                {% if form.reminder_date.value %}<span class="text-xs text-blue-400 ml-2">Reminder set</span>{% endif %}
-                {% if form.is_recurring.value %}<span class="text-xs text-indigo-400 ml-2">Recurring</span>{% endif %}
-            </summary>
-            <div class="space-y-4 mt-4">
-                <!-- Task reminder toggle -->
-                <div>
-                    <div class="flex items-center gap-2 mb-3">
-                        <input type="checkbox" id="reminder-toggle" class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-                               {% if form.reminder_date.value %}checked{% endif %}>
-                        <label for="reminder-toggle" class="text-sm font-medium text-gray-300 cursor-pointer">Set a reminder for this task</label>
-                    </div>
-                    <div id="reminder-field" class="{% if not form.reminder_date.value %}hidden{% endif %}">
-                        <label for="{{ form.reminder_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Reminder date &amp; time</label>
-                        {{ form.reminder_date }}
-                        {% if form.reminder_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reminder_date.errors.0 }}</p>{% endif %}
-                    </div>
-                </div>
-
-                <!-- Recurring task toggle -->
-                <div class="border-t border-gray-700 pt-4">
-                    <div class="flex items-center gap-2 mb-3">
-                        {{ form.is_recurring }}
-                        <label for="{{ form.is_recurring.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">Recurring task</label>
-                    </div>
-                    <div id="recurrence-field" class="{% if not form.is_recurring.value %}hidden{% endif %}">
-                        <label for="{{ form.recurrence_rule.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Repeat every</label>
-                        {{ form.recurrence_rule }}
-                        {% if form.recurrence_rule.errors %}<p class="mt-1 text-sm text-red-400">{{ form.recurrence_rule.errors.0 }}</p>{% endif %}
-                        <p class="mt-1 text-xs text-gray-500">When completed, a new task will be created with the next due date.</p>
-                    </div>
-                </div>
-
-                {% if not object %}
-                <!-- Follow-up section (create only) -->
-                <div id="fu-section-block" class="border-t border-gray-700 pt-4">
-                    <div class="flex items-center gap-2 mb-3">
-                        {{ form.fu_create }}
-                        <label for="{{ form.fu_create.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">
-                            {{ form.fu_create.label }}
-                        </label>
-                    </div>
-                    <div id="fu-fields" class="space-y-3 hidden">
-                        <div>
-                            <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
-                            {{ form.fu_method }}
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <div class="flex items-center gap-2">
-                                {{ form.fu_reminder_enabled }}
-                                <label for="{{ form.fu_reminder_enabled.id_for_label }}" class="text-xs font-medium text-gray-400 cursor-pointer">{{ form.fu_reminder_enabled.label }}</label>
-                            </div>
-                            <div id="fu-days-field" class="hidden">
-                                <div class="flex items-center gap-2">
-                                    <label for="{{ form.fu_follow_up_days.id_for_label }}" class="text-xs font-medium text-gray-400">after</label>
-                                    <div class="w-20">{{ form.fu_follow_up_days }}</div>
-                                    <span class="text-xs text-gray-400">days</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div>
-                            <label for="{{ form.fu_notes.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_notes.label }}</label>
-                            {{ form.fu_notes }}
-                        </div>
-                        <p class="text-xs text-gray-500">A follow-up will be created using the stakeholder selected above. If no stakeholder is selected, no follow-up will be created.</p>
-                    </div>
-                </div>
-                {% endif %}
+        <!-- Status + Priority (2-col on desktop) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.status.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.status.label }} <span class="text-red-400">*</span>
+                </label>
+                {{ form.status }}
+                {% if form.status.errors %}<p class="mt-1 text-sm text-red-400">{{ form.status.errors.0 }}</p>{% endif %}
             </div>
-        </details>
+            <div>
+                <label for="{{ form.priority.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.priority.label }} <span class="text-red-400">*</span>
+                </label>
+                {{ form.priority }}
+                {% if form.priority.errors %}<p class="mt-1 text-sm text-red-400">{{ form.priority.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+
+        <!-- Related stakeholders (full width) -->
+        <div id="stakeholder-field-wrapper">
+            <label for="{{ form.related_stakeholders.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="stakeholder-label">
+                {{ form.related_stakeholders.label }}
+            </label>
+            {{ form.related_stakeholders }}
+            {% if form.related_stakeholders.errors %}<p class="mt-1 text-sm text-red-400">{{ form.related_stakeholders.errors.0 }}</p>{% endif %}
+        </div>
+
+        <!-- Legal matter + Property (2-col on desktop) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.related_legal_matter.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.related_legal_matter.label }}
+                </label>
+                {{ form.related_legal_matter }}
+                {% if form.related_legal_matter.errors %}<p class="mt-1 text-sm text-red-400">{{ form.related_legal_matter.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.related_property.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.related_property.label }}
+                </label>
+                {{ form.related_property }}
+                {% if form.related_property.errors %}<p class="mt-1 text-sm text-red-400">{{ form.related_property.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+
+        <!-- Reminder + Recurring (always visible, no collapsible) -->
+        <div class="border-t border-gray-700 pt-4 space-y-4">
+            <!-- Task reminder toggle -->
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    <input type="checkbox" id="reminder-toggle" class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                           {% if form.reminder_date.value %}checked{% endif %}>
+                    <label for="reminder-toggle" class="text-sm font-medium text-gray-300 cursor-pointer">Set a reminder for this task</label>
+                </div>
+                <div id="reminder-field" class="{% if not form.reminder_date.value %}hidden{% endif %}">
+                    <label for="{{ form.reminder_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Reminder date &amp; time</label>
+                    {{ form.reminder_date }}
+                    {% if form.reminder_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reminder_date.errors.0 }}</p>{% endif %}
+                </div>
+            </div>
+
+            <!-- Recurring task toggle -->
+            <div>
+                <div class="flex items-center gap-2 mb-3">
+                    {{ form.is_recurring }}
+                    <label for="{{ form.is_recurring.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">Recurring task</label>
+                </div>
+                <div id="recurrence-field" class="{% if not form.is_recurring.value %}hidden{% endif %}">
+                    <label for="{{ form.recurrence_rule.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Repeat every</label>
+                    {{ form.recurrence_rule }}
+                    {% if form.recurrence_rule.errors %}<p class="mt-1 text-sm text-red-400">{{ form.recurrence_rule.errors.0 }}</p>{% endif %}
+                    <p class="mt-1 text-xs text-gray-500">When completed, a new task will be created with the next due date.</p>
+                </div>
+            </div>
+
+            {% if not object %}
+            <!-- Follow-up section (create only) -->
+            <div id="fu-section-block" class="border-t border-gray-700 pt-4">
+                <div class="flex items-center gap-2 mb-3">
+                    {{ form.fu_create }}
+                    <label for="{{ form.fu_create.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">
+                        {{ form.fu_create.label }}
+                    </label>
+                </div>
+                <div id="fu-fields" class="space-y-3 hidden">
+                    <div>
+                        <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
+                        {{ form.fu_method }}
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            {{ form.fu_reminder_enabled }}
+                            <label for="{{ form.fu_reminder_enabled.id_for_label }}" class="text-xs font-medium text-gray-400 cursor-pointer">{{ form.fu_reminder_enabled.label }}</label>
+                        </div>
+                        <div id="fu-days-field" class="hidden">
+                            <div class="flex items-center gap-2">
+                                <label for="{{ form.fu_follow_up_days.id_for_label }}" class="text-xs font-medium text-gray-400">after</label>
+                                <div class="w-20">{{ form.fu_follow_up_days }}</div>
+                                <span class="text-xs text-gray-400">days</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="{{ form.fu_notes.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_notes.label }}</label>
+                        {{ form.fu_notes }}
+                    </div>
+                    <p class="text-xs text-gray-500">A follow-up will be created using the stakeholder selected above. If no stakeholder is selected, no follow-up will be created.</p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
 
         <script>
             // Meeting time toggle

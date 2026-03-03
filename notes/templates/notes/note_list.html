@@ -92,18 +92,24 @@
     <!-- Collapsible filter panel -->
     <div id="note-filter-panel" class="{% if not selected_types and not selected_tags and not date_from and not date_to %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
         <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
-            <!-- Type checkboxes -->
+            <!-- Type filter pills -->
             <div>
-                <span class="text-xs text-gray-400 font-medium">Type:</span>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                <span class="text-xs text-gray-400 font-medium mr-1">Type:</span>
+                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:inline-flex items-center">
                     {% for val, label in note_types %}
-                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                    {% note_type_classes val as ntc %}
+                    <label class="cursor-pointer">
                         <input type="checkbox" name="type" value="{{ val }}"
                                {% if val in selected_types %}checked{% endif %}
                                hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
                                hx-include="#filter-form" hx-indicator="#loading-spinner"
-                               class="rounded border-gray-600 bg-gray-700 text-blue-600 h-3.5 w-3.5">
-                        {{ label }}
+                               class="hidden"
+                               onchange="toggleTypePill(this, '{{ ntc.bg }}', '{{ ntc.text }}', '{{ ntc.border }}')">
+                        <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                     {% if val in selected_types %}{{ ntc.bg }} {{ ntc.text }} {{ ntc.border }}{% else %}border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500{% endif %}"
+                              data-active-bg="{{ ntc.bg }}" data-active-text="{{ ntc.text }}" data-active-border="{{ ntc.border }}">
+                            {{ label }}
+                        </span>
                     </label>
                     {% endfor %}
                 </div>
@@ -297,6 +303,17 @@ function toggleTagPill(checkbox, bgClass, textClass, borderClass) {
     }
 }
 
+function toggleTypePill(checkbox, bgClass, textClass, borderClass) {
+    var span = checkbox.nextElementSibling;
+    if (checkbox.checked) {
+        span.classList.add(...bgClass.split(' '), ...textClass.split(' '), ...borderClass.split(' '));
+        span.classList.remove('border-gray-600', 'text-gray-500');
+    } else {
+        span.classList.remove(...bgClass.split(' '), ...textClass.split(' '), ...borderClass.split(' '));
+        span.classList.add('border-gray-600', 'text-gray-500');
+    }
+}
+
 function setBulkTagMode(mode) {
     document.getElementById('bulk-tag-mode').value = mode;
     var addBtn = document.getElementById('tag-mode-add');
@@ -331,9 +348,16 @@ function toggleNoteFilters() {
 
 function clearNoteFilters() {
     var panel = document.getElementById('note-filter-panel');
-    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+        cb.checked = false;
+        // Reset pill visuals for type and tag pills
+        var span = cb.nextElementSibling;
+        if (span && span.dataset.activeBg) {
+            span.classList.remove(...(span.dataset.activeBg || '').split(' '), ...(span.dataset.activeText || '').split(' '), ...(span.dataset.activeBorder || '').split(' '));
+            span.classList.add('border-gray-600', 'text-gray-500');
+        }
+    });
     panel.querySelectorAll('input[type=date]').forEach(function(d) { d.value = ''; });
-    // Also reset tag pill visuals (peer-checked CSS handles it, but clear state)
     var badge = document.getElementById('note-filter-count');
     if (badge) badge.remove();
     var btn = document.getElementById('note-filter-toggle-btn');

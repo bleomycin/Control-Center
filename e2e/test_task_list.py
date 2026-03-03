@@ -1,4 +1,7 @@
+from django.utils import timezone
+
 from tasks.models import Task, SubTask
+from notes.models import Note
 from e2e.base import PlaywrightTestCase
 
 
@@ -73,22 +76,12 @@ class TaskFormTests(PlaywrightTestCase):
         container.wait_for(state="visible")
         self.assertTrue(container.is_visible())
 
-    def test_form_collapsible_options(self):
-        """Options section starts collapsed, opens on click to show reminder/recurring."""
+    def test_form_reminder_and_recurring_visible(self):
+        """Reminder and recurring options are always visible (not hidden in collapsible)."""
         self.page.goto(self.url("/tasks/create/"))
 
-        # The details element should exist
-        details = self.page.locator("details")
-        details.wait_for(state="attached")
-
-        # Reminder field should be hidden initially (inside closed details)
+        # Reminder toggle should be visible directly
         reminder_toggle = self.page.locator("#reminder-toggle")
-        self.assertTrue(reminder_toggle.is_hidden())
-
-        # Click summary to open
-        self.page.click("summary:has-text('Options')")
-
-        # Wait for the details to open and content to be visible
         reminder_toggle.wait_for(state="visible")
         self.assertTrue(reminder_toggle.is_visible())
 
@@ -141,12 +134,42 @@ class TaskFormTests(PlaywrightTestCase):
         date_label = self.page.locator("#due-date-label")
         self.assertIn("Meeting date", date_label.text_content())
 
+    def test_form_2col_direction_and_type(self):
+        """Direction and Task type render side-by-side in a 2-col grid."""
+        self.page.goto(self.url("/tasks/create/"))
+
+        # Find 2-col grids
+        grids = self.page.locator(".sm\\:grid-cols-2")
+        grids.first.wait_for(state="visible")
+
+        # First 2-col grid should contain direction and task_type
+        first_grid = grids.first
+        self.assertTrue(first_grid.locator("#id_direction").is_visible())
+        self.assertTrue(first_grid.locator("#id_task_type").is_visible())
+
+    def test_form_2col_status_and_priority(self):
+        """Status and Priority render side-by-side in a 2-col grid."""
+        self.page.goto(self.url("/tasks/create/"))
+
+        # Status and priority should be in the same grid container
+        # They're in the 3rd sm:grid-cols-2 (after direction+type and date+time)
+        grids = self.page.locator(".sm\\:grid-cols-2")
+        grids.first.wait_for(state="visible")
+
+        # Find the grid that contains both status and priority
+        found = False
+        for i in range(grids.count()):
+            grid = grids.nth(i)
+            has_status = grid.locator("#id_status").count() > 0
+            has_priority = grid.locator("#id_priority").count() > 0
+            if has_status and has_priority:
+                found = True
+                break
+        self.assertTrue(found, "Status and Priority should be in the same 2-col grid")
+
     def test_form_recurring_toggle_shows_rule(self):
         """Check recurring checkbox -> recurrence rule dropdown appears."""
         self.page.goto(self.url("/tasks/create/"))
-
-        # Open Options section
-        self.page.click("summary:has-text('Options')")
 
         # Recurrence field should be hidden initially
         recurrence_field = self.page.locator("#recurrence-field")
@@ -234,3 +257,103 @@ class TaskListInlineStatusTests(PlaywrightTestCase):
 
         self.task.refresh_from_db()
         self.assertEqual(self.task.status, "complete")
+
+
+class TaskNoteIndicatorTests(PlaywrightTestCase):
+    """Test note count indicator on task list rows and detail page."""
+
+    def setUp(self):
+        super().setUp()
+        self.task_with_notes = Task.objects.create(
+            title="Task With Notes",
+            status="not_started",
+            priority="medium",
+            direction="personal",
+        )
+        self.task_without_notes = Task.objects.create(
+            title="Task Without Notes",
+            status="not_started",
+            priority="low",
+            direction="personal",
+        )
+        # Create 2 notes linked to the first task
+        for i in range(2):
+            note = Note.objects.create(
+                title=f"Test Note {i + 1}",
+                content=f"Content for note {i + 1}",
+                date=timezone.now(),
+                note_type="general",
+            )
+            note.related_tasks.add(self.task_with_notes)
+
+    def test_note_indicator_shown_on_list_row(self):
+        """Task with notes shows note icon + count on list row."""
+        self.page.goto(self.url("/tasks/"))
+
+        row = self.page.locator(f"#task-row-{self.task_with_notes.pk}")
+        row.wait_for(state="visible")
+
+        # Note indicator should be visible with count "2"
+        note_link = row.locator("a[title='2 notes']")
+        self.assertTrue(note_link.is_visible())
+        self.assertIn("2", note_link.text_content())
+
+    def test_no_note_indicator_when_no_notes(self):
+        """Task without notes has no note indicator."""
+        self.page.goto(self.url("/tasks/"))
+
+        row = self.page.locator(f"#task-row-{self.task_without_notes.pk}")
+        row.wait_for(state="visible")
+
+        # No note indicator link should exist in this row
+        note_links = row.locator("a[href*='#notes-section']")
+        self.assertEqual(0, note_links.count())
+
+    def test_note_indicator_links_to_detail_notes_section(self):
+        """Clicking note indicator navigates to detail page notes section."""
+        self.page.goto(self.url("/tasks/"))
+
+        row = self.page.locator(f"#task-row-{self.task_with_notes.pk}")
+        row.wait_for(state="visible")
+
+        # Click the note indicator
+        note_link = row.locator("a[title='2 notes']")
+        note_link.click()
+
+        # Should navigate to detail page
+        self.page.wait_for_selector("#notes-section")
+        self.assertIn(f"/tasks/{self.task_with_notes.pk}/", self.page.url)
+
+    def test_detail_page_notes_section_shows_count(self):
+        """Detail page shows note count in Notes section header."""
+        self.page.goto(self.url(f"/tasks/{self.task_with_notes.pk}/"))
+
+        notes_section = self.page.locator("#notes-section")
+        notes_section.wait_for(state="visible")
+
+        # Header should show "(2)"
+        header = notes_section.locator("h2")
+        self.assertIn("(2)", header.text_content())
+
+    def test_detail_page_lists_linked_notes(self):
+        """Detail page lists the linked notes with titles."""
+        self.page.goto(self.url(f"/tasks/{self.task_with_notes.pk}/"))
+
+        notes_section = self.page.locator("#notes-section")
+        notes_section.wait_for(state="visible")
+
+        text = notes_section.text_content()
+        self.assertIn("Test Note 1", text)
+        self.assertIn("Test Note 2", text)
+
+    def test_detail_page_no_count_when_no_notes(self):
+        """Detail page Notes header has no count when no notes exist."""
+        self.page.goto(self.url(f"/tasks/{self.task_without_notes.pk}/"))
+
+        notes_section = self.page.locator("#notes-section")
+        notes_section.wait_for(state="visible")
+
+        header = notes_section.locator("h2")
+        header_text = header.text_content()
+        self.assertIn("Notes", header_text)
+        self.assertNotIn("(", header_text)

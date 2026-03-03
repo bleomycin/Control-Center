@@ -30,6 +30,17 @@ FOLDER_COLOR_MAP = {
     "gray": {"bg": "bg-gray-700/30", "text": "text-gray-400"},
 }
 
+# Note type filter pill classes: maps note_type value -> color classes.
+NOTE_TYPE_COLOR_MAP = {
+    "call": {"bg": "bg-green-900/40", "text": "text-green-300", "border": "border-green-700"},
+    "email": {"bg": "bg-blue-900/40", "text": "text-blue-300", "border": "border-blue-700"},
+    "meeting": {"bg": "bg-purple-900/40", "text": "text-purple-300", "border": "border-purple-700"},
+    "research": {"bg": "bg-cyan-900/40", "text": "text-cyan-300", "border": "border-cyan-700"},
+    "legal_update": {"bg": "bg-amber-900/40", "text": "text-amber-300", "border": "border-amber-700"},
+    "general": {"bg": "bg-gray-700/40", "text": "text-gray-300", "border": "border-gray-600"},
+    "text_message": {"bg": "bg-indigo-900/40", "text": "text-indigo-300", "border": "border-indigo-700"},
+}
+
 DEFAULT = {"bg": "bg-blue-900/40", "text": "text-blue-300", "border": "border-blue-700"}
 
 
@@ -43,3 +54,9 @@ def tag_classes(color):
 def folder_classes(color):
     """Return CSS classes dict for a folder color."""
     return FOLDER_COLOR_MAP.get(color, {"bg": "bg-blue-900/30", "text": "text-blue-400"})
+
+
+@register.simple_tag
+def note_type_classes(note_type):
+    """Return CSS classes dict for a note type filter pill."""
+    return NOTE_TYPE_COLOR_MAP.get(note_type, DEFAULT)

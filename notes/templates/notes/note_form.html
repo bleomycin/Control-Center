@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static %}
+{% load static tag_colors %}
 {% block title %}{% if object %}Edit {{ object }}{% else %}New Note{% endif %} - Control Center{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'vendor/easymde.min.css' %}">
@@ -53,17 +53,74 @@
     </div>
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
-        {% for field in form %}
-            {% if field.name in form.CORE_FIELDS %}
+
+        <!-- Title (full width) -->
+        <div>
+            <label for="{{ form.title.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                {{ form.title.label }} <span class="text-red-400">*</span>
+            </label>
+            {{ form.title }}
+            {% if form.title.errors %}<p class="mt-1 text-sm text-red-400">{{ form.title.errors.0 }}</p>{% endif %}
+        </div>
+
+        <!-- Content (full width) -->
+        <div>
+            <label for="{{ form.content.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                {{ form.content.label }} <span class="text-red-400">*</span>
+            </label>
+            {{ form.content }}
+            {% if form.content.errors %}<p class="mt-1 text-sm text-red-400">{{ form.content.errors.0 }}</p>{% endif %}
+        </div>
+
+        <!-- Date + Note type + Folder (3-col on desktop) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-                <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
-                    {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
+                <label for="{{ form.date.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.date.label }} <span class="text-red-400">*</span>
                 </label>
-                {{ field }}
-                {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+                {{ form.date }}
+                {% if form.date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.date.errors.0 }}</p>{% endif %}
             </div>
-            {% endif %}
-        {% endfor %}
+            <div>
+                <label for="{{ form.note_type.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.note_type.label }} <span class="text-red-400">*</span>
+                </label>
+                {{ form.note_type }}
+                {% if form.note_type.errors %}<p class="mt-1 text-sm text-red-400">{{ form.note_type.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.folder.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ form.folder.label }}
+                </label>
+                {{ form.folder }}
+                {% if form.folder.errors %}<p class="mt-1 text-sm text-red-400">{{ form.folder.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+
+        <!-- Tags (horizontal color pills) -->
+        {% if all_tags %}
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Tags</label>
+            <div class="flex flex-wrap gap-1.5">
+                {% for tag in all_tags %}
+                {% tag_classes tag.color as tc %}
+                <label class="cursor-pointer">
+                    <input type="checkbox" name="tags" value="{{ tag.pk }}"
+                           {% if tag.pk in form.selected_tag_pks %}checked{% endif %}
+                           class="hidden"
+                           onchange="toggleFormTagPill(this, '{{ tc.bg }}', '{{ tc.text }}', '{{ tc.border }}')">
+                    <span class="form-tag-pill inline-flex items-center text-xs px-2.5 py-1 rounded-full border transition-colors
+                                 {% if tag.pk in form.selected_tag_pks %}{{ tc.bg }} {{ tc.text }} {{ tc.border }}{% else %}border-gray-600 text-gray-400 hover:text-gray-300 hover:border-gray-500{% endif %}"
+                          data-active-bg="{{ tc.bg }}" data-active-text="{{ tc.text }}" data-active-border="{{ tc.border }}">
+                        #{{ tag.name }}
+                    </span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Related Entities (collapsible) -->
         <details class="mt-4" {% if form.entity_linked_count %}open{% endif %}>
             <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300 select-none">
                 Related Entities
@@ -86,6 +143,7 @@
                 {% endfor %}
             </div>
         </details>
+
         <div class="flex gap-3 pt-4">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
                 {% if object %}Update{% else %}Create{% endif %} Note
@@ -96,6 +154,16 @@
 </div>
 <script src="{% static 'vendor/easymde.min.js' %}"></script>
 <script>
+function toggleFormTagPill(checkbox, bgClass, textClass, borderClass) {
+    var span = checkbox.nextElementSibling;
+    if (checkbox.checked) {
+        span.classList.add(...bgClass.split(' '), ...textClass.split(' '), ...borderClass.split(' '));
+        span.classList.remove('border-gray-600', 'text-gray-400');
+    } else {
+        span.classList.remove(...bgClass.split(' '), ...textClass.split(' '), ...borderClass.split(' '));
+        span.classList.add('border-gray-600', 'text-gray-400');
+    }
+}
 document.addEventListener("DOMContentLoaded", function() {
     var ta = document.getElementById("id_content");
     if (ta && window.innerWidth >= 640) {

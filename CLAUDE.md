@@ -20,6 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | PDF Export | reportlab 4.4.9 (platypus engine) |
 | Background Jobs | Django-Q2 (ORM broker) |
 | Static Files | WhiteNoise 6.9.0 |
+| E2E Testing | Playwright (dev-only, in `requirements-dev.txt`) |
 | Deployment | Docker (Gunicorn + WhiteNoise) |
 
 ## Build & Run Commands
@@ -72,8 +73,14 @@ python manage.py setup_schedules
 # Start background task worker (django-q2)
 python manage.py qcluster
 
-# Run tests
+# Run all tests (unit + e2e)
 python manage.py test
+
+# Run only unit tests (exclude e2e)
+python manage.py test assets cashflow config dashboard legal notes stakeholders tasks
+
+# Run only e2e browser tests
+python manage.py test e2e
 
 # Run a single test module
 python manage.py test <app_name>.tests.<TestClass>
@@ -94,7 +101,7 @@ make tailwind-watch     # watch mode for development
 
 ## Apps & Architecture
 
-Seven Django apps, all relationally linked:
+Seven Django apps + one e2e test package, all relationally linked:
 
 | App | Models | Purpose |
 |-----|--------|---------|
@@ -105,6 +112,7 @@ Seven Django apps, all relationally linked:
 | **tasks** | Task, FollowUp, SubTask | Deadlines, priorities, follow-ups, subtask checklists; bidirectional direction; multi-stakeholder M2M; meetings with time; kanban board; recurring tasks; grouped views |
 | **cashflow** | CashFlowEntry | Actual + projected inflows/outflows with category filtering and charts |
 | **notes** | Note, Attachment, Link, Tag, Folder | Searchable records linked to entities via M2M; external links; pinned notes, tags, folders, 3 view modes (cards/table/timeline) |
+| **e2e** | *(no models)* | Playwright browser tests — `StaticLiveServerTestCase` base class in `e2e/base.py`; 59 tests covering inline editing, HTMX swaps, form interactivity |
 
 ## Key Patterns
 
@@ -121,6 +129,9 @@ Seven Django apps, all relationally linked:
 - **Dropdown menus**: Multi-type asset tabs use `[data-dropdown]` toggle pattern (`toggleDropdown()`/`closeAllDropdowns()` in `asset_list.html`); single-type tabs render flat buttons instead.
 - **Currency**: `django.contrib.humanize` `intcomma` filter everywhere
 - **Mobile responsive**: All list pages mobile-optimized. Pattern: view toggle in header (icon-only on mobile via `hidden sm:inline`), Export CSV hidden on mobile (`hidden sm:inline-block`), 2-col grid for dropdowns (`grid grid-cols-2 sm:flex`), collapsible Filters panel with badge count, table rows hide columns on mobile and show `sm:hidden` metadata line in title cell, tabs collapse to `<select>` dropdown on mobile (`sm:hidden` / `hidden sm:flex`)
+- **Inline editing on detail pages**: Tasks and notes use HTMX display/editor partial swaps. Pattern: `_detail_title_display.html` + `_detail_title_editor.html` (pencil icon → input + Save/Cancel). Description uses click-to-edit with textarea. Metadata uses badge row → dropdown row swap. Breadcrumb updates via `HX-Trigger` event.
+- **Form layout**: Explicit field rendering (not `{% for field in form %}` loops) for precise layout control. Short fields (dropdowns, dates) in responsive 2-col grids (`grid grid-cols-1 sm:grid-cols-2 gap-4`); title/description full-width. Note form uses 3-col grid for Date/Type/Folder.
+- **Colored pill toggles**: Used for tag selection (forms + filters) and note type filters. Pattern: hidden `<input type="checkbox">` + styled `<span>` with `data-active-bg`/`data-active-text`/`data-active-border` attributes; JS `onchange` handler toggles CSS classes.
 
 ### Editable Choices (DB-backed dropdowns)
 - `ChoiceOption` model in `dashboard/models.py` — 7 categories: `entity_type`, `contact_method`, `matter_type`, `note_type`, `policy_type`, `vehicle_type`, `aircraft_type`
@@ -176,12 +187,18 @@ Seven Django apps, all relationally linked:
 - Recurring: `is_recurring` + `recurrence_rule`; `create_next_recurrence()` called in all 4 completion paths
 - Meeting: `task_type="meeting"` + optional `due_time` TimeField; `QuickTaskForm` also supports meetings (type select + conditional time field)
 - Kanban: SortableJS drag-and-drop, `kanban_update` endpoint
-- Inline edit: clickable status/priority badges cycle values; `_task_row.html` partial for single-row re-render
+- Inline list edit: clickable status/priority badges cycle values; inline date picker; `_task_row.html` partial for single-row re-render
+- Inline detail edit: title (pencil → input), description (click → textarea), metadata (badges → dropdowns) — partials in `tasks/partials/_detail_*_display.html` / `_detail_*_editor.html`; breadcrumb synced via `HX-Trigger: updateTaskBreadcrumb`
+- Note indicator: `note_count` annotation on list queryset; icon + count link on list rows (links to `#notes-section` on detail); count badge in detail Notes section header
 
 ### Notes System
 - 3 view modes: cards, list, timeline — `get_template_names()` routes by `view` param
 - `Tag` (name, slug, color) + `Folder` (name, color, sort_order); `notes/templatetags/tag_colors.py` maps color names → CSS class string literals (for Tailwind scanning)
+- Template tags: `tag_classes(color)`, `folder_classes(color)`, `note_type_classes(note_type)` — all return `{bg, text, border}` dict for colored pill rendering
+- Note type filter pills on list page: colored pill toggles (not plain checkboxes); `toggleTypePill` JS; `NOTE_TYPE_COLOR_MAP` for 7 types including `text_message`
 - Folder tab bar with inline "Manage Folders" panel; `HX-Trigger: foldersChanged` auto-refreshes tabs
+- Inline detail edit: title (pencil → input), content (click → EasyMDE textarea), metadata (badges → dropdowns + tag pills) — partials in `notes/partials/_detail_*_display.html` / `_detail_*_editor.html`
+- Note form: explicit field layout with 3-col grid (Date/Type/Folder); tags rendered as horizontal colored pills (not CheckboxSelectMultiple); `selected_tag_pks` property on form
 - Markdown: `render_markdown` template filter with `nl2br` + blank-line preprocessor; `prose-markdown` CSS in `input.css`
 
 ### Notifications & Email
@@ -211,6 +228,15 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - **Environment**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks; production security headers gated behind `not DEBUG`
 - **Sample data**: `SampleDataStatus` singleton tracks loaded PKs in `manifest` JSONField; remove deletes only manifested PKs in reverse-dependency order
 
+### E2E Browser Testing (Playwright)
+- `e2e/base.py`: `PlaywrightTestCase` extends `StaticLiveServerTestCase` — spins up real HTTP server on random port, serves static files
+- Browser shared per class (expensive to launch), fresh page per test for isolation; `url()` helper constructs full URL
+- `requirements-dev.txt` for dev-only dependencies (playwright); install browsers via `playwright install chromium`
+- Tests verify actual DOM state after HTMX swaps, JS toggle functions, and responsive behavior
+- Test files: `test_task_inline.py` (detail editing), `test_task_list.py` (list + form), `test_note_inline.py` (detail editing), `test_note_list.py` (list + form), `test_subtasks.py` (checklist interactions)
+- `setUp()` calls `invalidate_choice_cache()` to avoid stale ChoiceOption cache across test classes
+- EasyMDE hides `<textarea>` — tests use `page.set_viewport_size({"width": 375, ...})` for mobile to skip EasyMDE
+
 ### Important Gotchas
 - Dashboard views use lazy imports inside functions
 - Forms use `__init__` override for dynamic widget/choices setup
@@ -221,6 +247,8 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - **Timezone**: `TIME_ZONE = 'America/Los_Angeles'` with `USE_TZ = True`. Always use `timezone.localdate()` (not `date.today()`) and `timezone.localdate(dt)` (not `dt.date()`) when comparing dates from DateTimeFields — UTC vs local mismatch causes wrong results
 - Django test runner uses in-memory SQLite — WAL mode returns 'memory', not 'wal'
 - Backup/restore tests must use temp file-based DBs, not the in-memory test DB
+- E2E tests need `DJANGO_ALLOW_ASYNC_UNSAFE=true` (set in `e2e/base.py` setUp) for Playwright + LiveServerTestCase
+- EasyMDE textarea hiding: in e2e tests, use mobile viewport or target `.EasyMDEContainer` instead of the hidden `<textarea>`
 
 ## Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)

@@ -165,6 +165,11 @@ class NoteCreateView(CreateView):
     form_class = NoteForm
     template_name = "notes/note_form.html"
 
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["all_tags"] = Tag.objects.all().order_by("name")
+        return ctx
+
     def get_initial(self):
         initial = super().get_initial()
         date_param = self.request.GET.get("date", "").strip()
@@ -221,6 +226,11 @@ class NoteUpdateView(UpdateView):
     model = Note
     form_class = NoteForm
     template_name = "notes/note_form.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["all_tags"] = Tag.objects.all().order_by("name")
+        return ctx
 
     def form_valid(self, form):
         messages.success(self.request, "Note updated.")
