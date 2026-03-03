@@ -8,7 +8,7 @@ from legal.models import LegalMatter
 from stakeholders.models import Stakeholder
 from tasks.models import Task
 
-from .models import Attachment, Note
+from .models import Attachment, Link, Note
 
 
 class NoteModelTests(TestCase):
@@ -232,3 +232,73 @@ class NoteViewTests(TestCase):
         note.participants.add(s)
         resp = self.client.get(reverse("notes:list"))
         self.assertContains(resp, "Alice Wonderland")
+
+    def test_detail_has_link_context(self):
+        resp = self.client.get(reverse("notes:detail", args=[self.note.pk]))
+        self.assertIn("link_list", resp.context)
+        self.assertIn("link_form", resp.context)
+
+    def test_link_add_get(self):
+        resp = self.client.get(reverse("notes:link_add", args=[self.note.pk]))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_link_add_post(self):
+        resp = self.client.post(
+            reverse("notes:link_add", args=[self.note.pk]),
+            {"url": "https://docs.google.com/doc/1", "description": "Test Doc"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(Link.objects.filter(description="Test Doc").exists())
+
+    def test_link_delete(self):
+        link = Link.objects.create(
+            note=self.note, url="https://example.com", description="Del Link"
+        )
+        resp = self.client.post(reverse("notes:link_delete", args=[link.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(Link.objects.filter(pk=link.pk).exists())
+
+    def test_pdf_includes_links(self):
+        Link.objects.create(
+            note=self.note, url="https://example.com/report", description="Report"
+        )
+        resp = self.client.get(reverse("notes:export_pdf", args=[self.note.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_card_combined_count(self):
+        note = Note.objects.create(
+            title="Count Note", content="x", date=timezone.now()
+        )
+        f = SimpleUploadedFile("t.txt", b"d", content_type="text/plain")
+        Attachment.objects.create(note=note, file=f, description="file")
+        Link.objects.create(note=note, url="https://example.com", description="link")
+        resp = self.client.get(reverse("notes:list"))
+        self.assertContains(resp, "2")
+
+
+class LinkModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.note = Note.objects.create(
+            title="Link Note", content="content", date=timezone.now()
+        )
+
+    def test_create(self):
+        link = Link.objects.create(
+            note=self.note, url="https://docs.google.com/doc/123", description="GDoc"
+        )
+        self.assertEqual(link.note, self.note)
+        self.assertEqual(link.description, "GDoc")
+
+    def test_str(self):
+        link = Link.objects.create(
+            note=self.note, url="https://example.com", description="My Link"
+        )
+        self.assertEqual(str(link), "My Link")
+
+    def test_cascade_on_note_delete(self):
+        Link.objects.create(
+            note=self.note, url="https://example.com", description="Gone"
+        )
+        self.note.delete()
+        self.assertEqual(Link.objects.count(), 0)

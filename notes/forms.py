@@ -1,7 +1,7 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
 from dashboard.choices import get_choices
-from .models import Attachment, Note
+from .models import Attachment, Link, Note
 
 
 class NoteForm(TailwindFormMixin, forms.ModelForm):
@@ -44,3 +44,13 @@ class AttachmentForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Attachment
         fields = ["file", "description"]
+
+
+class LinkForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = Link
+        fields = ["url", "description"]
+        widgets = {
+            "url": forms.URLInput(attrs={"placeholder": "https://docs.google.com/..."}),
+            "description": forms.TextInput(attrs={"placeholder": "Q4 Financial Report"}),
+        }
