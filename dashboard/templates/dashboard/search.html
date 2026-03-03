@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Search - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-white">Search</h1>
+    <p class="text-sm text-gray-400 mt-1">Search across all modules</p>
+</div>
+
+<div class="mb-6">
+    <input type="text"
+           id="global-search-input"
+           name="q"
+           value="{{ query|default:'' }}"
+           placeholder="Search stakeholders, tasks, notes, legal matters, assets..."
+           hx-get="{% url 'dashboard:search' %}"
+           hx-trigger="keyup changed delay:300ms"
+           hx-target="#search-results"
+           hx-swap="innerHTML"
+           hx-push-url="true"
+           autofocus
+           class="w-full rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-4 py-3 text-lg">
+</div>
+
+<div id="search-results">
+    {% include "dashboard/partials/_search_results.html" %}
+</div>
+{% endblock %}

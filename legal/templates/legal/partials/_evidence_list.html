@@ -1,0 +1,22 @@
+<div class="divide-y divide-gray-700">
+    {% for ev in evidence_list %}
+    <div class="px-4 py-3 flex items-start justify-between group">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-gray-200">{{ ev.title }}</span>
+                {% if ev.evidence_type %}<span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ ev.evidence_type }}</span>{% endif %}
+            </div>
+            {% if ev.description %}<p class="text-sm text-gray-400 mt-1">{{ ev.description }}</p>{% endif %}
+            <div class="flex items-center gap-3 mt-1">
+                {% if ev.date_obtained %}<span class="text-xs text-gray-400">{{ ev.date_obtained|date:"M j, Y" }}</span>{% endif %}
+                {% if ev.file %}<a href="{{ ev.file.url }}" class="text-xs text-blue-400 hover:text-blue-300" target="_blank">View file</a>{% endif %}
+            </div>
+        </div>
+        <button hx-post="{% url 'legal:evidence_delete' ev.pk %}" hx-target="#evidence-list" hx-swap="innerHTML"
+                hx-confirm="Delete this evidence?"
+                class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">&times;</button>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No evidence</p>
+    {% endfor %}
+</div>

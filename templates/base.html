@@ -1,0 +1,124 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Control Center{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{% static 'js/htmx.min.js' %}"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        sidebar: {
+                            DEFAULT: '#1e293b',
+                            hover: '#334155',
+                            active: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        /* HTMX loading indicators */
+        .htmx-indicator { display: none; }
+        .htmx-request .htmx-indicator { display: inline-block; }
+        .htmx-request.htmx-indicator { display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-spinner {
+            width: 16px; height: 16px;
+            border: 2px solid #4b5563;
+            border-top-color: #60a5fa;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="h-full bg-gray-900 text-gray-100"
+      hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
+
+    <!-- Mobile hamburger -->
+    <div class="lg:hidden fixed top-0 left-0 right-0 z-40 bg-sidebar flex items-center px-4 py-3 border-b border-gray-700">
+        <button onclick="document.getElementById('sidebar').classList.toggle('-translate-x-full')"
+                class="text-gray-300 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+            </svg>
+        </button>
+        <span class="ml-3 text-lg font-bold text-white">Control Center</span>
+    </div>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div id="sidebar-overlay" class="lg:hidden fixed inset-0 z-40 bg-black/50 hidden"
+         onclick="document.getElementById('sidebar').classList.add('-translate-x-full'); this.classList.add('hidden')"></div>
+
+    {% include "partials/_sidebar.html" %}
+
+    <!-- Main content -->
+    <main class="lg:ml-64 pt-14 lg:pt-0 min-h-screen">
+        <div class="p-4 sm:p-6 lg:p-8">
+            {% include "partials/_messages.html" %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Modal container -->
+    <div id="modal-container" class="fixed inset-0 z-50 hidden">
+        <div class="fixed inset-0 bg-black/60" onclick="closeModal()"></div>
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div id="modal-content" class="bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto pointer-events-auto">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openModal() {
+            document.getElementById('modal-container').classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+        }
+        function closeModal() {
+            document.getElementById('modal-container').classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+            document.getElementById('modal-content').innerHTML = '';
+        }
+
+        // HTMX: open modal when content is swapped into modal-content
+        document.body.addEventListener('htmx:afterSwap', function(e) {
+            if (e.detail.target.id === 'modal-content') {
+                openModal();
+            }
+        });
+
+        // Close modal on successful form submission
+        document.body.addEventListener('htmx:afterRequest', function(e) {
+            if (e.detail.elt.closest('#modal-content') && e.detail.successful) {
+                var header = e.detail.xhr.getResponseHeader('HX-Trigger');
+                if (header && header.includes('closeModal')) {
+                    closeModal();
+                }
+            }
+        });
+
+        // Mobile sidebar: close on link click
+        document.querySelectorAll('#sidebar a').forEach(function(link) {
+            link.addEventListener('click', function() {
+                if (window.innerWidth < 1024) {
+                    document.getElementById('sidebar').classList.add('-translate-x-full');
+                    document.getElementById('sidebar-overlay').classList.add('hidden');
+                }
+            });
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

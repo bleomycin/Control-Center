@@ -1,0 +1,22 @@
+<form hx-post="{% url 'tasks:followup_add' task.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
+      class="px-4 py-4 border-b border-gray-700 bg-gray-750">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        {% for field in form %}
+        {% if field.name != "notes_text" %}
+        <div>
+            <label for="{{ field.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ field.label }}</label>
+            {{ field }}
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    <div class="mb-3">
+        <label for="{{ form.notes_text.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Notes</label>
+        {{ form.notes_text }}
+    </div>
+    <div class="flex gap-2">
+        <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">Add Follow-up</button>
+        <button type="button" onclick="this.closest('form').remove()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium rounded-md transition-colors">Cancel</button>
+    </div>
+</form>

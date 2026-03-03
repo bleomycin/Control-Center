@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ loan.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <a href="{% url 'assets:loan_list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Loans</a>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ loan.name }}</h1>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'assets:loan_export_pdf' loan.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'assets:loan_edit' loan.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'assets:loan_delete' loan.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Current Balance</p>
+        <p class="text-xl font-bold text-red-400 mt-1">${{ loan.current_balance|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Monthly Payment</p>
+        <p class="text-xl font-bold text-gray-200 mt-1">${{ loan.monthly_payment|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Interest Rate</p>
+        <p class="text-xl font-bold text-gray-200 mt-1">{{ loan.interest_rate|default:"N/A" }}{% if loan.interest_rate %}%{% endif %}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ loan.get_status_display }}</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Details</p>
+        <dl class="space-y-2 text-sm">
+            <div class="flex justify-between"><dt class="text-gray-400">Original Amount</dt><dd class="text-gray-200">${{ loan.original_amount|floatformat:0|intcomma|default:"N/A" }}</dd></div>
+            <div class="flex justify-between"><dt class="text-gray-400">Next Payment</dt><dd class="text-gray-200">{{ loan.next_payment_date|date:"M j, Y"|default:"N/A" }}</dd></div>
+            <div class="flex justify-between"><dt class="text-gray-400">Maturity Date</dt><dd class="text-gray-200">{{ loan.maturity_date|date:"M j, Y"|default:"N/A" }}</dd></div>
+            {% if loan.lender %}<div class="flex justify-between"><dt class="text-gray-400">Lender</dt><dd><a href="{{ loan.lender.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ loan.lender }}</a></dd></div>{% endif %}
+            {% if loan.borrower_description %}<div class="flex justify-between"><dt class="text-gray-400">Borrower</dt><dd class="text-gray-200">{{ loan.borrower_description }}</dd></div>{% endif %}
+        </dl>
+    </div>
+    {% if loan.collateral %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Collateral</p>
+        <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ loan.collateral }}</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if loan.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ loan.notes_text }}</p>
+</div>
+{% endif %}
+
+{% if cash_flow_entries %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Cash Flow</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for entry in cash_flow_entries %}
+        <div class="flex items-center justify-between px-4 py-3">
+            <div>
+                <span class="text-sm text-gray-200">{{ entry.description }}</span>
+                <span class="text-xs text-gray-400 ml-2">{{ entry.date|date:"M j" }}</span>
+            </div>
+            <span class="text-sm {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
+                {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
