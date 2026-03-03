@@ -89,10 +89,10 @@ Seven Django apps, all relationally linked:
 | App | Models | Purpose |
 |-----|--------|---------|
 | **dashboard** | ChoiceOption, EmailSettings, Notification | Master homepage, global search, activity timeline, calendar view, email/SMTP settings, notification center, editable choice management |
-| **stakeholders** | Stakeholder, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationship mapping, contact logs |
+| **stakeholders** | Stakeholder, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationship mapping, contact logs; firm/employee hierarchy via self-FK `parent_organization` |
 | **assets** | RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty | Asset & liability tracker — properties, investments, loans with payment schedules; M2M through models for multi-stakeholder ownership with percentages and roles |
 | **legal** | LegalMatter, Evidence | Legal matter management — case status, attorneys (M2M), evidence, related stakeholders/properties |
-| **tasks** | Task, FollowUp | Task system — deadlines, priorities, status tracking, follow-up/stale outreach workflows |
+| **tasks** | Task, FollowUp | Task system — deadlines, priorities, status tracking, follow-up/stale outreach workflows; bidirectional direction (personal/outbound/inbound) |
 | **cashflow** | CashFlowEntry | Cash flow — actual + projected inflows/outflows with category filtering |
 | **notes** | Note, Attachment | Notes/activity database — discrete searchable records linked to entities via M2M relations |
 
@@ -129,6 +129,8 @@ Seven Django apps, all relationally linked:
 - **Stakeholder Detail Tabs**: Tabbed "All Connections" interface replaces individual preview cards on stakeholder detail page. 8 tabs with count badges showing all related entities (no 5-item limits). Cash flow entries included. Zero information redundancy with the relationship graph.
 - **Follow-Up Reminders**: `FollowUp` model has `reminder_enabled` (default=False) opt-in toggle and `follow_up_days` (default=3) for per-follow-up configurable reminder windows. `is_stale` property only fires when `reminder_enabled=True`. UI shows: green (responded), red "Overdue" (stale + reminder on), yellow "Awaiting" (pending + reminder on), gray "no reminder" (pending + reminder off). HTMX "Mark Responded" button on pending follow-ups. Task create form has optional inline follow-up section with separate "Enable reminder" checkbox. `check_stale_followups()` filters on `reminder_enabled=True` and excludes completed tasks.
 - **Docker**: Single container runs Gunicorn (foreground) + qcluster (background). `entrypoint.sh` handles migrate, collectstatic, createsuperuser, sample data loading. Named volumes for SQLite (`legacy-data`) and media (`legacy-media`)
+- **Firm/Employee Hierarchy**: `Stakeholder.parent_organization` self-FK (SET_NULL). Firms have `entity_type="firm"`. Detail page shows Team Members section with count and "Add Employee" link. Employee detail links back to firm. Graph shows firm→employee + sibling edges. Form filters `parent_organization` queryset to firms. CSV/PDF exports include firm. Global search includes `parent_organization__name`. Stakeholder table rows link Organization column to firm. "firm" entity type seeded via `dashboard/migrations/0005_add_firm_entity_type.py` and `choice_seed_data.py`.
+- **Bidirectional Task Direction**: `Task.direction` CharField with choices: `personal` (default), `outbound` ("I asked them"), `inbound` ("they asked me"). NOT a DB-backed ChoiceOption (values in business logic). Cyan badges/arrows for outbound, amber for inbound. Direction-aware stakeholder label on detail ("Requested From"/"Requested By"). Follow-up section hidden for inbound tasks. Direction filter checkboxes on list page. Calendar event titles prefixed `[OUT]`/`[IN]`. Notification messages prefixed `[OUTBOUND]`/`[INBOUND]`. Stakeholder detail Tasks tab has convenience links: "+ Request from them" (outbound) and "+ They requested" (inbound) with prefilled direction + stakeholder.
 
 ## Current Status
 
@@ -162,7 +164,7 @@ Seven Django apps, all relationally linked:
 - HTMX loading indicators on all list page filters/searches
 - Colour-coded action buttons (purple exports, blue edit, green complete, red delete)
 - Docker deployment — single container with Gunicorn + WhiteNoise, env var config, named volumes
-- Unit/integration tests (264 tests across all modules)
+- Unit/integration tests (277 tests across all modules)
 - Tailwind CSS switched from CDN to standalone CLI (v3.4.17) — compiled at build time, no Node.js required
 - GitHub repo: `trialskid/control-center`
 - Security hardening — conditional SECRET_KEY, production SSL/HSTS/cookie security headers (gated behind `not DEBUG`)
@@ -178,6 +180,8 @@ Seven Django apps, all relationally linked:
 - Multi-stakeholder support — M2M through models (`PropertyOwnership`, `InvestmentParticipant`, `LoanParty`) replacing single FKs on properties, investments, and loans. Each link stores ownership percentage and role. Graph edges display "Role (X%)" labels. Admin inline editors. Sample data updated with co-owners and co-borrowers.
 - Inline stakeholder management on asset detail pages — HTMX add/delete for owners (properties), participants (investments), and parties (loans) directly from detail pages. 6 new views, 6 URL patterns, 6 template partials following the contact log inline pattern.
 - Per-follow-up configurable reminders — `reminder_enabled` (default=off) opt-in toggle + `follow_up_days` field (default=3). Reminders only fire when explicitly enabled. Task create form has optional inline follow-up creation with separate reminder toggle. "Mark Responded" HTMX button on pending follow-ups. Stale notification excludes completed tasks. 16 new tests.
+- Firm/employee hierarchy — `parent_organization` self-FK on Stakeholder. Firms (`entity_type="firm"`) have Team Members section on detail page with "Add Employee" link. Employees link back to firm. Graph shows firm→employee edges with sibling employees. "firm" entity type seeded via data migration. Form filters dropdown to firms only. CSV/PDF exports include firm. Global search includes `parent_organization__name`. Table rows link Organization column to firm. 6 new tests.
+- Bidirectional task tracking — `direction` field on Task (personal/outbound/inbound). Outbound = "I asked them", inbound = "they asked me". Cyan badges for outbound, amber for inbound. Arrow indicators (↗/↙) in task table rows. Direction-aware stakeholder label on detail page ("Requested From"/"Requested By"). Follow-up section hidden for inbound tasks. Direction filter checkboxes on list page. Calendar prefixes [OUT]/[IN]. Notification prefixes [OUTBOUND]/[INBOUND]. CSV/PDF exports include direction. Stakeholder detail Tasks tab has "+ Request from them" and "+ They requested" action links. Sample data includes Armanino LLP firm with 3 employees, 3 outbound tasks, 3 inbound tasks, and 2 follow-ups with reminders. 7 new tests.
 
 ### Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)

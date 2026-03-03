@@ -137,6 +137,7 @@ class TaskViewTests(TestCase):
     def test_create_post(self):
         resp = self.client.post(reverse("tasks:create"), {
             "title": "New Task",
+            "direction": "personal",
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
@@ -155,6 +156,7 @@ class TaskViewTests(TestCase):
             reverse("tasks:edit", args=[self.task.pk]),
             {
                 "title": "Updated Task",
+                "direction": "personal",
                 "status": "in_progress",
                 "priority": "high",
                 "task_type": "one_time",
@@ -487,6 +489,7 @@ class FollowUpRespondViewTests(TestCase):
     def test_task_create_with_followup(self):
         resp = self.client.post(reverse("tasks:create"), {
             "title": "Task With FU",
+            "direction": "outbound",
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
@@ -510,6 +513,7 @@ class FollowUpRespondViewTests(TestCase):
     def test_task_create_followup_reminder_defaults_off(self):
         resp = self.client.post(reverse("tasks:create"), {
             "title": "Task FU No Reminder",
+            "direction": "personal",
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
@@ -526,6 +530,7 @@ class FollowUpRespondViewTests(TestCase):
     def test_task_create_without_followup(self):
         resp = self.client.post(reverse("tasks:create"), {
             "title": "Task Without FU",
+            "direction": "personal",
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
@@ -538,6 +543,7 @@ class FollowUpRespondViewTests(TestCase):
     def test_task_create_followup_skipped_without_stakeholder(self):
         resp = self.client.post(reverse("tasks:create"), {
             "title": "Task No Stakeholder",
+            "direction": "personal",
             "status": "not_started",
             "priority": "medium",
             "task_type": "one_time",
@@ -548,3 +554,65 @@ class FollowUpRespondViewTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         task = Task.objects.get(title="Task No Stakeholder")
         self.assertEqual(task.follow_ups.count(), 0)
+
+
+class TaskDirectionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Direction Person")
+
+    def test_default_direction_is_personal(self):
+        t = Task.objects.create(title="Default Direction")
+        self.assertEqual(t.direction, "personal")
+
+    def test_create_outbound_task(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Outbound Task",
+            "direction": "outbound",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "one_time",
+            "related_stakeholder": self.stakeholder.pk,
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.get(title="Outbound Task")
+        self.assertEqual(task.direction, "outbound")
+
+    def test_create_inbound_task(self):
+        resp = self.client.post(reverse("tasks:create"), {
+            "title": "Inbound Task",
+            "direction": "inbound",
+            "status": "not_started",
+            "priority": "medium",
+            "task_type": "one_time",
+            "related_stakeholder": self.stakeholder.pk,
+        })
+        self.assertEqual(resp.status_code, 302)
+        task = Task.objects.get(title="Inbound Task")
+        self.assertEqual(task.direction, "inbound")
+
+    def test_direction_filter_on_list(self):
+        Task.objects.create(title="Out1", direction="outbound")
+        Task.objects.create(title="In1", direction="inbound")
+        Task.objects.create(title="Per1", direction="personal")
+        resp = self.client.get(reverse("tasks:list"), {"direction": "outbound"})
+        self.assertContains(resp, "Out1")
+        self.assertNotContains(resp, "In1")
+        self.assertNotContains(resp, "Per1")
+
+    def test_detail_shows_direction_badge(self):
+        t = Task.objects.create(title="Outbound Detail", direction="outbound")
+        resp = self.client.get(reverse("tasks:detail", args=[t.pk]))
+        self.assertContains(resp, "Outbound")
+
+    def test_initial_direction_from_querystring(self):
+        resp = self.client.get(
+            reverse("tasks:create"),
+            {"direction": "outbound", "stakeholder": self.stakeholder.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_pdf_includes_direction(self):
+        t = Task.objects.create(title="PDF Direction", direction="outbound")
+        resp = self.client.get(reverse("tasks:export_pdf", args=[t.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")

@@ -163,7 +163,7 @@ def global_search(request):
     if q:
         limit = 10
         context["stakeholders"] = Stakeholder.objects.filter(
-            Q(name__icontains=q) | Q(organization__icontains=q)
+            Q(name__icontains=q) | Q(organization__icontains=q) | Q(parent_organization__name__icontains=q)
         )[:limit]
         context["tasks_results"] = Task.objects.filter(title__icontains=q)[:limit]
         context["notes"] = Note.objects.filter(
@@ -312,9 +312,11 @@ def calendar_events(request):
         tasks = tasks.filter(due_date__gte=start)
     if end:
         tasks = tasks.filter(due_date__lte=end)
+    direction_prefixes = {"outbound": "[OUT] ", "inbound": "[IN] "}
     for task in tasks.filter(due_date__isnull=False):
+        prefix = direction_prefixes.get(task.direction, "")
         events.append({
-            "title": task.title,
+            "title": f"{prefix}{task.title}",
             "start": str(task.due_date),
             "url": task.get_absolute_url(),
             "color": priority_colors.get(task.priority, "#9ca3af"),

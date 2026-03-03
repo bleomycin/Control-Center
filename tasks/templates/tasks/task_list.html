@@ -36,6 +36,17 @@
                 {% endfor %}
             </div>
             <div class="flex flex-wrap gap-2 items-center">
+                <span class="text-xs text-gray-400">Direction:</span>
+                {% for val, label in direction_choices %}
+                <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                    <input type="checkbox" name="direction" value="{{ val }}" {% if val in selected_directions %}checked{% endif %}
+                           hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                           class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+                    {{ label }}
+                </label>
+                {% endfor %}
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
                 <span class="text-xs text-gray-400">Due:</span>
                 <input type="date" name="date_from" value="{{ date_from }}"
                        hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-table-body" hx-include="#filter-form" hx-indicator="#loading-spinner"

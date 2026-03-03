@@ -16,7 +16,7 @@ class StakeholderListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related("parent_organization")
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(name__icontains=q)
@@ -51,6 +51,12 @@ class StakeholderCreateView(CreateView):
     form_class = StakeholderForm
     template_name = "stakeholders/stakeholder_form.html"
 
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("parent_organization"):
+            initial["parent_organization"] = self.request.GET["parent_organization"]
+        return initial
+
     def form_valid(self, form):
         messages.success(self.request, "Stakeholder created.")
         return super().form_valid(form)
@@ -80,11 +86,15 @@ class StakeholderDetailView(DetailView):
         ctx["all_loans"] = Loan.objects.filter(parties__stakeholder=obj).distinct()
         ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
 
+        # Firm/employee hierarchy
+        ctx["employees"] = obj.employees.all() if obj.entity_type == "firm" else None
+
         # Relationships
         ctx["relationships_from"] = obj.relationships_from.select_related("to_stakeholder").all()
         ctx["relationships_to"] = obj.relationships_to.select_related("from_stakeholder").all()
 
         # Counts for tab badges
+        employee_count = ctx["employees"].count() if ctx["employees"] is not None else 0
         ctx["counts"] = {
             "stakeholders": ctx["relationships_from"].count() + ctx["relationships_to"].count(),
             "properties": ctx["all_properties"].count(),
@@ -94,6 +104,7 @@ class StakeholderDetailView(DetailView):
             "tasks": ctx["all_tasks"].count(),
             "notes": ctx["all_notes"].count(),
             "cashflow": ctx["all_cashflow"].count(),
+            "employees": employee_count,
         }
 
         return ctx
@@ -121,13 +132,14 @@ class StakeholderDeleteView(DeleteView):
 
 def export_csv(request):
     from legacy.export import export_csv as do_export
-    qs = Stakeholder.objects.all()
+    qs = Stakeholder.objects.select_related("parent_organization").all()
     fields = [
         ("name", "Name"),
         ("entity_type", "Type"),
         ("email", "Email"),
         ("phone", "Phone"),
         ("organization", "Organization"),
+        ("parent_organization__name", "Firm"),
         ("trust_rating", "Trust Rating"),
         ("risk_rating", "Risk Rating"),
     ]
@@ -137,15 +149,25 @@ def export_csv(request):
 def export_pdf_detail(request, pk):
     from legacy.pdf_export import render_pdf
     s = get_object_or_404(Stakeholder, pk=pk)
+    firm_name = s.parent_organization.name if s.parent_organization else None
     sections = [
         {"heading": "Contact Information", "type": "info", "rows": [
             ("Email", s.email or "N/A"),
             ("Phone", s.phone or "N/A"),
             ("Organization", s.organization or "N/A"),
+            ("Firm", firm_name or "N/A"),
             ("Trust Rating", f"{s.trust_rating}/5" if s.trust_rating else "N/A"),
             ("Risk Rating", f"{s.risk_rating}/5" if s.risk_rating else "N/A"),
         ]},
     ]
+    # Team members for firms
+    if s.entity_type == "firm":
+        employees = s.employees.all()
+        if employees:
+            sections.append({"heading": "Team Members", "type": "table",
+                             "headers": ["Name", "Type", "Email", "Phone"],
+                             "rows": [[e.name, get_choice_label("entity_type", e.entity_type),
+                                       e.email or "-", e.phone or "-"] for e in employees]})
     if s.notes_text:
         sections.append({"heading": "Notes", "type": "text", "content": s.notes_text})
     logs = s.contact_logs.all()
@@ -173,7 +195,9 @@ def export_pdf_detail(request, pk):
                          "headers": ["Title", "Type", "Date"],
                          "rows": [[n.title, get_choice_label("note_type", n.note_type), n.date.strftime("%b %d, %Y")] for n in notes]})
     subtitle = f"{get_choice_label('entity_type', s.entity_type)}"
-    if s.organization:
+    if s.parent_organization:
+        subtitle += f" — {s.parent_organization.name}"
+    elif s.organization:
         subtitle += f" — {s.organization}"
     return render_pdf(request, f"stakeholder-{s.pk}", s.name, subtitle, sections)
 
@@ -229,6 +253,23 @@ def relationship_graph_data(request, pk):
     # Center stakeholder
     add_node(f"s-{center.pk}", center.name, get_choice_label("entity_type", center.entity_type),
              "ellipse", center.get_absolute_url(), is_center=True)
+
+    # Firm/employee hierarchy edges
+    if center.parent_organization:
+        firm = center.parent_organization
+        add_node(f"s-{firm.pk}", firm.name, get_choice_label("entity_type", firm.entity_type),
+                 "ellipse", firm.get_absolute_url())
+        edges.append({"source": f"s-{firm.pk}", "target": f"s-{center.pk}", "label": "employs"})
+        # Sibling employees
+        for emp in firm.employees.exclude(pk=center.pk):
+            add_node(f"s-{emp.pk}", emp.name, get_choice_label("entity_type", emp.entity_type),
+                     "ellipse", emp.get_absolute_url())
+            edges.append({"source": f"s-{firm.pk}", "target": f"s-{emp.pk}", "label": "employs"})
+
+    for emp in center.employees.all():
+        add_node(f"s-{emp.pk}", emp.name, get_choice_label("entity_type", emp.entity_type),
+                 "ellipse", emp.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"s-{emp.pk}", "label": "employs"})
 
     # Connected stakeholders (1st degree relationships)
     connected_stakeholder_ids = set()
@@ -325,13 +366,14 @@ def bulk_delete(request):
 def bulk_export_csv(request):
     from legacy.export import export_csv as do_export
     pks = request.GET.getlist("selected")
-    qs = Stakeholder.objects.filter(pk__in=pks) if pks else Stakeholder.objects.none()
+    qs = Stakeholder.objects.filter(pk__in=pks).select_related("parent_organization") if pks else Stakeholder.objects.none()
     fields = [
         ("name", "Name"),
         ("entity_type", "Type"),
         ("email", "Email"),
         ("phone", "Phone"),
         ("organization", "Organization"),
+        ("parent_organization__name", "Firm"),
         ("trust_rating", "Trust Rating"),
         ("risk_rating", "Risk Rating"),
     ]
