@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load humanize choice_labels %}
 {% for entry in entries %}
 <tr class="hover:bg-gray-700/50 transition-colors {% if entry.is_projected %}opacity-70{% endif %}">
     <td class="px-4 py-3 w-8">
@@ -6,10 +6,11 @@
     </td>
     <td class="px-4 py-3 text-sm text-gray-300">{{ entry.date|date:"M j" }}</td>
     <td class="px-4 py-3">
-        <span class="text-sm text-gray-200">{{ entry.description }}</span>
+        <a href="{% url 'cashflow:detail' entry.pk %}" class="text-sm text-gray-200 hover:text-white">{{ entry.description }}</a>
         {% if entry.is_projected %}<span class="text-xs text-yellow-400 ml-1">(projected)</span>{% endif %}
+        {% if entry.is_recurring %}<span class="text-xs px-1.5 py-0.5 rounded-full bg-blue-900/50 text-blue-300 ml-1">{{ entry.get_recurrence_rule_display }}</span>{% endif %}
     </td>
-    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ entry.category|default:"-" }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{% if entry.category %}{{ entry.category|choice_label:"cashflow_category" }}{% else %}-{% endif %}</td>
     <td class="px-4 py-3 text-sm text-right font-medium whitespace-nowrap
         {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
         {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}

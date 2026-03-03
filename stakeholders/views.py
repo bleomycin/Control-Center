@@ -1,5 +1,7 @@
+from decimal import Decimal
+
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
@@ -213,7 +215,17 @@ class StakeholderDetailView(DetailView):
         ctx["policyholder_roles"] = PolicyHolder.objects.filter(stakeholder=obj).select_related("policy")
         ctx["policies_as_carrier"] = InsurancePolicy.objects.filter(carrier=obj)
         ctx["policies_as_agent"] = InsurancePolicy.objects.filter(agent=obj)
-        ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
+        cf_qs = CashFlowEntry.objects.filter(related_stakeholder=obj)
+        cf_totals = cf_qs.aggregate(
+            inflows=Sum("amount", filter=Q(entry_type="inflow"), default=Decimal("0")),
+            outflows=Sum("amount", filter=Q(entry_type="outflow"), default=Decimal("0")),
+        )
+        ctx["all_cashflow"] = cf_qs
+        ctx["cashflow_entries"] = cf_qs.order_by("-date")
+        ctx["cashflow_inflows"] = cf_totals["inflows"]
+        ctx["cashflow_outflows"] = cf_totals["outflows"]
+        ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
+        ctx["delete_url_name"] = "cashflow:stakeholder_cashflow_delete"
 
         # Firm/employee hierarchy
         ctx["employees"] = obj.employees.all() if obj.entity_type == "firm" else None

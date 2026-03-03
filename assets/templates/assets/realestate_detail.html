@@ -149,20 +149,16 @@
     </div>
 
     <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-4 py-3 border-b border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Cash Flow</h2>
+            <button hx-get="{% url 'cashflow:property_cashflow_add' property.pk %}"
+                    hx-target="#property-cashflow-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
         </div>
-        <div class="divide-y divide-gray-700">
-            {% for entry in cash_flow_entries %}
-            <div class="flex items-center justify-between px-4 py-3">
-                <span class="text-sm text-gray-200">{{ entry.description }}</span>
-                <span class="text-sm {% if entry.entry_type == 'inflow' %}text-green-400{% else %}text-red-400{% endif %}">
-                    {% if entry.entry_type == 'inflow' %}+{% else %}-{% endif %}${{ entry.amount|floatformat:0|intcomma }}
-                </span>
-            </div>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
+        <div id="property-cashflow-form-container"></div>
+        <div id="inline-cashflow-list">
+            {% include "cashflow/partials/_inline_cashflow_list.html" %}
         </div>
     </div>
 </div>
