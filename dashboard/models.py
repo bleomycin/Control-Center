@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 CATEGORY_CHOICES = [
@@ -79,3 +80,24 @@ class EmailSettings(models.Model):
     def is_configured(self):
         """True when minimum SMTP fields are populated."""
         return bool(self.smtp_host and self.from_email and self.admin_email)
+
+
+class SampleDataStatus(models.Model):
+    """Singleton model tracking whether sample data is loaded. Always use pk=1."""
+
+    is_loaded = models.BooleanField(default=False)
+    manifest = models.JSONField(default=dict, blank=True)
+    loaded_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Sample Data Status"
+        verbose_name_plural = "Sample Data Status"
+
+    def __str__(self):
+        return "Sample Data Status"
+
+    @classmethod
+    def load(cls):
+        """Return the singleton instance, creating it if needed."""
+        obj, _created = cls.objects.get_or_create(pk=1)
+        return obj
