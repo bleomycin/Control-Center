@@ -108,86 +108,121 @@ class Command(BaseCommand):
             )
 
         self.stdout.write("Creating real estate...")
+        from assets.models import PropertyOwnership
         properties = {}
+        # Format: (name, addr, juris, ptype, val, acq, status, notes, [(stakeholder_name, ownership%, role)])
         prop_data = [
             ("1200 Oak Avenue", "1200 Oak Ave, Austin, TX 78701", "Travis County, TX", "Single Family",
-             Decimal("385000.00"), today - timedelta(days=730), "owned", "Tom Driscoll",
-             "Rental property. Currently undergoing bathroom renovation. Tenant issues with Ray Holston."),
+             Decimal("385000.00"), today - timedelta(days=730), "owned",
+             "Rental property. Currently undergoing bathroom renovation. Tenant issues with Ray Holston.",
+             []),  # Sole ownership (Legacy - implied, no partners listed)
             ("450 Elm Street", "450 Elm St, Austin, TX 78702", "Travis County, TX", "Duplex",
-             Decimal("520000.00"), today - timedelta(days=1095), "owned", "Tom Driscoll",
-             "Co-owned 50/50 with Tom Driscoll. Both units rented. Needs roof inspection."),
+             Decimal("520000.00"), today - timedelta(days=1095), "owned",
+             "Co-owned 50/50 with Tom Driscoll. Both units rented. Needs roof inspection.",
+             [("Tom Driscoll", Decimal("50.00"), "Co-owner")]),  # 50/50 split with Tom
             ("3300 Magnolia Blvd", "3300 Magnolia Blvd, San Antonio, TX 78205", "Bexar County, TX", "Commercial",
-             Decimal("1250000.00"), None, "under_contract", "Nina Patel",
-             "Under contract. Closing scheduled for next month. Co-investing with Nina Patel."),
+             Decimal("1250000.00"), None, "under_contract",
+             "Under contract. Closing scheduled for next month. Co-investing with Nina Patel.",
+             [("Nina Patel", Decimal("50.00"), "Co-investor")]),  # 50/50 with Nina
             ("890 Cedar Lane", "890 Cedar Ln, Dallas, TX 75201", "Dallas County, TX", "Single Family",
-             Decimal("275000.00"), today - timedelta(days=1460), "in_dispute", None,
-             "Property boundary dispute with neighbor. Marcus Reed handling litigation."),
+             Decimal("275000.00"), today - timedelta(days=1460), "in_dispute",
+             "Property boundary dispute with neighbor. Marcus Reed handling litigation.",
+             []),  # Sole ownership
             ("15 Riverside Dr", "15 Riverside Dr, Houston, TX 77001", "Harris County, TX", "Vacant Land",
-             Decimal("180000.00"), today - timedelta(days=365), "owned", None,
-             "Undeveloped lot. Zoning permits under review for residential development."),
+             Decimal("180000.00"), today - timedelta(days=365), "owned",
+             "Undeveloped lot. Zoning permits under review for residential development.",
+             []),  # Sole ownership
         ]
-        for name, addr, juris, ptype, val, acq, status, sh_name, notes in prop_data:
+        for name, addr, juris, ptype, val, acq, status, notes, owners in prop_data:
             p = RealEstate.objects.create(
                 name=name, address=addr, jurisdiction=juris, property_type=ptype,
-                estimated_value=val, acquisition_date=acq, status=status,
-                stakeholder=stakeholders.get(sh_name), notes_text=notes,
+                estimated_value=val, acquisition_date=acq, status=status, notes_text=notes,
             )
             properties[name] = p
+            # Add ownership records
+            for owner_name, percentage, role in owners:
+                PropertyOwnership.objects.create(
+                    property=p, stakeholder=stakeholders[owner_name],
+                    ownership_percentage=percentage, role=role
+                )
 
         self.stdout.write("Creating investments...")
+        from assets.models import InvestmentParticipant
         investments = {}
+        # Format: (name, type, institution, value, notes, [(stakeholder_name, ownership%, role)])
         inv_data = [
-            ("Vanguard Total Market Index", "Index Fund", "Vanguard", Decimal("142500.00"), "Derek Vasquez",
-             "Core holding. Dollar-cost averaging $2k/month."),
-            ("Schwab S&P 500 ETF", "ETF", "Charles Schwab", Decimal("87300.00"), "Derek Vasquez",
-             "Large cap exposure. Rebalance quarterly."),
-            ("Municipal Bond Fund", "Bond Fund", "Fidelity", Decimal("65000.00"), "Derek Vasquez",
-             "Tax-advantaged income. Added per advisor recommendation."),
-            ("NP Investments LP - Fund II", "Private Equity", "NP Investments", Decimal("50000.00"), "Nina Patel",
-             "Committed $50k to Nina's real estate fund. 3-year lockup. Annual distributions."),
-            ("Bitcoin Holdings", "Cryptocurrency", "Coinbase", Decimal("22400.00"), None,
-             "Speculative position. 0.35 BTC. Consider taking profits if above $70k."),
+            ("Vanguard Total Market Index", "Index Fund", "Vanguard", Decimal("142500.00"),
+             "Core holding. Dollar-cost averaging $2k/month.",
+             [("Derek Vasquez", None, "Advisor")]),  # Derek manages but doesn't own
+            ("Schwab S&P 500 ETF", "ETF", "Charles Schwab", Decimal("87300.00"),
+             "Large cap exposure. Rebalance quarterly.",
+             [("Derek Vasquez", None, "Advisor")]),
+            ("Municipal Bond Fund", "Bond Fund", "Fidelity", Decimal("65000.00"),
+             "Tax-advantaged income. Added per advisor recommendation.",
+             [("Derek Vasquez", None, "Advisor")]),
+            ("NP Investments LP - Fund II", "Private Equity", "NP Investments", Decimal("50000.00"),
+             "Committed $50k to Nina's real estate fund. 3-year lockup. Annual distributions.",
+             [("Nina Patel", None, "Fund Manager")]),  # Nina manages the fund
+            ("Bitcoin Holdings", "Cryptocurrency", "Coinbase", Decimal("22400.00"),
+             "Speculative position. 0.35 BTC. Consider taking profits if above $70k.",
+             []),  # Sole ownership
         ]
-        for name, itype, inst, val, sh_name, notes in inv_data:
+        for name, itype, inst, val, notes, participants in inv_data:
             inv = Investment.objects.create(
-                name=name, investment_type=itype, institution=inst, current_value=val,
-                stakeholder=stakeholders.get(sh_name), notes_text=notes,
+                name=name, investment_type=itype, institution=inst, current_value=val, notes_text=notes,
             )
             investments[name] = inv
+            # Add participant records
+            for participant_name, percentage, role in participants:
+                InvestmentParticipant.objects.create(
+                    investment=inv, stakeholder=stakeholders[participant_name],
+                    ownership_percentage=percentage, role=role
+                )
 
         self.stdout.write("Creating loans...")
+        from assets.models import LoanParty
         loans = {}
+        # Format: (name, borrower_desc, orig, bal, rate, pmt, npd, mat, collat, status, notes, [(stakeholder_name, ownership%, role)])
         loan_data = [
-            ("First National - Oak Ave Mortgage", "Janet Cobb", "Legacy (personal)",
+            ("First National - Oak Ave Mortgage", "Legacy (personal)",
              Decimal("320000.00"), Decimal("285400.00"), Decimal("4.750"),
              Decimal("2100.00"), today + timedelta(days=22), today + timedelta(days=365 * 25),
              "1200 Oak Avenue property", "active",
-             "30-year fixed. Good rate locked in 2023."),
-            ("First National - Elm St Mortgage", "Janet Cobb", "Legacy & Tom Driscoll (50/50)",
+             "30-year fixed. Good rate locked in 2023.",
+             [("Janet Cobb", None, "Lender")]),
+            ("First National - Elm St Mortgage", "Legacy & Tom Driscoll (50/50)",
              Decimal("410000.00"), Decimal("372000.00"), Decimal("5.125"),
              Decimal("2800.00"), today + timedelta(days=15), today + timedelta(days=365 * 27),
              "450 Elm Street duplex", "active",
-             "Joint mortgage with Tom. Both personally guaranteeing."),
-            ("Huang Bridge Loan - Magnolia", "Victor Huang", "Legacy & Nina Patel",
+             "Joint mortgage with Tom. Both personally guaranteeing.",
+             [("Janet Cobb", None, "Lender"), ("Tom Driscoll", Decimal("50.00"), "Co-borrower")]),
+            ("Huang Bridge Loan - Magnolia", "Legacy & Nina Patel",
              Decimal("200000.00"), Decimal("200000.00"), Decimal("9.500"),
              Decimal("1583.33"), today + timedelta(days=8), today + timedelta(days=180),
              "3300 Magnolia Blvd purchase", "active",
-             "6-month bridge loan for acquisition. Need to refinance into permanent financing ASAP."),
-            ("Vehicle Loan - F-150", None, "Legacy (personal)",
+             "6-month bridge loan for acquisition. Need to refinance into permanent financing ASAP.",
+             [("Victor Huang", None, "Lender"), ("Nina Patel", Decimal("50.00"), "Co-borrower")]),
+            ("Vehicle Loan - F-150", "Legacy (personal)",
              Decimal("45000.00"), Decimal("28700.00"), Decimal("3.900"),
              Decimal("750.00"), today + timedelta(days=18), today + timedelta(days=365 * 3),
              "2023 Ford F-150", "active",
-             "Auto loan through credit union. On track."),
+             "Auto loan through credit union. On track.",
+             []),  # No specific lender stakeholder tracked
         ]
-        for name, lender_name, borrower, orig, bal, rate, pmt, npd, mat, collat, status, notes in loan_data:
+        for name, borrower, orig, bal, rate, pmt, npd, mat, collat, status, notes, parties in loan_data:
             ln = Loan.objects.create(
-                name=name, lender=stakeholders.get(lender_name),
-                borrower_description=borrower, original_amount=orig,
+                name=name, borrower_description=borrower, original_amount=orig,
                 current_balance=bal, interest_rate=rate, monthly_payment=pmt,
                 next_payment_date=npd, maturity_date=mat, collateral=collat,
                 status=status, notes_text=notes,
             )
             loans[name] = ln
+            # Add party records
+            for party_name, percentage, role in parties:
+                LoanParty.objects.create(
+                    loan=ln, stakeholder=stakeholders[party_name],
+                    ownership_percentage=percentage, role=role
+                )
 
         self.stdout.write("Creating legal matters...")
         legal_matters = {}
