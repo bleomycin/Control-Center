@@ -175,6 +175,62 @@ class AppointmentForm(TailwindFormMixin, forms.ModelForm):
                 self.fields["time"].initial = initial_time
 
 
+class PrescriptionLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Prescription")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Prescription.objects.all()
+
+
+class SupplementLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Supplement")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Supplement.objects.all()
+
+
+class TestResultLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Test Result")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = TestResult.objects.all()
+
+
+class VisitLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Visit")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Visit.objects.all()
+
+
+class AppointmentLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Appointment")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Appointment.objects.all()
+
+
+class ConditionLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Condition")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Condition.objects.all()
+
+
+class AdviceLinkForm(TailwindFormMixin, forms.Form):
+    item = forms.ModelChoiceField(queryset=None, label="Advice")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Advice.objects.all()
+
+
 class HealthcareNoteLinkForm(TailwindFormMixin, forms.Form):
     note = forms.ModelChoiceField(
         queryset=None,

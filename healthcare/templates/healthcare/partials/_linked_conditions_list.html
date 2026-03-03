@@ -1,0 +1,16 @@
+<div class="divide-y divide-gray-700">
+    {% for c in items %}
+    <div class="flex items-center justify-between px-4 py-3 group hover:bg-gray-700/50">
+        <a href="{{ c.get_absolute_url }}" class="text-sm text-gray-200 hover:text-blue-400 truncate">{{ c.name }}</a>
+        <div class="flex items-center gap-3 shrink-0">
+            <span class="text-xs {% if c.status == 'active' %}text-green-400{% elif c.status == 'managed' %}text-blue-400{% elif c.status == 'monitoring' %}text-yellow-400{% else %}text-gray-400{% endif %}">{{ c.get_status_display }}</span>
+            <button hx-post="{% url unlink_url_name parent_pk c.pk %}"
+                    hx-target="#condition-list" hx-swap="innerHTML"
+                    hx-confirm="Unlink this condition?"
+                    class="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 text-xs transition-opacity">Unlink</button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+    {% endfor %}
+</div>

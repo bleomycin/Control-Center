@@ -68,66 +68,128 @@
 
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
     <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-4 py-3 border-b border-gray-700">
-            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Active Prescriptions</h2>
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Prescriptions</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_prescription_link' provider.pk %}"
+                        hx-target="#prescription-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:prescription_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
-        <div class="divide-y divide-gray-700">
-            {% for rx in prescriptions %}
-            <a href="{{ rx.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <span class="text-sm text-gray-200">{{ rx.medication_name }}</span>
-                <span class="text-xs text-gray-400">{{ rx.dosage }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-4 py-3 border-b border-gray-700">
-            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Upcoming Appointments</h2>
-        </div>
-        <div class="divide-y divide-gray-700">
-            {% for appt in appointments %}
-            <a href="{{ appt.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <span class="text-sm text-gray-200">{{ appt.title }}</span>
-                <span class="text-xs text-gray-400">{{ appt.date|date:"M j" }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
+        <div id="prescription-form-container"></div>
+        <div id="prescription-list">
+            {% include "healthcare/partials/_linked_prescriptions_list.html" with items=prescriptions unlink_url_name="healthcare:provider_prescription_unlink" parent_pk=provider.pk %}
         </div>
     </div>
 
     <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-4 py-3 border-b border-gray-700">
-            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Recent Visits</h2>
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Appointments</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_appointment_link' provider.pk %}"
+                        hx-target="#appointment-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:appointment_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
-        <div class="divide-y divide-gray-700">
-            {% for v in visits %}
-            <a href="{{ v.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <span class="text-sm text-gray-200">{{ v.get_visit_type_display }}</span>
-                <span class="text-xs text-gray-400">{{ v.date|date:"M j, Y" }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
+        <div id="appointment-form-container"></div>
+        <div id="appointment-list">
+            {% include "healthcare/partials/_linked_appointments_list.html" with items=appointments unlink_url_name="healthcare:provider_appointment_unlink" parent_pk=provider.pk %}
         </div>
     </div>
 
     <div class="bg-gray-800 rounded-lg border border-gray-700">
-        <div class="px-4 py-3 border-b border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Visits</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_visit_link' provider.pk %}"
+                        hx-target="#visit-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:visit_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
+        </div>
+        <div id="visit-form-container"></div>
+        <div id="visit-list">
+            {% include "healthcare/partials/_linked_visits_list.html" with items=visits unlink_url_name="healthcare:provider_visit_unlink" parent_pk=provider.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Conditions</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_condition_link' provider.pk %}"
+                        hx-target="#condition-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:condition_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
-        <div class="divide-y divide-gray-700">
-            {% for c in conditions %}
-            <a href="{{ c.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <span class="text-sm text-gray-200">{{ c.name }}</span>
-                <span class="text-xs {% if c.status == 'active' %}text-green-400{% elif c.status == 'managed' %}text-blue-400{% else %}text-gray-400{% endif %}">{{ c.get_status_display }}</span>
-            </a>
-            {% empty %}
-            <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
-            {% endfor %}
+        <div id="condition-form-container"></div>
+        <div id="condition-list">
+            {% include "healthcare/partials/_linked_conditions_list.html" with items=conditions unlink_url_name="healthcare:provider_condition_unlink" parent_pk=provider.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Supplements</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_supplement_link' provider.pk %}"
+                        hx-target="#supplement-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:supplement_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
+        </div>
+        <div id="supplement-form-container"></div>
+        <div id="supplement-list">
+            {% include "healthcare/partials/_linked_supplements_list.html" with items=supplements unlink_url_name="healthcare:provider_supplement_unlink" parent_pk=provider.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Test Results</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_testresult_link' provider.pk %}"
+                        hx-target="#testresult-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:testresult_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
+        </div>
+        <div id="testresult-form-container"></div>
+        <div id="testresult-list">
+            {% include "healthcare/partials/_linked_testresults_list.html" with items=test_results unlink_url_name="healthcare:provider_testresult_unlink" parent_pk=provider.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700 lg:col-span-2">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Advice</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_advice_link' provider.pk %}"
+                        hx-target="#advice-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'healthcare:advice_create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
+        </div>
+        <div id="advice-form-container"></div>
+        <div id="advice-list">
+            {% include "healthcare/partials/_linked_advice_list.html" with items=advice unlink_url_name="healthcare:provider_advice_unlink" parent_pk=provider.pk %}
         </div>
     </div>
 </div>
@@ -138,10 +200,14 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
-            <button hx-get="{% url 'healthcare:provider_note_link' provider.pk %}"
-                    hx-target="#note-form-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Note</button>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_note_link' provider.pk %}"
+                        hx-target="#note-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'notes:create' %}?provider={{ provider.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
         <div id="note-form-container"></div>
         <div id="note-list">
@@ -152,10 +218,14 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Legal Matters</h2>
-            <button hx-get="{% url 'healthcare:provider_legal_link' provider.pk %}"
-                    hx-target="#legal-form-container"
-                    hx-swap="innerHTML"
-                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Matter</button>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'healthcare:provider_legal_link' provider.pk %}"
+                        hx-target="#legal-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'legal:create' %}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
         </div>
         <div id="legal-form-container"></div>
         <div id="legal-list">

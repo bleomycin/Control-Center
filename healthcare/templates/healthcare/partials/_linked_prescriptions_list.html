@@ -1,0 +1,17 @@
+<div class="divide-y divide-gray-700">
+    {% for rx in items %}
+    <div class="flex items-center justify-between px-4 py-3 group hover:bg-gray-700/50">
+        <a href="{{ rx.get_absolute_url }}" class="text-sm text-gray-200 hover:text-blue-400 truncate">{{ rx.medication_name }}</a>
+        <div class="flex items-center gap-3 shrink-0">
+            <span class="text-xs text-gray-400">{{ rx.dosage }}</span>
+            <span class="text-xs {% if rx.status == 'active' %}text-green-400{% elif rx.status == 'on_hold' %}text-yellow-400{% elif rx.status == 'discontinued' %}text-red-400{% else %}text-gray-400{% endif %}">{{ rx.get_status_display }}</span>
+            <button hx-post="{% url unlink_url_name parent_pk rx.pk %}"
+                    hx-target="#prescription-list" hx-swap="innerHTML"
+                    hx-confirm="Unlink this prescription?"
+                    class="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 text-xs transition-opacity">Unlink</button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+    {% endfor %}
+</div>
