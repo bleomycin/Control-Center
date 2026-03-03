@@ -19,7 +19,7 @@ class LegalMatterListView(ListView):
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
-        statuses = self.request.GET.getlist("status")
+        statuses = [s for s in self.request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
         matter_type = self.request.GET.get("type")
