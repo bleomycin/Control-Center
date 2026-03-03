@@ -59,8 +59,10 @@ def export_pdf_realestate_detail(request, pk):
             ("Jurisdiction", p.jurisdiction or "N/A"),
         ]},
     ]
-    if p.stakeholder:
-        sections[0]["rows"].append(("Stakeholder", p.stakeholder.name))
+    owners = p.ownerships.select_related("stakeholder").all()
+    if owners:
+        owner_str = ", ".join(f"{o.stakeholder.name} ({o.role} {o.ownership_percentage}%)" if o.ownership_percentage else f"{o.stakeholder.name} ({o.role})" for o in owners)
+        sections[0]["rows"].append(("Stakeholders", owner_str))
     if p.notes_text:
         sections.append({"heading": "Notes", "type": "text", "content": p.notes_text})
     entries = p.cash_flow_entries.all()
@@ -83,8 +85,10 @@ def export_pdf_investment_detail(request, pk):
             ("Current Value", f"${inv.current_value:,.0f}" if inv.current_value else "N/A"),
         ]},
     ]
-    if inv.stakeholder:
-        sections[0]["rows"].append(("Stakeholder", inv.stakeholder.name))
+    participants = inv.participants.select_related("stakeholder").all()
+    if participants:
+        part_str = ", ".join(f"{p.stakeholder.name} ({p.role} {p.ownership_percentage}%)" if p.ownership_percentage else f"{p.stakeholder.name} ({p.role})" for p in participants)
+        sections[0]["rows"].append(("Stakeholders", part_str))
     if inv.notes_text:
         sections.append({"heading": "Notes", "type": "text", "content": inv.notes_text})
     return render_pdf(request, f"investment-{inv.pk}", inv.name, "Investment", sections)
@@ -103,8 +107,10 @@ def export_pdf_loan_detail(request, pk):
             ("Maturity Date", loan.maturity_date.strftime("%b %d, %Y") if loan.maturity_date else "N/A"),
         ]},
     ]
-    if loan.lender:
-        sections[0]["rows"].append(("Lender", loan.lender.name))
+    parties = loan.parties.select_related("stakeholder").all()
+    if parties:
+        party_str = ", ".join(f"{p.stakeholder.name} ({p.role} {p.ownership_percentage}%)" if p.ownership_percentage else f"{p.stakeholder.name} ({p.role})" for p in parties)
+        sections[0]["rows"].append(("Parties", party_str))
     if loan.borrower_description:
         sections[0]["rows"].append(("Borrower", loan.borrower_description))
     if loan.collateral:
