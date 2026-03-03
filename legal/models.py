@@ -38,6 +38,24 @@ class LegalMatter(models.Model):
     related_properties = models.ManyToManyField(
         "assets.RealEstate", blank=True, related_name="legal_matters",
     )
+    related_investments = models.ManyToManyField(
+        "assets.Investment", blank=True, related_name="legal_matters",
+    )
+    related_loans = models.ManyToManyField(
+        "assets.Loan", blank=True, related_name="legal_matters",
+    )
+    related_vehicles = models.ManyToManyField(
+        "assets.Vehicle", blank=True, related_name="legal_matters",
+    )
+    related_aircraft = models.ManyToManyField(
+        "assets.Aircraft", blank=True, related_name="legal_matters",
+    )
+    related_policies = models.ManyToManyField(
+        "assets.InsurancePolicy", blank=True, related_name="legal_matters",
+    )
+    related_leases = models.ManyToManyField(
+        "assets.Lease", blank=True, related_name="legal_matters",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

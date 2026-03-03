@@ -318,3 +318,27 @@ class AssetLoanLinkForm(TailwindFormMixin, forms.Form):
         queryset=Loan.objects.all(),
         label="Loan",
     )
+
+
+class AssetNoteLinkForm(TailwindFormMixin, forms.Form):
+    note = forms.ModelChoiceField(
+        queryset=None,
+        label="Note",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from notes.models import Note
+        self.fields["note"].queryset = Note.objects.all()
+
+
+class AssetLegalLinkForm(TailwindFormMixin, forms.Form):
+    legal_matter = forms.ModelChoiceField(
+        queryset=None,
+        label="Legal Matter",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from legal.models import LegalMatter
+        self.fields["legal_matter"].queryset = LegalMatter.objects.all()
