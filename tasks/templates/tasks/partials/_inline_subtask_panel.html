@@ -1,0 +1,12 @@
+<div class="mt-2 ml-1 border-l-2 border-blue-500/40 pl-3 py-1 space-y-1">
+    {% for st in subtasks %}
+    <div class="flex items-center gap-2">
+        <button hx-post="{% url 'tasks:subtask_toggle' st.pk %}?inline={{ task.pk }}" hx-target="#subtask-expand-{{ task.pk }}" hx-swap="innerHTML"
+                class="w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center {% if st.is_completed %}bg-green-600 border-green-600{% else %}border-gray-500 hover:border-green-400{% endif %}">
+            {% if st.is_completed %}<svg class="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"/></svg>{% endif %}
+        </button>
+        <span class="text-xs {% if st.is_completed %}text-gray-500 line-through{% else %}text-gray-300{% endif %}">{{ st.title }}</span>
+    </div>
+    {% endfor %}
+</div>
+<span id="subtask-counter-{{ task.pk }}" hx-swap-oob="true" class="text-xs text-gray-500 ml-1.5 cursor-pointer hover:text-blue-400" onclick="toggleInlineSubtasks({{ task.pk }})">{{ subtask_done }}/{{ subtask_count }}</span>
