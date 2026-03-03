@@ -163,6 +163,9 @@
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="aircraft">
             Aircraft <span class="text-xs opacity-70">({{ counts.aircraft }})</span>
         </button>
+        <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="leases">
+            Leases <span class="text-xs opacity-70">({{ counts.leases }})</span>
+        </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="policies">
             Insurance <span class="text-xs opacity-70">({{ counts.policies }})</span>
         </button>
@@ -262,6 +265,20 @@
         <div id="sh-aircraft-form-container"></div>
         <div id="sh-aircraft-list">
             {% include "stakeholders/partials/_sh_aircraft_list.html" with aircraft_ownerships=aircraft_ownerships %}
+        </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab-leases">
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Leases linked to this stakeholder</span>
+            <button hx-get="{% url 'stakeholders:lease_party_add' stakeholder.pk %}"
+                    hx-target="#sh-lease-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Lease</button>
+        </div>
+        <div id="sh-lease-form-container"></div>
+        <div id="lease-list">
+            {% include "stakeholders/partials/_sh_lease_list.html" with lease_parties=lease_parties %}
         </div>
     </div>
 

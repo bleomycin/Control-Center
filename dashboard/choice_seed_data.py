@@ -71,4 +71,13 @@ SEED_DATA = [
     ("cashflow_category", "taxes", "Taxes", 10),
     ("cashflow_category", "maintenance", "Maintenance", 11),
     ("cashflow_category", "other", "Other", 12),
+    # Lease types
+    ("lease_type", "residential", "Residential", 0),
+    ("lease_type", "commercial", "Commercial", 1),
+    ("lease_type", "industrial", "Industrial", 2),
+    ("lease_type", "retail", "Retail", 3),
+    ("lease_type", "office", "Office", 4),
+    ("lease_type", "ground_lease", "Ground Lease", 5),
+    ("lease_type", "sublease", "Sublease", 6),
+    ("lease_type", "other", "Other", 7),
 ]

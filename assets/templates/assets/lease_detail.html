@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+{% block title %}{{ lease.name }} - Control Center{% endblock %}
+{% block content %}
+<div class="mb-6">
+    <div>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'assets:lease_list' %}" class="hover:text-gray-300">Leases</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ lease.name }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ lease.name }}</h1>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">
+        <a href="{% url 'assets:lease_export_pdf' lease.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'assets:lease_edit' lease.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'assets:lease_delete' lease.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    </div>
+</div>
+
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Monthly Rent</p>
+        <p class="text-xl font-bold text-green-400 mt-1">${{ lease.monthly_rent|floatformat:0|intcomma|default:"N/A" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Status</p>
+        <p class="text-sm font-medium mt-1 {% if lease.status == 'active' %}text-green-300{% elif lease.status == 'expired' %}text-red-300{% elif lease.status == 'upcoming' %}text-blue-300{% elif lease.status == 'month_to_month' %}text-yellow-300{% else %}text-gray-300{% endif %}">{{ lease.get_status_display }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Type</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ lease.lease_type|choice_label:"lease_type" }}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">End Date</p>
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ lease.end_date|date:"M j, Y"|default:"N/A" }}</p>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Lease Details</p>
+    </div>
+    <div class="px-4 py-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+        <div>
+            <span class="text-xs text-gray-500">Property</span>
+            <p class="text-sm text-gray-200">{% if lease.related_property %}<a href="{{ lease.related_property.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ lease.related_property.name }}</a>{% else %}N/A{% endif %}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Start Date</span>
+            <p class="text-sm text-gray-200">{{ lease.start_date|date:"M j, Y"|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">End Date</span>
+            <p class="text-sm text-gray-200">{{ lease.end_date|date:"M j, Y"|default:"N/A" }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Security Deposit</span>
+            <p class="text-sm text-gray-200">{% if lease.security_deposit %}${{ lease.security_deposit|floatformat:0|intcomma }}{% else %}N/A{% endif %}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Rent Due Day</span>
+            <p class="text-sm text-gray-200">{% if lease.rent_due_day %}{{ lease.rent_due_day }}{% if lease.rent_due_day == 1 %}st{% elif lease.rent_due_day == 2 %}nd{% elif lease.rent_due_day == 3 %}rd{% else %}th{% endif %} of month{% else %}N/A{% endif %}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Renewal Type</span>
+            <p class="text-sm text-gray-200">{{ lease.get_renewal_type_display }}</p>
+        </div>
+        <div>
+            <span class="text-xs text-gray-500">Escalation Rate</span>
+            <p class="text-sm text-gray-200">{% if lease.escalation_rate %}{{ lease.escalation_rate }}%{% else %}N/A{% endif %}</p>
+        </div>
+    </div>
+</div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Parties</p>
+        <button hx-get="{% url 'assets:lease_party_add' lease.pk %}"
+                hx-target="#party-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Party</button>
+    </div>
+    <div id="party-form-container"></div>
+    <div id="party-list">
+        {% include "assets/partials/_lease_party_list.html" with parties=lease.parties.all %}
+    </div>
+</div>
+
+{% if lease.renewal_terms %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Renewal Terms</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ lease.renewal_terms }}</p>
+</div>
+{% endif %}
+
+{% if lease.notes_text %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Internal Notes</p>
+    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ lease.notes_text }}</p>
+</div>
+{% endif %}
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Linked Notes</h2>
+        <a href="{% url 'notes:create' %}?lease={{ lease.pk }}" class="text-xs text-blue-400 hover:text-blue-300">+ Add</a>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for note in notes %}
+        <a href="{{ note.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
+            <span class="text-sm text-gray-200">{{ note.title }}</span>
+            <span class="text-xs text-gray-400">{{ note.date|date:"M j" }}</span>
+        </a>
+        {% empty %}
+        <p class="px-4 py-4 text-sm text-gray-500 text-center">None</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

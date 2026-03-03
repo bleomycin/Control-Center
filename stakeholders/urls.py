@@ -36,6 +36,8 @@ urlpatterns = [
     path("aircraft-ownership/<int:pk>/delete/", views.aircraft_ownership_delete, name="aircraft_ownership_delete"),
     path("<int:pk>/policyholder/add/", views.policyholder_add, name="policyholder_add"),
     path("policyholder/<int:pk>/delete/", views.policyholder_delete, name="policyholder_delete"),
+    path("<int:pk>/lease-party/add/", views.lease_party_add, name="lease_party_add"),
+    path("lease-party/<int:pk>/delete/", views.lease_party_delete, name="lease_party_delete"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
 ]

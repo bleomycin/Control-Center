@@ -3,7 +3,8 @@ from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from stakeholders.models import Stakeholder
 from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
-                     Loan, LoanParty, PolicyHolder, PropertyOwnership, RealEstate,
+                     Lease, LeaseParty, Loan, LoanParty, PolicyHolder,
+                     PropertyOwnership, RealEstate,
                      InvestmentParticipant, Vehicle, VehicleOwner)
 
 
@@ -256,6 +257,50 @@ class AircraftOwnerForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = AircraftOwner
         fields = ["stakeholder", "ownership_percentage", "role", "notes"]
+        widgets = {
+            "notes": forms.Textarea(attrs={"rows": 2}),
+        }
+
+
+class LeaseForm(TailwindFormMixin, forms.ModelForm):
+    initial_stakeholder = forms.ModelChoiceField(
+        queryset=Stakeholder.objects.all(), required=False, label="Initial Party",
+    )
+    initial_role = forms.CharField(max_length=100, required=False, label="Role")
+
+    field_order = [
+        "name", "related_property", "lease_type", "status",
+        "start_date", "end_date", "monthly_rent", "security_deposit",
+        "rent_due_day", "renewal_type", "renewal_terms", "escalation_rate",
+        "notes_text",
+        "initial_stakeholder", "initial_role",
+    ]
+
+    class Meta:
+        model = Lease
+        fields = [
+            "name", "related_property", "lease_type", "status",
+            "start_date", "end_date", "monthly_rent", "security_deposit",
+            "rent_due_day", "renewal_type", "renewal_terms", "escalation_rate",
+            "notes_text",
+        ]
+        widgets = {
+            "start_date": forms.DateInput(attrs={"type": "date"}),
+            "end_date": forms.DateInput(attrs={"type": "date"}),
+            "lease_type": forms.Select(),
+            "renewal_terms": forms.Textarea(attrs={"rows": 2}),
+            "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["lease_type"].widget.choices = get_choices("lease_type")
+
+
+class LeasePartyForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = LeaseParty
+        fields = ["stakeholder", "role", "notes"]
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 2}),
         }

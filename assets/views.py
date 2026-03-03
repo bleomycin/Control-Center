@@ -9,11 +9,12 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from .forms import (AircraftForm, AircraftOwnerForm, AssetPolicyLinkForm, AssetTabForm,
                      InsurancePolicyForm, InvestmentForm, InvestmentParticipantForm,
+                     LeaseForm, LeasePartyForm,
                      LoanForm, LoanPartyForm, PolicyHolderForm, PropertyOwnershipForm,
                      RealEstateForm, VehicleForm, VehicleOwnerForm)
 from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
-                     InvestmentParticipant, Loan, LoanParty, PolicyHolder,
-                     PropertyOwnership, RealEstate, Vehicle, VehicleOwner)
+                     InvestmentParticipant, Lease, LeaseParty, Loan, LoanParty,
+                     PolicyHolder, PropertyOwnership, RealEstate, Vehicle, VehicleOwner)
 
 
 # --- Asset Tab Config ---
@@ -21,7 +22,7 @@ from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investm
 def _get_asset_tab_config():
     """Build dynamic tab config from AssetTab + computed Other tab."""
     tabs = list(AssetTab.objects.all())
-    all_types = {"properties", "investments", "loans", "policies", "vehicles", "aircraft"}
+    all_types = {"properties", "investments", "loans", "policies", "vehicles", "aircraft", "leases"}
 
     # Collect asset_types claimed by non-builtin tabs
     claimed = set()
@@ -39,6 +40,7 @@ def _get_asset_tab_config():
         "policies": InsurancePolicy.objects.count(),
         "vehicles": Vehicle.objects.count(),
         "aircraft": Aircraft.objects.count(),
+        "leases": Lease.objects.count(),
     }
 
     result = []
@@ -216,17 +218,38 @@ def asset_list(request):
         ctx["aircraft_list"] = qs
         ctx["aircraft_status_choices"] = Aircraft.STATUS_CHOICES
 
+    if "leases" in current_asset_types:
+        qs = Lease.objects.select_related("related_property").all()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        statuses = [s for s in request.GET.getlist("status") if s]
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(end_date__gte=date_from)
+        date_to = request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(end_date__lte=date_to)
+        if len(current_asset_types) == 1:
+            ALLOWED_SORTS = {"name", "status", "monthly_rent", "end_date"}
+            if sort in ALLOWED_SORTS:
+                qs = qs.order_by(f"{direction}{sort}")
+        ctx["leases"] = qs
+        ctx["lease_status_choices"] = Lease.STATUS_CHOICES
+
     ctx["hide_checkboxes"] = len(current_asset_types) > 1
 
     # For status filters / date filters in single-type tabs
     if len(current_asset_types) == 1:
-        if current_asset_types[0] in ("properties", "loans", "policies", "vehicles", "aircraft"):
+        if current_asset_types[0] in ("properties", "loans", "policies", "vehicles", "aircraft", "leases"):
             ctx["status_choices"] = (
                 ctx.get("property_status_choices")
                 or ctx.get("loan_status_choices")
                 or ctx.get("policy_status_choices")
                 or ctx.get("vehicle_status_choices")
-                or ctx.get("aircraft_status_choices", [])
+                or ctx.get("aircraft_status_choices")
+                or ctx.get("lease_status_choices", [])
             )
             ctx["selected_statuses"] = [s for s in request.GET.getlist("status") if s]
             ctx["date_from"] = request.GET.get("date_from", "")
@@ -1671,6 +1694,12 @@ def policyholder_notes(request, pk):
                            reverse("assets:policyholder_notes", args=[pk]))
 
 
+def lease_party_notes(request, pk):
+    obj = get_object_or_404(LeaseParty, pk=pk)
+    return _notes_response(request, obj, f"notes-leaseparty-{pk}",
+                           reverse("assets:lease_party_notes", args=[pk]))
+
+
 # --- Asset ↔ Policy linking ---
 
 def _policy_list_ctx(asset, m2m_field, unlink_url_name, new_policy_param):
@@ -1886,3 +1915,220 @@ def aircraft_loan_unlink(request, pk, loan_pk):
         loan.save()
     return render(request, "assets/partials/_asset_loan_list.html",
                   _loan_list_ctx(ac, "related_aircraft", "assets:aircraft_loan_unlink"))
+
+
+# --- Leases ---
+
+class LeaseListView(ListView):
+    model = Lease
+    template_name = "assets/lease_list.html"
+    context_object_name = "leases"
+    paginate_by = 25
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related("related_property")
+        q = self.request.GET.get("q", "").strip()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        statuses = [s for s in self.request.GET.getlist("status") if s]
+        if statuses:
+            qs = qs.filter(status__in=statuses)
+        date_from = self.request.GET.get("date_from")
+        if date_from:
+            qs = qs.filter(end_date__gte=date_from)
+        date_to = self.request.GET.get("date_to")
+        if date_to:
+            qs = qs.filter(end_date__lte=date_to)
+        ALLOWED_SORTS = {"name", "status", "monthly_rent", "end_date"}
+        sort = self.request.GET.get("sort", "")
+        if sort in ALLOWED_SORTS:
+            direction = "" if self.request.GET.get("dir") == "asc" else "-"
+            qs = qs.order_by(f"{direction}{sort}")
+        return qs
+
+    def get_template_names(self):
+        if self.request.headers.get("HX-Request"):
+            return ["assets/partials/_lease_table_rows.html"]
+        return [self.template_name]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["search_query"] = self.request.GET.get("q", "")
+        ctx["status_choices"] = Lease.STATUS_CHOICES
+        ctx["selected_statuses"] = self.request.GET.getlist("status")
+        ctx["date_from"] = self.request.GET.get("date_from", "")
+        ctx["date_to"] = self.request.GET.get("date_to", "")
+        ctx["current_sort"] = self.request.GET.get("sort", "")
+        ctx["current_dir"] = self.request.GET.get("dir", "")
+        return ctx
+
+
+class LeaseCreateView(CreateView):
+    model = Lease
+    form_class = LeaseForm
+    template_name = "assets/lease_form.html"
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.request.GET.get("property"):
+            initial["related_property"] = self.request.GET["property"]
+        return initial
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        stakeholder = form.cleaned_data.get("initial_stakeholder")
+        if stakeholder:
+            LeaseParty.objects.create(
+                lease=self.object,
+                stakeholder=stakeholder,
+                role=form.cleaned_data.get("initial_role", ""),
+            )
+        messages.success(self.request, "Lease created.")
+        return response
+
+
+class LeaseDetailView(DetailView):
+    model = Lease
+    template_name = "assets/lease_detail.html"
+    context_object_name = "lease"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["notes"] = self.object.notes.all()[:5]
+        return ctx
+
+
+class LeaseUpdateView(UpdateView):
+    model = Lease
+    form_class = LeaseForm
+    template_name = "assets/lease_form.html"
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        del form.fields["initial_stakeholder"]
+        del form.fields["initial_role"]
+        return form
+
+    def form_valid(self, form):
+        messages.success(self.request, "Lease updated.")
+        return super().form_valid(form)
+
+
+class LeaseDeleteView(DeleteView):
+    model = Lease
+    template_name = "partials/_confirm_delete.html"
+    success_url = reverse_lazy("assets:lease_list")
+
+    def form_valid(self, form):
+        messages.success(self.request, f'Lease "{self.object}" deleted.')
+        return super().form_valid(form)
+
+
+def inline_update_lease_status(request, pk):
+    lease = get_object_or_404(Lease, pk=pk)
+    status = request.POST.get("status", "")
+    valid = [s[0] for s in Lease.STATUS_CHOICES]
+    if status not in valid:
+        return HttpResponseBadRequest("Invalid status")
+    lease.status = status
+    lease.save(update_fields=["status"])
+    return render(request, "assets/partials/_lease_row.html", {"lease": lease})
+
+
+def export_lease_csv(request):
+    from config.export import export_csv as do_export
+    qs = Lease.objects.select_related("related_property").all()
+    fields = [
+        ("name", "Name"),
+        ("related_property", "Property"),
+        ("lease_type", "Type"),
+        ("monthly_rent", "Monthly Rent"),
+        ("status", "Status"),
+        ("start_date", "Start Date"),
+        ("end_date", "End Date"),
+    ]
+    return do_export(qs, fields, "leases")
+
+
+def export_pdf_lease_detail(request, pk):
+    from config.pdf_export import render_pdf
+    lease = get_object_or_404(Lease, pk=pk)
+    info_rows = [
+        ("Property", lease.related_property.name),
+        ("Type", lease.lease_type or "N/A"),
+        ("Status", lease.get_status_display()),
+        ("Start Date", lease.start_date.strftime("%b %d, %Y") if lease.start_date else "N/A"),
+        ("End Date", lease.end_date.strftime("%b %d, %Y") if lease.end_date else "N/A"),
+        ("Monthly Rent", f"${lease.monthly_rent:,.2f}" if lease.monthly_rent else "N/A"),
+        ("Security Deposit", f"${lease.security_deposit:,.2f}" if lease.security_deposit else "N/A"),
+        ("Rent Due Day", str(lease.rent_due_day) if lease.rent_due_day else "N/A"),
+        ("Renewal Type", lease.get_renewal_type_display()),
+    ]
+    if lease.escalation_rate:
+        info_rows.append(("Escalation Rate", f"{lease.escalation_rate}%"))
+    sections = [{"heading": "Lease Information", "type": "info", "rows": info_rows}]
+    parties = lease.parties.select_related("stakeholder").all()
+    if parties:
+        party_str = ", ".join(f"{p.stakeholder.name} ({p.role})" if p.role else p.stakeholder.name for p in parties)
+        sections[0]["rows"].append(("Parties", party_str))
+    if lease.renewal_terms:
+        sections.append({"heading": "Renewal Terms", "type": "text", "content": lease.renewal_terms})
+    if lease.notes_text:
+        sections.append({"heading": "Notes", "type": "text", "content": lease.notes_text})
+    return render_pdf(request, f"lease-{lease.pk}", lease.name,
+                      f"Lease — {lease.get_status_display()}", sections)
+
+
+def lease_party_add(request, pk):
+    lease = get_object_or_404(Lease, pk=pk)
+    if request.method == "POST":
+        form = LeasePartyForm(request.POST)
+        if form.is_valid():
+            party = form.save(commit=False)
+            party.lease = lease
+            party.save()
+            return render(request, "assets/partials/_lease_party_list.html",
+                          {"parties": lease.parties.select_related("stakeholder").all(), "lease": lease})
+    else:
+        form = LeasePartyForm()
+    return render(request, "assets/partials/_lease_party_form.html",
+                  {"form": form, "lease": lease})
+
+
+def lease_party_delete(request, pk):
+    party = get_object_or_404(LeaseParty, pk=pk)
+    lease = party.lease
+    if request.method == "POST":
+        party.delete()
+    return render(request, "assets/partials/_lease_party_list.html",
+                  {"parties": lease.parties.select_related("stakeholder").all(), "lease": lease})
+
+
+def bulk_delete_lease(request):
+    if request.method == "POST":
+        pks = request.POST.getlist("selected")
+        count = Lease.objects.filter(pk__in=pks).count()
+        if "confirm" not in request.POST:
+            return render(request, "partials/_bulk_confirm_delete.html", {
+                "count": count, "selected_pks": pks,
+                "action_url": reverse("assets:lease_bulk_delete"),
+            })
+        Lease.objects.filter(pk__in=pks).delete()
+        messages.success(request, f"{count} lease(s) deleted.")
+    return redirect("assets:lease_list")
+
+
+def bulk_export_lease_csv(request):
+    from config.export import export_csv as do_export
+    pks = request.GET.getlist("selected")
+    qs = Lease.objects.filter(pk__in=pks) if pks else Lease.objects.none()
+    fields = [
+        ("name", "Name"),
+        ("related_property", "Property"),
+        ("lease_type", "Type"),
+        ("monthly_rent", "Monthly Rent"),
+        ("status", "Status"),
+        ("start_date", "Start Date"),
+        ("end_date", "End Date"),
+    ]
+    return do_export(qs, fields, "leases_selected")

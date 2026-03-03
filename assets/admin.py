@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import (Aircraft, AircraftOwner, InsurancePolicy, Investment, Loan,
-                     LoanParty, PolicyHolder, PropertyOwnership, RealEstate,
-                     InvestmentParticipant, Vehicle, VehicleOwner)
+from .models import (Aircraft, AircraftOwner, InsurancePolicy, Investment, Lease,
+                     LeaseParty, Loan, LoanParty, PolicyHolder, PropertyOwnership,
+                     RealEstate, InvestmentParticipant, Vehicle, VehicleOwner)
 
 
 class PropertyOwnershipInline(admin.TabularInline):
@@ -86,3 +86,17 @@ class AircraftAdmin(admin.ModelAdmin):
     list_filter = ["status", "aircraft_type"]
     search_fields = ["name", "tail_number", "serial_number", "make", "model_name", "notes_text"]
     inlines = [AircraftOwnerInline]
+
+
+class LeasePartyInline(admin.TabularInline):
+    model = LeaseParty
+    extra = 1
+    fields = ["stakeholder", "role", "notes"]
+
+
+@admin.register(Lease)
+class LeaseAdmin(admin.ModelAdmin):
+    list_display = ["name", "related_property", "lease_type", "monthly_rent", "status", "end_date"]
+    list_filter = ["status", "lease_type"]
+    search_fields = ["name", "notes_text"]
+    inlines = [LeasePartyInline]

@@ -1,81 +1,109 @@
 {% load tag_colors %}
-<div class="p-4 sm:p-6">
-    <h2 class="text-lg font-semibold text-white mb-3">Quick Capture</h2>
-    <form hx-post="{% url 'notes:quick_capture' %}" hx-swap="none" class="space-y-3">
+<div class="p-4 sm:p-6" id="qc-root">
+    <!-- Fullscreen top bar (hidden by default) -->
+    <div id="qc-fullscreen-bar" class="hidden items-center justify-between mb-3">
+        <span class="text-lg font-semibold text-white">Quick Capture</span>
+        <button type="button" onclick="collapseEditor()"
+                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Done</button>
+    </div>
+
+    <h2 id="qc-heading" class="text-lg font-semibold text-white mb-3">Quick Capture</h2>
+    <form hx-post="{% url 'notes:quick_capture' %}" hx-swap="none" class="space-y-3" id="qc-form">
         {% csrf_token %}
 
+        <!-- Markdown helper bar (hidden by default) -->
+        <div id="qc-md-bar" class="hidden flex-wrap gap-1 mb-2">
+            <button type="button" onclick="qcMdInsert('**','**')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded font-bold">B</button>
+            <button type="button" onclick="qcMdInsert('*','*')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded italic">I</button>
+            <button type="button" onclick="qcMdInsert('## ','')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">H2</button>
+            <button type="button" onclick="qcMdInsert('- ','')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">List</button>
+            <button type="button" onclick="qcMdInsert('[','](url)')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">Link</button>
+            <button type="button" onclick="qcMdInsert('`','`')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded font-mono">Code</button>
+        </div>
+
         {# Content first — the main thing you're here to write #}
-        <div>
-            <label for="id_content" class="block text-sm font-medium text-gray-300 mb-1">Content</label>
+        <div id="qc-content-section">
+            <label for="id_content" class="flex items-center gap-2 text-sm font-medium text-gray-300 mb-1">
+                Content
+                <button type="button" onclick="expandEditor()" id="qc-expand-btn"
+                        class="text-gray-500 hover:text-gray-300 transition-colors" title="Expand editor">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/>
+                    </svg>
+                </button>
+            </label>
             {{ form.content }}
             {% if form.content.errors %}<p class="mt-1 text-sm text-red-400">{{ form.content.errors.0 }}</p>{% endif %}
         </div>
 
-        {# Title — optional, secondary #}
-        <div>
-            <label for="id_title" class="block text-sm font-medium text-gray-300 mb-1">
-                Title <span class="text-gray-500 font-normal">(optional — auto-generated if blank)</span>
-            </label>
-            {{ form.title }}
-            {% if form.title.errors %}<p class="mt-1 text-sm text-red-400">{{ form.title.errors.0 }}</p>{% endif %}
-        </div>
-
-        {# Date + Note type — stacked on mobile, side-by-side on desktop #}
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-                <label for="id_date" class="block text-sm font-medium text-gray-300 mb-1">Date</label>
-                <div class="w-fit">{{ form.date }}</div>
+        {# All other fields wrapped for toggling #}
+        <div id="qc-form-fields">
+            {# Title — optional, secondary #}
+            <div class="mb-3">
+                <label for="id_title" class="block text-sm font-medium text-gray-300 mb-1">
+                    Title <span class="text-gray-500 font-normal">(optional — auto-generated if blank)</span>
+                </label>
+                {{ form.title }}
+                {% if form.title.errors %}<p class="mt-1 text-sm text-red-400">{{ form.title.errors.0 }}</p>{% endif %}
             </div>
-            <div>
-                <label for="id_note_type" class="block text-sm font-medium text-gray-300 mb-1">Type</label>
-                {{ form.note_type }}
-            </div>
-        </div>
 
-        {# More options — folder, tags, stakeholder, task #}
-        <details class="border border-gray-700 rounded-md">
-            <summary class="px-3 py-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300">More options</summary>
-            <div class="px-3 py-3 space-y-3 border-t border-gray-700">
+            {# Date + Note type — stacked on mobile, side-by-side on desktop #}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                 <div>
-                    <label for="id_folder" class="block text-xs font-medium text-gray-400 mb-1">Folder</label>
-                    {{ form.folder }}
+                    <label for="id_date" class="block text-sm font-medium text-gray-300 mb-1">Date</label>
+                    <div class="w-fit">{{ form.date }}</div>
                 </div>
-                {# Tag pills #}
-                {% if tags %}
                 <div>
-                    <label class="block text-xs font-medium text-gray-400 mb-1">Tags</label>
-                    <div class="flex flex-wrap gap-1.5">
-                        {% for tag in tags %}
-                            {% tag_classes tag.color as tc %}
-                            <label class="cursor-pointer">
-                                <input type="checkbox" name="tags" value="{{ tag.pk }}"
-                                       class="hidden"
-                                       onchange="toggleTypePill(this, '{{ tc.bg }}', '{{ tc.text }}', '{{ tc.border }}')">
-                                <span class="form-tag-pill inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
-                                             border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500"
-                                      data-active-bg="{{ tc.bg }}" data-active-text="{{ tc.text }}" data-active-border="{{ tc.border }}">
-                                    {{ tag.name }}
-                                </span>
-                            </label>
-                        {% endfor %}
+                    <label for="id_note_type" class="block text-sm font-medium text-gray-300 mb-1">Type</label>
+                    {{ form.note_type }}
+                </div>
+            </div>
+
+            {# More options — folder, tags, stakeholder, task #}
+            <details class="border border-gray-700 rounded-md mb-3">
+                <summary class="px-3 py-2 text-xs text-gray-400 cursor-pointer hover:text-gray-300">More options</summary>
+                <div class="px-3 py-3 space-y-3 border-t border-gray-700">
+                    <div>
+                        <label for="id_folder" class="block text-xs font-medium text-gray-400 mb-1">Folder</label>
+                        {{ form.folder }}
+                    </div>
+                    {# Tag pills #}
+                    {% if tags %}
+                    <div>
+                        <label class="block text-xs font-medium text-gray-400 mb-1">Tags</label>
+                        <div class="flex flex-wrap gap-1.5">
+                            {% for tag in tags %}
+                                {% tag_classes tag.color as tc %}
+                                <label class="cursor-pointer">
+                                    <input type="checkbox" name="tags" value="{{ tag.pk }}"
+                                           class="hidden"
+                                           onchange="toggleTypePill(this, '{{ tc.bg }}', '{{ tc.text }}', '{{ tc.border }}')">
+                                    <span class="form-tag-pill inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                                 border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500"
+                                          data-active-bg="{{ tc.bg }}" data-active-text="{{ tc.text }}" data-active-border="{{ tc.border }}">
+                                        {{ tag.name }}
+                                    </span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label for="id_stakeholder" class="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
+                        {{ form.stakeholder }}
+                    </div>
+                    <div>
+                        <label for="id_task" class="block text-xs font-medium text-gray-400 mb-1">Task</label>
+                        {{ form.task }}
                     </div>
                 </div>
-                {% endif %}
-                <div>
-                    <label for="id_stakeholder" class="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
-                    {{ form.stakeholder }}
-                </div>
-                <div>
-                    <label for="id_task" class="block text-xs font-medium text-gray-400 mb-1">Task</label>
-                    {{ form.task }}
-                </div>
-            </div>
-        </details>
+            </details>
 
-        {# Save bar #}
-        <div class="flex gap-3 pt-2">
-            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Note</button>
-            <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
+            {# Save bar #}
+            <div class="flex gap-3 pt-2">
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Note</button>
+                <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
+            </div>
         </div>
     </form>
     <script>
@@ -97,9 +125,11 @@
             // Auto-expand textarea as user types
             if (content) {
                 var maxHeight = window.innerHeight * 0.4;
+                content._qcMaxHeight = maxHeight;
                 function autoExpand() {
+                    var mh = content._qcMaxHeight;
                     content.style.height = 'auto';
-                    var newHeight = Math.min(content.scrollHeight, maxHeight);
+                    var newHeight = Math.min(content.scrollHeight, mh);
                     content.style.height = newHeight + 'px';
                 }
                 content.addEventListener('input', autoExpand);
@@ -122,6 +152,115 @@
                 border.split(' ').forEach(function(c) { if(c) span.classList.remove(c); });
                 span.classList.add('border-gray-600', 'text-gray-500');
             }
+        }
+
+        // Fullscreen editor expand/collapse
+        function expandEditor() {
+            var modal = document.getElementById('modal-content');
+            var root = document.getElementById('qc-root');
+            var form = document.getElementById('qc-form');
+            var content = document.getElementById('id_content');
+            var fields = document.getElementById('qc-form-fields');
+            var heading = document.getElementById('qc-heading');
+            var bar = document.getElementById('qc-fullscreen-bar');
+            var mdBar = document.getElementById('qc-md-bar');
+            var expandBtn = document.getElementById('qc-expand-btn');
+
+            // Toggle modal to fullscreen
+            modal.classList.remove('max-w-2xl', 'max-h-[90vh]', 'rounded-lg');
+            modal.classList.add('w-full', 'h-full', 'max-w-none', 'max-h-none', 'rounded-none');
+            modal.style.overflow = 'hidden';
+
+            // Make root fill the modal
+            root.classList.remove('p-4', 'sm:p-6');
+            root.classList.add('p-3', 'h-full', 'flex', 'flex-col');
+
+            // Make form fill available space
+            form.classList.add('flex-1', 'flex', 'flex-col', 'min-h-0');
+
+            // Hide other fields + heading, show fullscreen bar
+            fields.style.display = 'none';
+            heading.style.display = 'none';
+            bar.classList.remove('hidden');
+            bar.classList.add('flex');
+            mdBar.classList.remove('hidden');
+            mdBar.classList.add('flex');
+            expandBtn.style.display = 'none';
+
+            // Make content section fill remaining space
+            var contentSection = document.getElementById('qc-content-section');
+            contentSection.classList.add('flex-1', 'flex', 'flex-col', 'min-h-0');
+
+            // Remove max-height cap on textarea, let it fill
+            content._qcMaxHeight = Infinity;
+            content.style.height = 'auto';
+            content.classList.add('flex-1');
+            content.style.minHeight = '0';
+            content.focus();
+
+            document.body.dataset.qcFullscreen = '1';
+        }
+
+        function collapseEditor() {
+            var modal = document.getElementById('modal-content');
+            var root = document.getElementById('qc-root');
+            var form = document.getElementById('qc-form');
+            var content = document.getElementById('id_content');
+            var fields = document.getElementById('qc-form-fields');
+            var heading = document.getElementById('qc-heading');
+            var bar = document.getElementById('qc-fullscreen-bar');
+            var mdBar = document.getElementById('qc-md-bar');
+            var expandBtn = document.getElementById('qc-expand-btn');
+
+            // Restore modal
+            modal.classList.add('max-w-2xl', 'max-h-[90vh]', 'rounded-lg');
+            modal.classList.remove('w-full', 'h-full', 'max-w-none', 'max-h-none', 'rounded-none');
+            modal.style.overflow = '';
+
+            // Restore root
+            root.classList.add('p-4', 'sm:p-6');
+            root.classList.remove('p-3', 'h-full', 'flex', 'flex-col');
+
+            // Restore form
+            form.classList.remove('flex-1', 'flex', 'flex-col', 'min-h-0');
+
+            // Show other fields + heading, hide fullscreen bar
+            fields.style.display = '';
+            heading.style.display = '';
+            bar.classList.add('hidden');
+            bar.classList.remove('flex');
+            mdBar.classList.add('hidden');
+            mdBar.classList.remove('flex');
+            expandBtn.style.display = '';
+
+            // Restore content section
+            var contentSection = document.getElementById('qc-content-section');
+            contentSection.classList.remove('flex-1', 'flex', 'flex-col', 'min-h-0');
+
+            // Restore textarea max-height cap
+            var maxHeight = window.innerHeight * 0.4;
+            content._qcMaxHeight = maxHeight;
+            content.classList.remove('flex-1');
+            content.style.minHeight = '';
+            content.style.height = 'auto';
+            var newHeight = Math.min(content.scrollHeight, maxHeight);
+            content.style.height = newHeight + 'px';
+
+            delete document.body.dataset.qcFullscreen;
+        }
+
+        // Markdown insert helper for quick capture
+        function qcMdInsert(before, after) {
+            var ta = document.getElementById('id_content');
+            if (!ta) return;
+            var start = ta.selectionStart;
+            var end = ta.selectionEnd;
+            var text = ta.value;
+            var selected = text.substring(start, end);
+            ta.value = text.substring(0, start) + before + selected + after + text.substring(end);
+            ta.selectionStart = start + before.length;
+            ta.selectionEnd = start + before.length + selected.length;
+            ta.focus();
         }
     </script>
 </div>

@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.db import models
 from django.urls import reverse
+from django.utils import timezone
 
 
 class AssetTab(models.Model):
@@ -10,6 +13,7 @@ class AssetTab(models.Model):
         ("policies", "Policies"),
         ("vehicles", "Vehicles"),
         ("aircraft", "Aircraft"),
+        ("leases", "Leases"),
     ]
 
     key = models.SlugField(max_length=50, unique=True)
@@ -475,3 +479,93 @@ class AircraftOwner(models.Model):
 
     def get_notes_id(self):
         return f"notes-aowner-{self.pk}"
+
+
+class Lease(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("expired", "Expired"),
+        ("upcoming", "Upcoming"),
+        ("terminated", "Terminated"),
+        ("month_to_month", "Month-to-Month"),
+    ]
+
+    RENEWAL_TYPE_CHOICES = [
+        ("none", "None"),
+        ("auto", "Auto-Renew"),
+        ("option", "Option to Renew"),
+        ("negotiable", "Negotiable"),
+    ]
+
+    name = models.CharField(max_length=255)
+    related_property = models.ForeignKey(
+        RealEstate, on_delete=models.CASCADE,
+        related_name="leases", verbose_name="Property",
+    )
+    lease_type = models.CharField(max_length=30, default="residential")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True, db_index=True)
+    monthly_rent = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    security_deposit = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    rent_due_day = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Day of month rent is due (1-31)",
+    )
+    renewal_type = models.CharField(
+        max_length=20, choices=RENEWAL_TYPE_CHOICES, default="none",
+    )
+    renewal_terms = models.TextField(blank=True)
+    escalation_rate = models.DecimalField(
+        "Annual escalation %", max_digits=5, decimal_places=2,
+        null=True, blank=True,
+    )
+    stakeholders = models.ManyToManyField(
+        "stakeholders.Stakeholder",
+        through="LeaseParty",
+        related_name="leases",
+        blank=True,
+    )
+    notes_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        return reverse("assets:lease_detail", kwargs={"pk": self.pk})
+
+    @property
+    def is_expiring_soon(self):
+        """True if end_date is within 60 days."""
+        if not self.end_date:
+            return False
+        return self.end_date <= timezone.localdate() + timedelta(days=60)
+
+    class Meta:
+        ordering = ["name"]
+
+
+class LeaseParty(models.Model):
+    """Through model for Lease-Stakeholder M2M with role details."""
+    lease = models.ForeignKey(Lease, on_delete=models.CASCADE, related_name="parties")
+    stakeholder = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.CASCADE, related_name="lease_parties",
+    )
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Tenant, Landlord, Guarantor, Property Manager")
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name_plural = "Lease parties"
+        ordering = ["role", "stakeholder__name"]
+        unique_together = [("lease", "stakeholder")]
+
+    def __str__(self):
+        role = f" - {self.role}" if self.role else ""
+        return f"{self.stakeholder.name}{role}"
+
+    def get_notes_url(self):
+        return reverse("assets:lease_party_notes", kwargs={"pk": self.pk})
+
+    def get_notes_id(self):
+        return f"notes-leaseparty-{self.pk}"

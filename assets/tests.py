@@ -7,7 +7,7 @@ from stakeholders.models import Stakeholder
 
 from .models import (
     Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
-    InvestmentParticipant, Loan, LoanParty, PolicyHolder,
+    InvestmentParticipant, Lease, LeaseParty, Loan, LoanParty, PolicyHolder,
     PropertyOwnership, RealEstate, Vehicle, VehicleOwner,
 )
 
@@ -650,7 +650,7 @@ class InlineStatusUpdateTests(TestCase):
 class AssetTabModelTests(TestCase):
     def test_seed_data_exists(self):
         tabs = AssetTab.objects.all()
-        self.assertEqual(tabs.count(), 7)
+        self.assertEqual(tabs.count(), 8)
         keys = list(tabs.values_list("key", flat=True))
         self.assertIn("all", keys)
         self.assertIn("properties", keys)
@@ -659,11 +659,12 @@ class AssetTabModelTests(TestCase):
         self.assertIn("insurance", keys)
         self.assertIn("vehicles", keys)
         self.assertIn("aircraft", keys)
+        self.assertIn("leases", keys)
 
     def test_builtin_tab(self):
         tab = AssetTab.objects.get(key="all")
         self.assertTrue(tab.is_builtin)
-        self.assertEqual(sorted(tab.asset_types), ["aircraft", "investments", "loans", "policies", "properties", "vehicles"])
+        self.assertEqual(sorted(tab.asset_types), ["aircraft", "investments", "leases", "loans", "policies", "properties", "vehicles"])
 
     def test_create_with_auto_key(self):
         tab = AssetTab(label="My Custom Tab", asset_types=["properties"])
@@ -1749,3 +1750,389 @@ class InlineNotesTests(TestCase):
         self.assertEqual(self.vowner.get_notes_id(), f"notes-vowner-{self.vowner.pk}")
         self.assertEqual(self.aowner.get_notes_id(), f"notes-aowner-{self.aowner.pk}")
         self.assertEqual(self.holder.get_notes_id(), f"notes-holder-{self.holder.pk}")
+
+
+# ── Lease Tests ──────────────────────────────────────────────────────────
+
+
+class LeaseModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        cls.prop = RealEstate.objects.create(name="Lease Prop", address="100 Main St")
+        cls.stakeholder = Stakeholder.objects.create(name="Tenant One")
+        cls.lease = Lease.objects.create(
+            name="Test Lease",
+            related_property=cls.prop,
+            lease_type="residential",
+            status="active",
+            start_date=timezone.localdate() - timedelta(days=300),
+            end_date=timezone.localdate() + timedelta(days=30),
+            monthly_rent=Decimal("1500.00"),
+            security_deposit=Decimal("1500.00"),
+            rent_due_day=1,
+            renewal_type="auto",
+        )
+        cls.party = LeaseParty.objects.create(
+            lease=cls.lease,
+            stakeholder=cls.stakeholder,
+            role="Tenant",
+        )
+
+    def test_str(self):
+        self.assertEqual(str(self.lease), "Test Lease")
+
+    def test_get_absolute_url(self):
+        self.assertEqual(
+            self.lease.get_absolute_url(),
+            reverse("assets:lease_detail", kwargs={"pk": self.lease.pk}),
+        )
+
+    def test_defaults(self):
+        lease = Lease.objects.create(name="Bare Lease", related_property=self.prop)
+        self.assertEqual(lease.status, "active")
+        self.assertEqual(lease.renewal_type, "none")
+        self.assertIsNone(lease.monthly_rent)
+
+    def test_is_expiring_soon_true(self):
+        self.assertTrue(self.lease.is_expiring_soon)
+
+    def test_is_expiring_soon_false_no_end_date(self):
+        lease = Lease.objects.create(name="No End", related_property=self.prop)
+        self.assertFalse(lease.is_expiring_soon)
+
+    def test_is_expiring_soon_false_far_out(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        lease = Lease.objects.create(
+            name="Far Out", related_property=self.prop,
+            end_date=timezone.localdate() + timedelta(days=365),
+        )
+        self.assertFalse(lease.is_expiring_soon)
+
+    def test_ordering(self):
+        Lease.objects.create(name="Alpha Lease", related_property=self.prop)
+        Lease.objects.create(name="Zulu Lease", related_property=self.prop)
+        names = list(Lease.objects.values_list("name", flat=True))
+        self.assertEqual(names, sorted(names))
+
+    def test_cascade_on_property_delete(self):
+        prop = RealEstate.objects.create(name="Temp Prop", address="x")
+        lease = Lease.objects.create(name="Cascade Test", related_property=prop)
+        prop.delete()
+        self.assertFalse(Lease.objects.filter(pk=lease.pk).exists())
+
+    def test_stakeholder_m2m_via_through(self):
+        self.assertIn(self.stakeholder, self.lease.stakeholders.all())
+
+    def test_lease_party_str(self):
+        self.assertEqual(str(self.party), "Tenant One - Tenant")
+
+    def test_lease_party_unique_together(self):
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            LeaseParty.objects.create(
+                lease=self.lease, stakeholder=self.stakeholder, role="Landlord",
+            )
+
+    def test_lease_party_notes_url_and_id(self):
+        self.assertIn(str(self.party.pk), self.party.get_notes_url())
+        self.assertEqual(self.party.get_notes_id(), f"notes-leaseparty-{self.party.pk}")
+
+    def test_decimal_precision(self):
+        lease = Lease.objects.create(
+            name="Precision", related_property=self.prop,
+            monthly_rent=Decimal("9999999999.99"),
+        )
+        lease.refresh_from_db()
+        self.assertEqual(lease.monthly_rent, Decimal("9999999999.99"))
+
+
+class LeaseCRUDTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="CRUD Prop", address="1 Main St")
+        cls.stakeholder = Stakeholder.objects.create(name="CRUD Tenant")
+        cls.lease = Lease.objects.create(
+            name="CRUD Lease", related_property=cls.prop,
+            lease_type="residential", status="active",
+            monthly_rent=Decimal("2000.00"),
+        )
+
+    def test_lease_list(self):
+        resp = self.client.get(reverse("assets:lease_list"))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_lease_create(self):
+        resp = self.client.post(reverse("assets:lease_create"), {
+            "name": "New Lease",
+            "related_property": self.prop.pk,
+            "lease_type": "commercial",
+            "status": "upcoming",
+            "renewal_type": "none",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(Lease.objects.filter(name="New Lease").exists())
+
+    def test_lease_create_with_initial_stakeholder(self):
+        resp = self.client.post(reverse("assets:lease_create"), {
+            "name": "Tenanted Lease",
+            "related_property": self.prop.pk,
+            "lease_type": "residential",
+            "status": "active",
+            "renewal_type": "auto",
+            "initial_stakeholder": self.stakeholder.pk,
+            "initial_role": "Tenant",
+        })
+        self.assertEqual(resp.status_code, 302)
+        lease = Lease.objects.get(name="Tenanted Lease")
+        party = LeaseParty.objects.get(lease=lease)
+        self.assertEqual(party.stakeholder, self.stakeholder)
+        self.assertEqual(party.role, "Tenant")
+
+    def test_lease_create_preselects_property(self):
+        resp = self.client.get(
+            reverse("assets:lease_create") + f"?property={self.prop.pk}")
+        self.assertEqual(resp.status_code, 200)
+
+    def test_lease_detail(self):
+        resp = self.client.get(reverse("assets:lease_detail", args=[self.lease.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "CRUD Lease")
+
+    def test_lease_edit(self):
+        resp = self.client.post(
+            reverse("assets:lease_edit", args=[self.lease.pk]),
+            {
+                "name": "Updated Lease",
+                "related_property": self.prop.pk,
+                "lease_type": "residential",
+                "status": "active",
+                "renewal_type": "none",
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        self.lease.refresh_from_db()
+        self.assertEqual(self.lease.name, "Updated Lease")
+
+    def test_lease_edit_hides_initial_fields(self):
+        resp = self.client.get(reverse("assets:lease_edit", args=[self.lease.pk]))
+        self.assertNotContains(resp, "Initial Party")
+
+    def test_lease_delete(self):
+        lease = Lease.objects.create(name="Delete Me", related_property=self.prop)
+        resp = self.client.post(reverse("assets:lease_delete", args=[lease.pk]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Lease.objects.filter(pk=lease.pk).exists())
+
+    def test_lease_csv(self):
+        resp = self.client.get(reverse("assets:lease_export_csv"))
+        self.assertEqual(resp["Content-Type"], "text/csv")
+        self.assertIn("Name", resp.content.decode())
+
+    def test_lease_pdf(self):
+        resp = self.client.get(reverse("assets:lease_export_pdf", args=[self.lease.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class LeaseInlineStatusTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Status Prop", address="x")
+        cls.lease = Lease.objects.create(
+            name="Status Lease", related_property=cls.prop, status="active",
+        )
+
+    def test_inline_status_update(self):
+        resp = self.client.post(
+            reverse("assets:lease_inline_status", args=[self.lease.pk]),
+            {"status": "expired"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.lease.refresh_from_db()
+        self.assertEqual(self.lease.status, "expired")
+        self.assertTemplateUsed(resp, "assets/partials/_lease_row.html")
+
+    def test_inline_status_invalid(self):
+        resp = self.client.post(
+            reverse("assets:lease_inline_status", args=[self.lease.pk]),
+            {"status": "bogus"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_status_404(self):
+        resp = self.client.post(
+            reverse("assets:lease_inline_status", args=[99999]),
+            {"status": "active"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+class LeaseBulkTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Bulk Prop", address="x")
+        cls.l1 = Lease.objects.create(name="Bulk Lease 1", related_property=cls.prop)
+        cls.l2 = Lease.objects.create(name="Bulk Lease 2", related_property=cls.prop)
+
+    def test_bulk_delete(self):
+        resp = self.client.post(reverse("assets:lease_bulk_delete"), {
+            "selected": [self.l1.pk, self.l2.pk],
+            "confirm": "1",
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.assertFalse(Lease.objects.filter(pk__in=[self.l1.pk, self.l2.pk]).exists())
+
+    def test_bulk_export(self):
+        resp = self.client.get(
+            reverse("assets:lease_bulk_export_csv"),
+            {"selected": [self.l1.pk]},
+        )
+        self.assertEqual(resp["Content-Type"], "text/csv")
+
+
+class LeaseUnifiedListTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Unified Prop", address="x")
+        cls.lease = Lease.objects.create(
+            name="Unified Lease", related_property=cls.prop,
+            lease_type="residential", status="active",
+        )
+
+    def test_lease_appears_on_all_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertContains(resp, "Unified Lease")
+
+    def test_lease_tab_exists(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertContains(resp, "Leases")
+
+
+class LeasePartyInlineTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Party Prop", address="x")
+        cls.lease = Lease.objects.create(
+            name="Party Lease", related_property=cls.prop,
+        )
+        cls.stakeholder = Stakeholder.objects.create(name="Party Person")
+
+    def test_lease_party_add(self):
+        resp = self.client.post(
+            reverse("assets:lease_party_add", args=[self.lease.pk]),
+            {"stakeholder": self.stakeholder.pk, "role": "Tenant"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(LeaseParty.objects.filter(
+            lease=self.lease, stakeholder=self.stakeholder).exists())
+
+    def test_lease_party_delete(self):
+        party = LeaseParty.objects.create(
+            lease=self.lease, stakeholder=self.stakeholder, role="Tenant",
+        )
+        resp = self.client.post(
+            reverse("assets:lease_party_delete", args=[party.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LeaseParty.objects.filter(pk=party.pk).exists())
+
+    def test_lease_party_notes_roundtrip(self):
+        party = LeaseParty.objects.create(
+            lease=self.lease, stakeholder=self.stakeholder, role="Tenant",
+        )
+        resp = self.client.post(
+            reverse("assets:lease_party_notes", args=[party.pk]),
+            {"notes": "lease party note"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        party.refresh_from_db()
+        self.assertEqual(party.notes, "lease party note")
+
+
+class LeasePropertyDetailTests(TestCase):
+    """Test that leases show up on property detail pages."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Detail Prop", address="x")
+        cls.lease = Lease.objects.create(
+            name="Detail Lease", related_property=cls.prop,
+            status="active", monthly_rent=Decimal("2000.00"),
+        )
+
+    def test_property_detail_shows_lease(self):
+        resp = self.client.get(reverse("assets:realestate_detail", args=[self.prop.pk]))
+        self.assertContains(resp, "Detail Lease")
+
+    def test_property_detail_has_new_lease_link(self):
+        resp = self.client.get(reverse("assets:realestate_detail", args=[self.prop.pk]))
+        self.assertContains(resp, f"property={self.prop.pk}")
+
+
+class LeaseCalendarTests(TestCase):
+    """Test that lease expiry events appear in calendar."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        cls.prop = RealEstate.objects.create(name="Cal Prop", address="x")
+        cls.lease = Lease.objects.create(
+            name="Expiring Lease", related_property=cls.prop,
+            status="active", monthly_rent=Decimal("1500.00"),
+            end_date=timezone.localdate() + timedelta(days=30),
+        )
+
+    def test_calendar_includes_lease_events(self):
+        import json
+        from datetime import timedelta
+        from django.utils import timezone
+
+        start = (timezone.localdate() - timedelta(days=5)).isoformat()
+        end = (timezone.localdate() + timedelta(days=60)).isoformat()
+        resp = self.client.get(
+            reverse("dashboard:calendar_events"),
+            {"start": start, "end": end},
+        )
+        self.assertEqual(resp.status_code, 200)
+        events = json.loads(resp.content)
+        lease_events = [e for e in events if e.get("extendedProps", {}).get("type") == "lease"]
+        self.assertTrue(len(lease_events) >= 1)
+        self.assertIn("Expiring Lease", lease_events[0]["title"])
+
+    def test_calendar_lease_event_color(self):
+        import json
+        from datetime import timedelta
+        from django.utils import timezone
+
+        start = (timezone.localdate() - timedelta(days=5)).isoformat()
+        end = (timezone.localdate() + timedelta(days=60)).isoformat()
+        resp = self.client.get(
+            reverse("dashboard:calendar_events"),
+            {"start": start, "end": end},
+        )
+        events = json.loads(resp.content)
+        lease_events = [e for e in events if e.get("extendedProps", {}).get("type") == "lease"]
+        self.assertEqual(lease_events[0]["color"], "#10b981")
+
+
+class LeaseGlobalSearchTests(TestCase):
+    """Test that leases appear in global search results."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(name="Search Prop", address="x")
+        cls.lease = Lease.objects.create(
+            name="Searchable Lease", related_property=cls.prop,
+        )
+
+    def test_global_search_finds_lease(self):
+        resp = self.client.get(
+            reverse("dashboard:search"),
+            {"q": "Searchable"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Searchable Lease")
