@@ -68,27 +68,32 @@ def dashboard(request):
         entry_type="outflow", is_projected=False,
     ).aggregate(total=Sum("amount"))["total"] or 0
 
-    projected_inflows = current_month_entries.filter(
-        entry_type="inflow", is_projected=True,
-    ).aggregate(total=Sum("amount"))["total"] or 0
-
-    projected_outflows = current_month_entries.filter(
-        entry_type="outflow", is_projected=True,
-    ).aggregate(total=Sum("amount"))["total"] or 0
-
     from cashflow.alerts import get_liquidity_alerts
 
+    # Monthly net flow
+    monthly_net_flow = actual_inflows - actual_outflows
+
     # Net Worth calculation
-    total_real_estate = RealEstate.objects.exclude(status="sold").aggregate(
+    properties_qs = RealEstate.objects.exclude(status="sold")
+    total_real_estate = properties_qs.aggregate(
         total=Sum("estimated_value"),
     )["total"] or 0
-    total_investments = Investment.objects.aggregate(
+    property_count = properties_qs.count()
+
+    investments_qs = Investment.objects.all()
+    total_investments = investments_qs.aggregate(
         total=Sum("current_value"),
     )["total"] or 0
+    investment_count = investments_qs.count()
+
     total_assets = total_real_estate + total_investments
-    total_liabilities = Loan.objects.filter(status="active").aggregate(
+
+    active_loans_qs = Loan.objects.filter(status="active")
+    total_liabilities = active_loans_qs.aggregate(
         total=Sum("current_balance"),
     )["total"] or 0
+    active_loan_count = active_loans_qs.count()
+
     net_worth = total_assets - total_liabilities
 
     # Upcoming Deadlines (next 30 days, unified)
@@ -136,17 +141,18 @@ def dashboard(request):
         "recent_activity": recent_activity,
         "stale_followups": stale_followups,
         "liquidity_alerts": get_liquidity_alerts(),
-        "cashflow": {
-            "actual_inflows": actual_inflows,
-            "actual_outflows": actual_outflows,
-            "projected_inflows": projected_inflows,
-            "projected_outflows": projected_outflows,
-        },
+        "monthly_net_flow": monthly_net_flow,
         "net_worth": {
             "total_assets": total_assets,
             "total_liabilities": total_liabilities,
             "net_worth": net_worth,
         },
+        "property_count": property_count,
+        "property_value": total_real_estate,
+        "investment_count": investment_count,
+        "investment_value": total_investments,
+        "active_loan_count": active_loan_count,
+        "loan_balance": total_liabilities,
         "upcoming_deadlines": upcoming_deadlines,
         "at_risk_properties": at_risk_properties,
         "at_risk_loans": at_risk_loans,
