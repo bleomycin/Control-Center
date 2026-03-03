@@ -29,6 +29,9 @@
 .prose-markdown th { text-align: left; padding: 0.375rem 0.75rem; border-bottom: 1px solid #4b5563; color: #f3f4f6; font-weight: 600; }
 .prose-markdown td { padding: 0.375rem 0.75rem; border-bottom: 1px solid #374151; }
 
+/* Details/summary chevron rotation */
+details[open] > summary .details-open-rotate { transform: rotate(90deg); }
+
 /* HTMX loading indicators */
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator { display: inline-block; }
