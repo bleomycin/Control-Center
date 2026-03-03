@@ -6,6 +6,11 @@ app_name = "assets"
 urlpatterns = [
     # Unified asset list
     path("", views.asset_list, name="asset_list"),
+    # Asset tab settings
+    path("tabs/", views.asset_tab_settings, name="asset_tab_settings"),
+    path("tabs/add/", views.asset_tab_add, name="asset_tab_add"),
+    path("tabs/<int:pk>/edit/", views.asset_tab_edit, name="asset_tab_edit"),
+    path("tabs/<int:pk>/delete/", views.asset_tab_delete, name="asset_tab_delete"),
     # Real Estate
     path("real-estate/", views.RealEstateListView.as_view(), name="realestate_list"),
     path("real-estate/<int:pk>/inline-status/", views.inline_update_realestate_status, name="realestate_inline_status"),

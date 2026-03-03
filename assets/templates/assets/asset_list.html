@@ -4,18 +4,20 @@
 <div class="flex items-start justify-between mb-6">
     <div>
         <h1 class="text-2xl font-bold text-white">Assets</h1>
-        <p class="text-sm text-gray-400 mt-1">{{ tab_counts.properties|add:tab_counts.investments|add:tab_counts.loans }} total</p>
+        <p class="text-sm text-gray-400 mt-1">{{ total_count }} total</p>
     </div>
     <div class="flex flex-wrap items-center gap-2 shrink-0">
-        {% if current_tab == "properties" %}
-        <a href="{% url 'assets:realestate_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
-        <a href="{% url 'assets:realestate_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ New</a>
-        {% elif current_tab == "investments" %}
-        <a href="{% url 'assets:investment_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
-        <a href="{% url 'assets:investment_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ New</a>
-        {% elif current_tab == "loans" %}
-        <a href="{% url 'assets:loan_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export CSV</a>
-        <a href="{% url 'assets:loan_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ New</a>
+        {% if "properties" in current_asset_types %}
+        <a href="{% url 'assets:realestate_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export Properties</a>
+        <a href="{% url 'assets:realestate_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Property</a>
+        {% endif %}
+        {% if "investments" in current_asset_types %}
+        <a href="{% url 'assets:investment_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export Investments</a>
+        <a href="{% url 'assets:investment_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Investment</a>
+        {% endif %}
+        {% if "loans" in current_asset_types %}
+        <a href="{% url 'assets:loan_export_csv' %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm font-medium rounded-md transition-colors whitespace-nowrap">Export Loans</a>
+        <a href="{% url 'assets:loan_create' %}" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors whitespace-nowrap">+ Loan</a>
         {% endif %}
     </div>
 </div>
@@ -23,32 +25,24 @@
 <!-- Tab bar -->
 <div class="border-b border-gray-700 mb-4">
     <nav id="asset-tabs" class="flex gap-0 -mb-px overflow-x-auto">
-        <a href="{% url 'assets:asset_list' %}?tab=properties"
-           hx-get="{% url 'assets:asset_list' %}?tab=properties"
-           hx-target="#asset-content" hx-push-url="{% url 'assets:asset_list' %}?tab=properties"
+        {% for tab in tabs %}
+        <a href="{% url 'assets:asset_list' %}?tab={{ tab.key }}"
+           hx-get="{% url 'assets:asset_list' %}?tab={{ tab.key }}"
+           hx-target="#asset-content" hx-push-url="{% url 'assets:asset_list' %}?tab={{ tab.key }}"
            hx-indicator="#loading-spinner"
-           class="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors {% if current_tab == 'properties' %}border-blue-500 text-blue-400{% else %}border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600{% endif %}"
-           onclick="switchAssetTab(this, 'properties')">
-            Properties
-            <span class="ml-1 text-xs {% if current_tab == 'properties' %}text-blue-400/70{% else %}text-gray-500{% endif %}">({{ tab_counts.properties }})</span>
+           class="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors {% if current_tab == tab.key %}border-blue-500 text-blue-400{% else %}border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600{% endif %}"
+           onclick="switchAssetTab(this, '{{ tab.key }}')">
+            {{ tab.label }}
+            <span class="ml-1 text-xs {% if current_tab == tab.key %}text-blue-400/70{% else %}text-gray-500{% endif %}">({{ tab.count }})</span>
         </a>
-        <a href="{% url 'assets:asset_list' %}?tab=investments"
-           hx-get="{% url 'assets:asset_list' %}?tab=investments"
-           hx-target="#asset-content" hx-push-url="{% url 'assets:asset_list' %}?tab=investments"
-           hx-indicator="#loading-spinner"
-           class="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors {% if current_tab == 'investments' %}border-blue-500 text-blue-400{% else %}border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600{% endif %}"
-           onclick="switchAssetTab(this, 'investments')">
-            Investments
-            <span class="ml-1 text-xs {% if current_tab == 'investments' %}text-blue-400/70{% else %}text-gray-500{% endif %}">({{ tab_counts.investments }})</span>
-        </a>
-        <a href="{% url 'assets:asset_list' %}?tab=loans"
-           hx-get="{% url 'assets:asset_list' %}?tab=loans"
-           hx-target="#asset-content" hx-push-url="{% url 'assets:asset_list' %}?tab=loans"
-           hx-indicator="#loading-spinner"
-           class="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors {% if current_tab == 'loans' %}border-blue-500 text-blue-400{% else %}border-transparent text-gray-400 hover:text-gray-300 hover:border-gray-600{% endif %}"
-           onclick="switchAssetTab(this, 'loans')">
-            Loans
-            <span class="ml-1 text-xs {% if current_tab == 'loans' %}text-blue-400/70{% else %}text-gray-500{% endif %}">({{ tab_counts.loans }})</span>
+        {% endfor %}
+        <a href="{% url 'assets:asset_tab_settings' %}"
+           class="px-3 py-2.5 text-gray-500 hover:text-gray-300 transition-colors ml-auto"
+           title="Manage tabs">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
         </a>
     </nav>
 </div>
@@ -57,11 +51,11 @@
     <input type="hidden" name="tab" id="current-tab" value="{{ current_tab }}">
     <div class="flex flex-col sm:flex-row gap-3">
         <input type="text" name="q" value="{{ search_query }}"
-               placeholder="{% if current_tab == 'properties' %}Search properties...{% elif current_tab == 'investments' %}Search investments...{% else %}Search loans...{% endif %}"
+               placeholder="Search assets..."
                hx-get="{% url 'assets:asset_list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
     </div>
-    {% if current_tab == "properties" or current_tab == "loans" %}
+    {% if status_choices %}
     <div id="status-filters" class="flex flex-wrap gap-2 items-center">
         <span class="text-xs text-gray-400">Status:</span>
         {% for val, label in status_choices %}
@@ -74,7 +68,7 @@
         {% endfor %}
     </div>
     <div id="date-filters" class="flex flex-wrap gap-2 items-center">
-        <span class="text-xs text-gray-400">{% if current_tab == "properties" %}Acquired:{% else %}Next Due:{% endif %}</span>
+        <span class="text-xs text-gray-400">{% if "properties" in current_asset_types %}Acquired:{% else %}Next Due:{% endif %}</span>
         <input type="date" name="date_from" value="{{ date_from }}"
                hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">

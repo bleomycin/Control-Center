@@ -6,7 +6,7 @@ from django.urls import reverse
 from stakeholders.models import Stakeholder
 
 from .models import (
-    Investment, InvestmentParticipant, Loan, LoanParty,
+    AssetTab, Investment, InvestmentParticipant, Loan, LoanParty,
     PropertyOwnership, RealEstate,
 )
 
@@ -484,3 +484,178 @@ class InlineStatusUpdateTests(TestCase):
             {"status": "active"},
         )
         self.assertEqual(resp.status_code, 404)
+
+
+class AssetTabModelTests(TestCase):
+    def test_seed_data_exists(self):
+        tabs = AssetTab.objects.all()
+        self.assertEqual(tabs.count(), 4)
+        keys = list(tabs.values_list("key", flat=True))
+        self.assertIn("all", keys)
+        self.assertIn("properties", keys)
+        self.assertIn("investments", keys)
+        self.assertIn("loans", keys)
+
+    def test_builtin_tab(self):
+        tab = AssetTab.objects.get(key="all")
+        self.assertTrue(tab.is_builtin)
+        self.assertEqual(sorted(tab.asset_types), ["investments", "loans", "properties"])
+
+    def test_create_with_auto_key(self):
+        tab = AssetTab(label="My Custom Tab", asset_types=["properties"])
+        tab.sort_order = 10
+        tab.save()
+        self.assertEqual(tab.key, "my-custom-tab")
+
+    def test_slug_collision(self):
+        AssetTab.objects.create(key="custom", label="Custom", asset_types=["loans"], sort_order=10)
+        tab2 = AssetTab(label="Custom", asset_types=["investments"])
+        tab2.sort_order = 11
+        tab2.save()
+        self.assertEqual(tab2.key, "custom-1")
+
+    def test_ordering(self):
+        tabs = list(AssetTab.objects.values_list("key", flat=True))
+        self.assertEqual(tabs[0], "all")
+
+    def test_str(self):
+        tab = AssetTab.objects.get(key="all")
+        self.assertEqual(str(tab), "All")
+
+
+class AssetTabSettingsTests(TestCase):
+    def test_settings_page(self):
+        resp = self.client.get(reverse("assets:asset_tab_settings"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Manage Asset Tabs")
+
+    def test_add_get(self):
+        resp = self.client.get(reverse("assets:asset_tab_add"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Tab Name")
+
+    def test_add_post(self):
+        resp = self.client.post(reverse("assets:asset_tab_add"), {
+            "label": "Debt",
+            "asset_types": ["loans"],
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(AssetTab.objects.filter(key="debt").exists())
+
+    def test_edit_get(self):
+        tab = AssetTab.objects.get(key="properties")
+        resp = self.client.get(reverse("assets:asset_tab_edit", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Properties")
+
+    def test_edit_post(self):
+        tab = AssetTab.objects.get(key="properties")
+        resp = self.client.post(reverse("assets:asset_tab_edit", args=[tab.pk]), {
+            "label": "Real Estate",
+            "asset_types": ["properties"],
+        })
+        self.assertEqual(resp.status_code, 200)
+        tab.refresh_from_db()
+        self.assertEqual(tab.label, "Real Estate")
+
+    def test_delete(self):
+        tab = AssetTab.objects.get(key="loans")
+        resp = self.client.post(reverse("assets:asset_tab_delete", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(AssetTab.objects.filter(key="loans").exists())
+
+    def test_builtin_edit_forbidden(self):
+        tab = AssetTab.objects.get(key="all")
+        resp = self.client.get(reverse("assets:asset_tab_edit", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_builtin_delete_forbidden(self):
+        tab = AssetTab.objects.get(key="all")
+        resp = self.client.post(reverse("assets:asset_tab_delete", args=[tab.pk]))
+        self.assertEqual(resp.status_code, 403)
+
+
+class DynamicAssetTabIntegrationTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.prop = RealEstate.objects.create(
+            name="Tab Test Prop", address="1 Test St", status="owned",
+        )
+        cls.inv = Investment.objects.create(
+            name="Tab Test Inv", investment_type="equities",
+        )
+        cls.loan = Loan.objects.create(
+            name="Tab Test Loan", status="active",
+        )
+
+    def test_default_tab_is_all(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["current_tab"], "all")
+        self.assertContains(resp, "Tab Test Prop")
+        self.assertContains(resp, "Tab Test Inv")
+        self.assertContains(resp, "Tab Test Loan")
+
+    def test_properties_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "properties"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Tab Test Prop")
+        self.assertNotContains(resp, "Tab Test Inv")
+        self.assertNotContains(resp, "Tab Test Loan")
+
+    def test_investments_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "investments"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Tab Test Inv")
+        self.assertNotContains(resp, "Tab Test Prop")
+
+    def test_loans_tab(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "loans"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Tab Test Loan")
+        self.assertNotContains(resp, "Tab Test Prop")
+
+    def test_invalid_tab_falls_back_to_first(self):
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "bogus"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["current_tab"], "all")
+
+    def test_tab_counts(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertEqual(resp.context["tab_counts"]["properties"], 1)
+        self.assertEqual(resp.context["tab_counts"]["investments"], 1)
+        self.assertEqual(resp.context["tab_counts"]["loans"], 1)
+
+    def test_tabs_in_context(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        tabs = resp.context["tabs"]
+        keys = [t["key"] for t in tabs]
+        self.assertIn("all", keys)
+        self.assertIn("properties", keys)
+
+    def test_multi_type_tab(self):
+        AssetTab.objects.create(
+            key="prop-loans", label="Property & Loans",
+            asset_types=["properties", "loans"], sort_order=10,
+        )
+        resp = self.client.get(reverse("assets:asset_list"), {"tab": "prop-loans"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Tab Test Prop")
+        self.assertContains(resp, "Tab Test Loan")
+        self.assertNotContains(resp, "Tab Test Inv")
+
+    def test_htmx_returns_partial(self):
+        resp = self.client.get(
+            reverse("assets:asset_list"), {"tab": "all"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "assets/partials/_asset_tab_content.html")
+
+    def test_gear_icon_link(self):
+        resp = self.client.get(reverse("assets:asset_list"))
+        self.assertContains(resp, reverse("assets:asset_tab_settings"))
+
+    def test_settings_hub_has_asset_tabs_card(self):
+        resp = self.client.get(reverse("dashboard:settings_hub"))
+        self.assertContains(resp, "Manage Asset Tabs")
