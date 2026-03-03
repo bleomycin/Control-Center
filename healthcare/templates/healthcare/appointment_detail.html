@@ -90,7 +90,7 @@
                         hx-target="#note-form-container"
                         hx-swap="innerHTML"
                         class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
-                <a href="{% url 'notes:create' %}"
+                <a href="{% url 'notes:create' %}?appointment={{ appointment.pk }}&title=Re: {{ appointment.title|urlencode }}"
                    class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
             </div>
         </div>

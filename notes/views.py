@@ -47,7 +47,9 @@ class NoteListView(ListView):
             "participants", "related_stakeholders",
             "related_legal_matters", "related_properties",
             "related_investments", "related_loans", "related_tasks",
-            "related_policies", "related_vehicles", "related_aircraft", "tags",
+            "related_policies", "related_vehicles", "related_aircraft",
+            "related_leases", "related_providers", "related_prescriptions",
+            "related_appointments", "related_visits", "related_conditions", "tags",
         ).annotate(
             attachment_count=Count("attachments", distinct=True),
             link_count=Count("links", distinct=True),
@@ -203,6 +205,16 @@ class NoteCreateView(CreateView):
             initial["related_aircraft"] = [self.request.GET["aircraft"]]
         if self.request.GET.get("lease"):
             initial["related_leases"] = [self.request.GET["lease"]]
+        if self.request.GET.get("provider"):
+            initial["related_providers"] = [self.request.GET["provider"]]
+        if self.request.GET.get("prescription"):
+            initial["related_prescriptions"] = [self.request.GET["prescription"]]
+        if self.request.GET.get("appointment"):
+            initial["related_appointments"] = [self.request.GET["appointment"]]
+        if self.request.GET.get("visit"):
+            initial["related_visits"] = [self.request.GET["visit"]]
+        if self.request.GET.get("condition"):
+            initial["related_conditions"] = [self.request.GET["condition"]]
         return initial
 
     def form_valid(self, form):
