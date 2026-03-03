@@ -138,11 +138,26 @@ class NoteDeleteView(DeleteView):
         return super().form_valid(form)
 
 
+def _strip_markdown(text):
+    """Convert markdown to plain text for PDF export."""
+    import re
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)  # headings
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)  # bold
+    text = re.sub(r'\*(.+?)\*', r'\1', text)  # italic
+    text = re.sub(r'~~(.+?)~~', r'\1', text)  # strikethrough
+    text = re.sub(r'`(.+?)`', r'\1', text)  # inline code
+    text = re.sub(r'^\s*[-*+]\s+', '  - ', text, flags=re.MULTILINE)  # bullets
+    text = re.sub(r'^\s*\d+\.\s+', '  - ', text, flags=re.MULTILINE)  # numbered
+    text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)  # links
+    text = re.sub(r'^>\s?', '', text, flags=re.MULTILINE)  # blockquotes
+    return text
+
+
 def export_pdf_detail(request, pk):
     from legacy.pdf_export import render_pdf
     n = get_object_or_404(Note, pk=pk)
     sections = [
-        {"heading": "Content", "type": "text", "content": n.content},
+        {"heading": "Content", "type": "text", "content": _strip_markdown(n.content)},
     ]
     participants = n.participants.all()
     if participants:

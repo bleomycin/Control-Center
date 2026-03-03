@@ -323,3 +323,41 @@ class LinkModelTests(TestCase):
         )
         self.note.delete()
         self.assertEqual(Link.objects.count(), 0)
+
+
+class MarkdownRenderTests(TestCase):
+    def test_detail_renders_markdown_bold(self):
+        note = Note.objects.create(
+            title="MD Note", content="**bold text**", date=timezone.now()
+        )
+        resp = self.client.get(reverse("notes:detail", args=[note.pk]))
+        self.assertContains(resp, "<strong>bold text</strong>")
+
+    def test_detail_renders_markdown_list(self):
+        note = Note.objects.create(
+            title="List Note", content="- item one\n- item two", date=timezone.now()
+        )
+        resp = self.client.get(reverse("notes:detail", args=[note.pk]))
+        self.assertContains(resp, "<li>item one</li>")
+
+    def test_detail_renders_plain_text_ok(self):
+        note = Note.objects.create(
+            title="Plain Note", content="Just plain text here", date=timezone.now()
+        )
+        resp = self.client.get(reverse("notes:detail", args=[note.pk]))
+        self.assertContains(resp, "Just plain text here")
+
+    def test_template_filter_empty_string(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        self.assertEqual(render_markdown(""), "")
+
+    def test_pdf_strips_markdown(self):
+        note = Note.objects.create(
+            title="PDF MD", content="**bold** and *italic*", date=timezone.now()
+        )
+        resp = self.client.get(reverse("notes:export_pdf", args=[note.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_form_includes_easymde(self):
+        resp = self.client.get(reverse("notes:create"))
+        self.assertContains(resp, "easymde")
