@@ -879,3 +879,197 @@ class MeetingTaskTests(TestCase):
         Task.objects.create(title="Second Task")
         resp = self.client.get(reverse("tasks:list"), {"sort": "created_at", "dir": "desc"})
         self.assertEqual(resp.status_code, 200)
+
+
+class KanbanViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.task1 = Task.objects.create(title="Board Task 1", status="not_started")
+        cls.task2 = Task.objects.create(title="Board Task 2", status="in_progress")
+        cls.task3 = Task.objects.create(title="Board Task 3", status="complete")
+
+    def test_board_view_full_page(self):
+        resp = self.client.get(reverse("tasks:list"), {"view": "board"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "kanban-board")
+        self.assertContains(resp, "Board Task 1")
+        self.assertContains(resp, "Board Task 2")
+
+    def test_board_view_htmx(self):
+        resp = self.client.get(
+            reverse("tasks:list"), {"view": "board"}, HTTP_HX_REQUEST="true"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_kanban_board.html")
+
+    def test_board_view_no_pagination(self):
+        # Board view should show all tasks without pagination
+        for i in range(30):
+            Task.objects.create(title=f"Bulk Task {i}", status="not_started")
+        resp = self.client.get(reverse("tasks:list"), {"view": "board"})
+        self.assertEqual(resp.status_code, 200)
+        # Should contain all tasks, not just 25
+        self.assertContains(resp, "Bulk Task 29")
+
+    def test_board_context_has_kanban_columns(self):
+        resp = self.client.get(reverse("tasks:list"), {"view": "board"})
+        self.assertIn("kanban_columns", resp.context)
+        columns = resp.context["kanban_columns"]
+        self.assertEqual(len(columns), 4)
+        statuses = [c["status"] for c in columns]
+        self.assertEqual(statuses, ["not_started", "in_progress", "waiting", "complete"])
+
+    def test_board_filters_work(self):
+        resp = self.client.get(
+            reverse("tasks:list"), {"view": "board", "status": "in_progress"}
+        )
+        self.assertContains(resp, "Board Task 2")
+
+    def test_kanban_update(self):
+        resp = self.client.post(
+            reverse("tasks:kanban_update", args=[self.task1.pk]),
+            {"status": "in_progress"},
+        )
+        self.assertEqual(resp.status_code, 204)
+        self.task1.refresh_from_db()
+        self.assertEqual(self.task1.status, "in_progress")
+
+    def test_kanban_update_complete_sets_completed_at(self):
+        resp = self.client.post(
+            reverse("tasks:kanban_update", args=[self.task1.pk]),
+            {"status": "complete"},
+        )
+        self.assertEqual(resp.status_code, 204)
+        self.task1.refresh_from_db()
+        self.assertEqual(self.task1.status, "complete")
+        self.assertIsNotNone(self.task1.completed_at)
+
+    def test_kanban_update_invalid_status(self):
+        resp = self.client.post(
+            reverse("tasks:kanban_update", args=[self.task1.pk]),
+            {"status": "invalid"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_kanban_update_get_not_allowed(self):
+        resp = self.client.get(
+            reverse("tasks:kanban_update", args=[self.task1.pk])
+        )
+        self.assertEqual(resp.status_code, 405)
+
+    def test_table_view_default(self):
+        resp = self.client.get(reverse("tasks:list"))
+        self.assertContains(resp, "task-table-body")
+        self.assertNotContains(resp, "kanban-board")
+
+
+class InlineUpdateTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.task = Task.objects.create(
+            title="Inline Task",
+            status="not_started",
+            priority="medium",
+            due_date=timezone.localdate(),
+        )
+
+    def test_inline_update_status(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "status", "value": "in_progress"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "in_progress")
+
+    def test_inline_update_status_complete_sets_completed_at(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "status", "value": "complete"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "complete")
+        self.assertIsNotNone(self.task.completed_at)
+
+    def test_inline_update_priority(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "priority", "value": "high"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.priority, "high")
+
+    def test_inline_update_due_date(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "due_date", "value": "2026-06-15"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        from datetime import date
+        self.assertEqual(self.task.due_date, date(2026, 6, 15))
+
+    def test_inline_update_due_date_clear(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "due_date", "value": ""},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertIsNone(self.task.due_date)
+
+    def test_inline_update_invalid_field(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "title", "value": "hacked"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_update_invalid_status_value(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "status", "value": "invalid"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_update_invalid_date(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "due_date", "value": "not-a-date"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_inline_update_get_not_allowed(self):
+        resp = self.client.get(
+            reverse("tasks:inline_update", args=[self.task.pk])
+        )
+        self.assertEqual(resp.status_code, 405)
+
+    def test_inline_update_returns_row_partial(self):
+        resp = self.client.post(
+            reverse("tasks:inline_update", args=[self.task.pk]),
+            {"field": "status", "value": "waiting"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn(f"task-row-{self.task.pk}", content)
+
+    def test_toggle_complete_returns_row_for_table(self):
+        resp = self.client.post(
+            reverse("tasks:toggle_complete", args=[self.task.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertIn(f"task-row-{self.task.pk}", content)
+
+    def test_toggle_complete_returns_badge_for_detail(self):
+        resp = self.client.post(
+            reverse("tasks:toggle_complete", args=[self.task.pk]),
+            {"context": "detail"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        content = resp.content.decode()
+        self.assertNotIn(f"task-row-{self.task.pk}", content)
+        self.assertIn("rounded-full", content)

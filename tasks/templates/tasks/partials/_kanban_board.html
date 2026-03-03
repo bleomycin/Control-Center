@@ -1,0 +1,21 @@
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" id="kanban-board">
+    {% for col in kanban_columns %}
+    <div>
+        <div class="flex items-center justify-between mb-2 px-1">
+            <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">{{ col.label }}</h3>
+            <span class="text-xs px-1.5 py-0.5 rounded-full bg-gray-700 text-gray-400">{{ col.tasks|length }}</span>
+        </div>
+        <div class="border-t-2 {{ col.border_color }} rounded-lg bg-gray-800/50 p-2 min-h-[200px]">
+            <div id="kanban-{{ col.status }}" class="kanban-column space-y-2 min-h-[180px]" data-status="{{ col.status }}">
+                {% for task in col.tasks %}
+                {% include "tasks/partials/_kanban_card.html" %}
+                {% empty %}
+                <div class="kanban-empty border-2 border-dashed border-gray-700 rounded-lg p-4 text-center text-xs text-gray-500">
+                    Drop tasks here
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
