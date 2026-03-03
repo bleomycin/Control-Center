@@ -114,7 +114,7 @@ def check_upcoming_reminders():
 
 
 def check_stale_followups():
-    """Daily: email for follow-ups with no response received >3 days."""
+    """Daily: email for follow-ups past their per-follow-up reminder window."""
     ctx = _get_email_context()
     if ctx is None:
         return "Notifications disabled."
@@ -122,12 +122,15 @@ def check_stale_followups():
     from tasks.models import FollowUp
 
     now = timezone.now()
-    stale = FollowUp.objects.filter(
+    pending = FollowUp.objects.filter(
         response_received=False,
-        outreach_date__lt=now - timedelta(days=3),
+    ).exclude(
+        task__status="complete",
     ).select_related("task", "stakeholder")
 
-    if not stale.exists():
+    stale = [fu for fu in pending if fu.is_stale]
+
+    if not stale:
         return "No stale follow-ups."
 
     from dashboard.choices import get_choice_label
@@ -137,13 +140,14 @@ def check_stale_followups():
         days = (now - fu.outreach_date).days
         lines.append(
             f"  - {fu.stakeholder.name} re: {fu.task.title} "
-            f"({get_choice_label('contact_method', fu.method)}, {days} day(s) ago)"
+            f"({get_choice_label('contact_method', fu.method)}, {days} day(s) ago, "
+            f"remind after {fu.follow_up_days})"
         )
 
-    body = f"You have {stale.count()} stale follow-up(s) with no response:\n\n" + "\n".join(lines)
+    body = f"You have {len(stale)} stale follow-up(s) with no response:\n\n" + "\n".join(lines)
 
     send_mail(
-        subject=f"[Control Center] {stale.count()} Stale Follow-up(s)",
+        subject=f"[Control Center] {len(stale)} Stale Follow-up(s)",
         message=body,
         from_email=ctx["from_email"],
         recipient_list=[ctx["admin_email"]],
@@ -158,4 +162,4 @@ def check_stale_followups():
             link=fu.get_absolute_url(),
         )
 
-    return f"Sent stale follow-up alert for {stale.count()} item(s)."
+    return f"Sent stale follow-up alert for {len(stale)} item(s)."
