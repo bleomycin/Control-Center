@@ -3,7 +3,7 @@ from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from assets.models import (AircraftOwner, InsurancePolicy, InvestmentParticipant,
                            LoanParty, PolicyHolder, PropertyOwnership, VehicleOwner)
-from .models import Stakeholder, StakeholderTab, ContactLog
+from .models import Relationship, Stakeholder, StakeholderTab, ContactLog
 
 
 class StakeholderForm(TailwindFormMixin, forms.ModelForm):
@@ -140,3 +140,23 @@ class StakeholderPolicyForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "notes": forms.Textarea(attrs={"rows": 2}),
         }
+
+
+class StakeholderRelationshipForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = Relationship
+        fields = ["to_stakeholder", "relationship_type", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 2}),
+        }
+        labels = {
+            "to_stakeholder": "Stakeholder",
+        }
+
+    def validate_unique(self):
+        exclude = self._get_validation_exclusions()
+        exclude.discard("from_stakeholder")
+        try:
+            self.instance.validate_unique(exclude=exclude)
+        except forms.ValidationError as e:
+            self._update_errors(e)

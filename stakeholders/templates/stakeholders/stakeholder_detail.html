@@ -182,28 +182,16 @@
 
     <!-- Tab Content -->
     <div class="tab-content" id="tab-stakeholders">
-        <div class="divide-y divide-gray-700">
-            {% for rel in relationships_from %}
-            <a href="{{ rel.to_stakeholder.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <div>
-                    <span class="text-sm text-gray-200">{{ rel.to_stakeholder.name }}</span>
-                    <span class="text-xs text-gray-400 ml-2">{{ rel.relationship_type }}</span>
-                </div>
-                <span class="text-xs text-gray-500">→</span>
-            </a>
-            {% endfor %}
-            {% for rel in relationships_to %}
-            <a href="{{ rel.from_stakeholder.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50">
-                <div>
-                    <span class="text-sm text-gray-200">{{ rel.from_stakeholder.name }}</span>
-                    <span class="text-xs text-gray-400 ml-2">{{ rel.relationship_type }}</span>
-                </div>
-                <span class="text-xs text-gray-500">←</span>
-            </a>
-            {% endfor %}
-            {% if not relationships_from and not relationships_to %}
-            <p class="px-4 py-8 text-sm text-gray-500 text-center">No stakeholder relationships</p>
-            {% endif %}
+        <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
+            <span class="text-xs text-gray-400">Relationships with other stakeholders</span>
+            <button hx-get="{% url 'stakeholders:relationship_add' stakeholder.pk %}"
+                    hx-target="#sh-relationship-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Relationship</button>
+        </div>
+        <div id="sh-relationship-form-container"></div>
+        <div id="sh-relationship-list">
+            {% include "stakeholders/partials/_sh_relationship_list.html" %}
         </div>
     </div>
 
