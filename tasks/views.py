@@ -126,6 +126,8 @@ class TaskListView(ListView):
                 )).order_by(f"{direction}_status_order")
             else:
                 qs = qs.order_by(f"{direction}{sort}")
+        else:
+            qs = qs.order_by("due_date", "-priority", "pk")
         return qs
 
     def get_paginate_by(self, queryset):
