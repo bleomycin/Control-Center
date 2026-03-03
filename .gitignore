@@ -21,6 +21,9 @@ backups/
 # Media uploads
 media/
 
+# Docker persistent data
+persist/
+
 # IDE
 .vscode/
 .idea/
