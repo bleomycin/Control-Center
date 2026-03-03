@@ -62,18 +62,37 @@ class StakeholderDetailView(DetailView):
     context_object_name = "stakeholder"
 
     def get_context_data(self, **kwargs):
+        from cashflow.models import CashFlowEntry
         ctx = super().get_context_data(**kwargs)
         obj = self.object
         ctx["contact_logs"] = obj.contact_logs.all()[:10]
         ctx["contact_log_form"] = ContactLogForm()
-        ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
-        ctx["notes"] = obj.notes.all()[:5]
-        ctx["legal_matters"] = obj.legal_matters.all()[:5]
-        ctx["properties"] = obj.properties.all()[:5]
-        ctx["investments"] = obj.investments.all()[:5]
-        ctx["loans"] = obj.loans_as_lender.all()[:5]
+
+        # All related entities (no limit for tabs view)
+        ctx["all_tasks"] = obj.tasks.all()
+        ctx["all_notes"] = obj.notes.all()
+        ctx["all_legal_matters"] = obj.legal_matters.all()
+        ctx["all_properties"] = obj.properties.all()
+        ctx["all_investments"] = obj.investments.all()
+        ctx["all_loans"] = obj.loans_as_lender.all()
+        ctx["all_cashflow"] = CashFlowEntry.objects.filter(related_stakeholder=obj)
+
+        # Relationships
         ctx["relationships_from"] = obj.relationships_from.select_related("to_stakeholder").all()
         ctx["relationships_to"] = obj.relationships_to.select_related("from_stakeholder").all()
+
+        # Counts for tab badges
+        ctx["counts"] = {
+            "stakeholders": ctx["relationships_from"].count() + ctx["relationships_to"].count(),
+            "properties": ctx["all_properties"].count(),
+            "investments": ctx["all_investments"].count(),
+            "loans": ctx["all_loans"].count(),
+            "legal_matters": ctx["all_legal_matters"].count(),
+            "tasks": ctx["all_tasks"].count(),
+            "notes": ctx["all_notes"].count(),
+            "cashflow": ctx["all_cashflow"].count(),
+        }
+
         return ctx
 
 
@@ -182,43 +201,93 @@ def contact_log_delete(request, pk):
 
 
 def relationship_graph_data(request, pk):
-    """JSON endpoint for Cytoscape.js relationship graph."""
+    """JSON endpoint for Cytoscape.js relationship graph - shows all connected entities."""
+    from assets.models import RealEstate, Investment, Loan
+    from legal.models import LegalMatter
+    from tasks.models import Task
+    from cashflow.models import CashFlowEntry
+
     center = get_object_or_404(Stakeholder, pk=pk)
     nodes = {}
     edges = []
 
-    def add_node(s, is_center=False):
-        if s.pk not in nodes:
-            nodes[s.pk] = {
-                "id": str(s.pk),
-                "name": s.name,
-                "type": get_choice_label("entity_type", s.entity_type),
-                "url": s.get_absolute_url(),
+    def add_node(entity_id, name, entity_type, shape, url, is_center=False):
+        """Add a node to the graph with type-specific styling."""
+        if entity_id not in nodes:
+            nodes[entity_id] = {
+                "id": entity_id,
+                "name": name,
+                "entity_type": entity_type,
+                "shape": shape,
+                "url": url,
                 "is_center": is_center,
             }
 
-    add_node(center, is_center=True)
+    # Center stakeholder
+    add_node(f"s-{center.pk}", center.name, get_choice_label("entity_type", center.entity_type),
+             "ellipse", center.get_absolute_url(), is_center=True)
 
-    # Direct relationships (1st degree)
-    connected_ids = set()
+    # Connected stakeholders (1st degree relationships)
+    connected_stakeholder_ids = set()
     for rel in Relationship.objects.filter(from_stakeholder=center).select_related("to_stakeholder"):
-        add_node(rel.to_stakeholder)
-        connected_ids.add(rel.to_stakeholder.pk)
-        edges.append({"source": str(center.pk), "target": str(rel.to_stakeholder.pk), "label": rel.relationship_type})
-    for rel in Relationship.objects.filter(to_stakeholder=center).select_related("from_stakeholder"):
-        add_node(rel.from_stakeholder)
-        connected_ids.add(rel.from_stakeholder.pk)
-        edges.append({"source": str(rel.from_stakeholder.pk), "target": str(center.pk), "label": rel.relationship_type})
+        s = rel.to_stakeholder
+        add_node(f"s-{s.pk}", s.name, get_choice_label("entity_type", s.entity_type),
+                 "ellipse", s.get_absolute_url())
+        connected_stakeholder_ids.add(s.pk)
+        edges.append({"source": f"s-{center.pk}", "target": f"s-{s.pk}", "label": rel.relationship_type})
 
-    # 2nd degree relationships (between connected stakeholders)
-    if connected_ids:
+    for rel in Relationship.objects.filter(to_stakeholder=center).select_related("from_stakeholder"):
+        s = rel.from_stakeholder
+        add_node(f"s-{s.pk}", s.name, get_choice_label("entity_type", s.entity_type),
+                 "ellipse", s.get_absolute_url())
+        connected_stakeholder_ids.add(s.pk)
+        edges.append({"source": f"s-{s.pk}", "target": f"s-{center.pk}", "label": rel.relationship_type})
+
+    # 2nd degree stakeholder relationships (between connected stakeholders)
+    if connected_stakeholder_ids:
         for rel in Relationship.objects.filter(
-            from_stakeholder_id__in=connected_ids,
-            to_stakeholder_id__in=connected_ids,
+            from_stakeholder_id__in=connected_stakeholder_ids,
+            to_stakeholder_id__in=connected_stakeholder_ids,
         ).select_related("from_stakeholder", "to_stakeholder"):
-            add_node(rel.from_stakeholder)
-            add_node(rel.to_stakeholder)
-            edges.append({"source": str(rel.from_stakeholder.pk), "target": str(rel.to_stakeholder.pk), "label": rel.relationship_type})
+            add_node(f"s-{rel.from_stakeholder.pk}", rel.from_stakeholder.name,
+                     get_choice_label("entity_type", rel.from_stakeholder.entity_type),
+                     "ellipse", rel.from_stakeholder.get_absolute_url())
+            add_node(f"s-{rel.to_stakeholder.pk}", rel.to_stakeholder.name,
+                     get_choice_label("entity_type", rel.to_stakeholder.entity_type),
+                     "ellipse", rel.to_stakeholder.get_absolute_url())
+            edges.append({"source": f"s-{rel.from_stakeholder.pk}",
+                         "target": f"s-{rel.to_stakeholder.pk}", "label": rel.relationship_type})
+
+    # Properties
+    for prop in center.properties.all():
+        add_node(f"p-{prop.pk}", prop.name, "Property", "roundrectangle", prop.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"p-{prop.pk}", "label": "owns"})
+
+    # Investments
+    for inv in center.investments.all():
+        add_node(f"i-{inv.pk}", inv.name, "Investment", "diamond", inv.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"i-{inv.pk}", "label": "invests"})
+
+    # Loans (as lender)
+    for loan in center.loans_as_lender.all():
+        add_node(f"l-{loan.pk}", loan.name, "Loan", "triangle", loan.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"l-{loan.pk}", "label": "lender"})
+
+    # Legal matters (as attorney or related party)
+    for matter in center.legal_matters.all():
+        add_node(f"m-{matter.pk}", matter.title, "Legal Matter", "hexagon", matter.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"m-{matter.pk}", "label": "involved"})
+
+    for matter in center.legal_matters_as_attorney.all():
+        node_id = f"m-{matter.pk}"
+        if node_id not in nodes:
+            add_node(node_id, matter.title, "Legal Matter", "hexagon", matter.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": node_id, "label": "attorney"})
+
+    # High-priority active tasks
+    for task in center.tasks.filter(priority__in=["critical", "high"]).exclude(status="complete")[:5]:
+        add_node(f"t-{task.pk}", task.title, "Task", "star", task.get_absolute_url())
+        edges.append({"source": f"s-{center.pk}", "target": f"t-{task.pk}", "label": task.get_priority_display()})
 
     return JsonResponse({"nodes": list(nodes.values()), "edges": edges})
 
