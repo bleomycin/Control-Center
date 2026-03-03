@@ -382,7 +382,7 @@ restart_container() {
 
 # ─── Health check ─────────────────────────────────────────────────────────────
 
-_get_container_url() {
+_get_container_ip() {
     # Get the container's internal IP via docker inspect so the health check
     # works even without host port mapping (e.g., behind Caddy reverse proxy).
     local cid
@@ -393,12 +393,21 @@ _get_container_url() {
     fi
     local ip
     ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$cid" 2>/dev/null)
-    if [[ -n "$ip" ]]; then
-        echo "http://${ip}:${APP_PORT}/"
-    else
-        # Fallback to localhost if inspect fails
-        echo "http://localhost:${APP_PORT}/"
+    echo "${ip:-localhost}"
+}
+
+_get_allowed_host() {
+    # Read first ALLOWED_HOSTS value from .env for the Host header.
+    # Django returns 400 if the Host header doesn't match ALLOWED_HOSTS.
+    if [[ -f .env ]]; then
+        local hosts
+        hosts=$(grep -E '^ALLOWED_HOSTS=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'" | cut -d, -f1)
+        if [[ -n "$hosts" ]]; then
+            echo "$hosts"
+            return
+        fi
     fi
+    echo "localhost"
 }
 
 health_check() {
@@ -409,13 +418,15 @@ health_check() {
         return 0
     fi
 
+    local container_ip allowed_host
+    container_ip=$(_get_container_ip)
+    allowed_host=$(_get_allowed_host)
+
     local elapsed=0
     while [[ $elapsed -lt $HEALTH_TIMEOUT ]]; do
-        local url
-        url=$(_get_container_url)
         local http_code
-        if [[ -n "$url" ]]; then
-            http_code=$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+        if [[ -n "$container_ip" ]]; then
+            http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${allowed_host}" "http://${container_ip}:${APP_PORT}/" 2>/dev/null || echo "000")
         else
             http_code="000"
         fi
@@ -494,13 +505,14 @@ rollback() {
 
     # Verify rollback
     log "Verifying rollback..."
+    local container_ip allowed_host
+    container_ip=$(_get_container_ip)
+    allowed_host=$(_get_allowed_host)
     local elapsed=0
     while [[ $elapsed -lt 30 ]]; do
-        local url
-        url=$(_get_container_url)
         local http_code
-        if [[ -n "$url" ]]; then
-            http_code=$(curl -s -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+        if [[ -n "$container_ip" ]]; then
+            http_code=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: ${allowed_host}" "http://${container_ip}:${APP_PORT}/" 2>/dev/null || echo "000")
         else
             http_code="000"
         fi
