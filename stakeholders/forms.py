@@ -1,5 +1,6 @@
 from django import forms
 from legacy.forms import TailwindFormMixin
+from dashboard.choices import get_choices
 from .models import Stakeholder, ContactLog
 
 
@@ -12,6 +13,10 @@ class StakeholderForm(TailwindFormMixin, forms.ModelForm):
             "notes_text": forms.Textarea(attrs={"rows": 3}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["entity_type"].widget = forms.Select(choices=get_choices("entity_type"))
+
 
 class ContactLogForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
@@ -22,3 +27,7 @@ class ContactLogForm(TailwindFormMixin, forms.ModelForm):
             "follow_up_date": forms.DateInput(attrs={"type": "date"}),
             "summary": forms.Textarea(attrs={"rows": 3}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["method"].widget = forms.Select(choices=get_choices("contact_method"))

@@ -13,7 +13,8 @@ from notes.models import Note
 from stakeholders.models import ContactLog, Stakeholder
 from tasks.models import FollowUp, Task
 
-from .models import Notification
+from .choices import get_choice_label, get_choices, invalidate_choice_cache
+from .models import ChoiceOption, Notification
 from .views import _parse_date, get_activity_timeline
 
 
@@ -321,3 +322,177 @@ class NotificationTests(TestCase):
         n2 = Notification.objects.create(message="Second")
         notifications = list(Notification.objects.all())
         self.assertEqual(notifications[0], n2)  # newest first
+
+
+class ChoiceOptionModelTests(TestCase):
+    def test_seed_data_exists(self):
+        """Data migration should have seeded all 4 categories."""
+        for cat in ("entity_type", "contact_method", "matter_type", "note_type"):
+            self.assertTrue(
+                ChoiceOption.objects.filter(category=cat).exists(),
+                f"No seed data for category: {cat}",
+            )
+
+    def test_entity_type_has_expected_values(self):
+        values = set(ChoiceOption.objects.filter(category="entity_type").values_list("value", flat=True))
+        for v in ("advisor", "business_partner", "lender", "contact", "professional", "attorney", "other"):
+            self.assertIn(v, values)
+
+    def test_str(self):
+        opt = ChoiceOption.objects.filter(category="entity_type", value="advisor").first()
+        self.assertIn("Advisor", str(opt))
+
+    def test_unique_together(self):
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            ChoiceOption.objects.create(category="entity_type", value="advisor", label="Duplicate")
+
+
+class ChoiceUtilityTests(TestCase):
+    def test_get_choices_returns_tuples(self):
+        invalidate_choice_cache()
+        choices = get_choices("entity_type")
+        self.assertIsInstance(choices, list)
+        self.assertTrue(len(choices) > 0)
+        self.assertEqual(len(choices[0]), 2)  # (value, label) tuple
+
+    def test_get_choices_excludes_inactive(self):
+        invalidate_choice_cache()
+        opt = ChoiceOption.objects.get(category="entity_type", value="other")
+        opt.is_active = False
+        opt.save()
+        invalidate_choice_cache()
+        choices = get_choices("entity_type")
+        values = [v for v, _ in choices]
+        self.assertNotIn("other", values)
+        # Restore
+        opt.is_active = True
+        opt.save()
+        invalidate_choice_cache()
+
+    def test_get_choices_include_inactive(self):
+        invalidate_choice_cache()
+        opt = ChoiceOption.objects.get(category="entity_type", value="other")
+        opt.is_active = False
+        opt.save()
+        invalidate_choice_cache()
+        choices = get_choices("entity_type", include_inactive=True)
+        values = [v for v, _ in choices]
+        self.assertIn("other", values)
+        # Restore
+        opt.is_active = True
+        opt.save()
+        invalidate_choice_cache()
+
+    def test_get_choice_label_found(self):
+        invalidate_choice_cache()
+        label = get_choice_label("entity_type", "advisor")
+        self.assertEqual(label, "Advisor")
+
+    def test_get_choice_label_fallback(self):
+        invalidate_choice_cache()
+        label = get_choice_label("entity_type", "nonexistent_value")
+        self.assertEqual(label, "nonexistent_value")
+
+    def test_get_choice_label_empty(self):
+        self.assertEqual(get_choice_label("entity_type", ""), "")
+        self.assertIsNone(get_choice_label("entity_type", None))
+
+
+class ChoiceSettingsViewTests(TestCase):
+    def test_settings_page_loads(self):
+        resp = self.client.get(reverse("dashboard:choice_settings"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Stakeholder Type")
+        self.assertContains(resp, "Contact Method")
+        self.assertContains(resp, "Legal Matter Type")
+        self.assertContains(resp, "Note Type")
+
+    def test_add_option(self):
+        invalidate_choice_cache()
+        resp = self.client.post(
+            reverse("dashboard:choice_add", args=["entity_type"]),
+            {"label": "Vendor"},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(ChoiceOption.objects.filter(category="entity_type", value="vendor").exists())
+
+    def test_add_option_auto_value(self):
+        invalidate_choice_cache()
+        self.client.post(
+            reverse("dashboard:choice_add", args=["entity_type"]),
+            {"label": "Real Estate Agent"},
+        )
+        self.assertTrue(ChoiceOption.objects.filter(category="entity_type", value="real_estate_agent").exists())
+
+    def test_edit_option(self):
+        invalidate_choice_cache()
+        opt = ChoiceOption.objects.get(category="entity_type", value="advisor")
+        resp = self.client.post(
+            reverse("dashboard:choice_edit", args=[opt.pk]),
+            {"label": "Financial Advisor", "value": "advisor"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        opt.refresh_from_db()
+        self.assertEqual(opt.label, "Financial Advisor")
+
+    def test_toggle_deactivate(self):
+        invalidate_choice_cache()
+        opt = ChoiceOption.objects.get(category="entity_type", value="other")
+        self.assertTrue(opt.is_active)
+        self.client.post(reverse("dashboard:choice_toggle", args=[opt.pk]))
+        opt.refresh_from_db()
+        self.assertFalse(opt.is_active)
+        # Re-activate
+        self.client.post(reverse("dashboard:choice_toggle", args=[opt.pk]))
+        opt.refresh_from_db()
+        self.assertTrue(opt.is_active)
+
+    def test_move_reorder(self):
+        invalidate_choice_cache()
+        opts = list(ChoiceOption.objects.filter(category="entity_type"))
+        if len(opts) >= 2:
+            second = opts[1]
+            original_order = second.sort_order
+            self.client.post(reverse("dashboard:choice_move", args=[second.pk, "up"]))
+            second.refresh_from_db()
+            self.assertNotEqual(second.sort_order, original_order)
+
+    def test_inactive_hidden_from_form_choices(self):
+        invalidate_choice_cache()
+        opt = ChoiceOption.objects.get(category="entity_type", value="other")
+        opt.is_active = False
+        opt.save()
+        invalidate_choice_cache()
+        choices = get_choices("entity_type")
+        values = [v for v, _ in choices]
+        self.assertNotIn("other", values)
+        # Restore
+        opt.is_active = True
+        opt.save()
+        invalidate_choice_cache()
+
+    def test_existing_records_display_inactive_label(self):
+        """Deactivated options should still show labels for existing records."""
+        invalidate_choice_cache()
+        s = Stakeholder.objects.create(name="Test", entity_type="other")
+        opt = ChoiceOption.objects.get(category="entity_type", value="other")
+        opt.is_active = False
+        opt.save()
+        invalidate_choice_cache()
+        label = get_choice_label("entity_type", "other")
+        self.assertEqual(label, "Other")
+        # Restore
+        opt.is_active = True
+        opt.save()
+        invalidate_choice_cache()
+
+
+class ChoiceTemplateFilterTests(TestCase):
+    def test_choice_label_filter_in_template(self):
+        invalidate_choice_cache()
+        s = Stakeholder.objects.create(name="Filter Test", entity_type="advisor")
+        resp = self.client.get(reverse("stakeholders:detail", args=[s.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Advisor")

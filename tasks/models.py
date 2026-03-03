@@ -67,7 +67,7 @@ class FollowUp(models.Model):
         "stakeholders.Stakeholder", on_delete=models.CASCADE, related_name="follow_ups",
     )
     outreach_date = models.DateTimeField()
-    method = models.CharField(max_length=10, choices=METHOD_CHOICES)
+    method = models.CharField(max_length=30)
     response_received = models.BooleanField(default=False)
     response_date = models.DateTimeField(null=True, blank=True)
     notes_text = models.TextField(blank=True)

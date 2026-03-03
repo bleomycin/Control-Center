@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import EmailSettings, Notification
+from .models import ChoiceOption, EmailSettings, Notification
+
+
+@admin.register(ChoiceOption)
+class ChoiceOptionAdmin(admin.ModelAdmin):
+    list_display = ("label", "value", "category", "sort_order", "is_active")
+    list_filter = ("category", "is_active")
+    list_editable = ("sort_order", "is_active")
+    ordering = ("category", "sort_order")
 
 
 @admin.register(Notification)

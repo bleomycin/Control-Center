@@ -5,10 +5,11 @@ from django.contrib import messages
 from django.core.mail import send_mail
 from django.db.models import Q, Sum
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from dashboard.choices import get_choice_label
 from assets.models import Investment, Loan, RealEstate
 from cashflow.models import CashFlowEntry
 from legal.models import Evidence, LegalMatter
@@ -207,7 +208,7 @@ def get_activity_timeline(limit=50):
             "type": "contact",
             "color": "blue",
             "icon": "phone",
-            "title": f"{log.get_method_display()} with {log.stakeholder.name}",
+            "title": f"{get_choice_label('contact_method', log.method)} with {log.stakeholder.name}",
             "summary": log.summary[:120],
             "url": log.get_absolute_url(),
         })
@@ -458,3 +459,101 @@ def notifications_mark_read(request):
     from dashboard.models import Notification
     Notification.objects.filter(is_read=False).update(is_read=True)
     return render(request, "dashboard/partials/_notification_badge.html", {"unread_count": 0})
+
+
+def choice_settings(request):
+    from dashboard.models import CATEGORY_CHOICES, ChoiceOption
+    categories = []
+    for cat_value, cat_label in CATEGORY_CHOICES:
+        options = ChoiceOption.objects.filter(category=cat_value)
+        categories.append({
+            "key": cat_value,
+            "label": cat_label,
+            "options": options,
+        })
+    return render(request, "dashboard/choice_settings.html", {"categories": categories})
+
+
+def choice_add(request, category):
+    from dashboard.choices import invalidate_choice_cache
+    from dashboard.forms import ChoiceOptionForm
+    from dashboard.models import CATEGORY_CHOICES, ChoiceOption
+
+    if request.method == "POST":
+        form = ChoiceOptionForm(request.POST, category=category)
+        if form.is_valid():
+            form.save()
+            invalidate_choice_cache()
+            options = ChoiceOption.objects.filter(category=category)
+            cat_label = dict(CATEGORY_CHOICES).get(category, category)
+            return render(request, "dashboard/partials/_choice_category.html", {
+                "cat": {"key": category, "label": cat_label, "options": options},
+            })
+    else:
+        form = ChoiceOptionForm(category=category)
+    return render(request, "dashboard/partials/_choice_add_form.html", {
+        "form": form, "category": category,
+    })
+
+
+def choice_edit(request, pk):
+    from dashboard.choices import invalidate_choice_cache
+    from dashboard.forms import ChoiceOptionForm
+    from dashboard.models import CATEGORY_CHOICES, ChoiceOption
+
+    option = get_object_or_404(ChoiceOption, pk=pk)
+    if request.method == "POST":
+        form = ChoiceOptionForm(request.POST, instance=option, category=option.category)
+        if form.is_valid():
+            form.save()
+            invalidate_choice_cache()
+            options = ChoiceOption.objects.filter(category=option.category)
+            cat_label = dict(CATEGORY_CHOICES).get(option.category, option.category)
+            return render(request, "dashboard/partials/_choice_category.html", {
+                "cat": {"key": option.category, "label": cat_label, "options": options},
+            })
+    else:
+        form = ChoiceOptionForm(instance=option, category=option.category)
+    return render(request, "dashboard/partials/_choice_edit_form.html", {
+        "form": form, "option": option,
+    })
+
+
+@require_POST
+def choice_toggle(request, pk):
+    from dashboard.choices import invalidate_choice_cache
+    from dashboard.models import CATEGORY_CHOICES, ChoiceOption
+
+    option = get_object_or_404(ChoiceOption, pk=pk)
+    option.is_active = not option.is_active
+    option.save()
+    invalidate_choice_cache()
+    options = ChoiceOption.objects.filter(category=option.category)
+    cat_label = dict(CATEGORY_CHOICES).get(option.category, option.category)
+    return render(request, "dashboard/partials/_choice_category.html", {
+        "cat": {"key": option.category, "label": cat_label, "options": options},
+    })
+
+
+@require_POST
+def choice_move(request, pk, direction):
+    from dashboard.choices import invalidate_choice_cache
+    from dashboard.models import CATEGORY_CHOICES, ChoiceOption
+
+    option = get_object_or_404(ChoiceOption, pk=pk)
+    siblings = list(ChoiceOption.objects.filter(category=option.category))
+    idx = next((i for i, o in enumerate(siblings) if o.pk == option.pk), None)
+    if idx is not None:
+        swap_idx = idx - 1 if direction == "up" else idx + 1
+        if 0 <= swap_idx < len(siblings):
+            siblings[idx].sort_order, siblings[swap_idx].sort_order = (
+                siblings[swap_idx].sort_order, siblings[idx].sort_order,
+            )
+            siblings[idx].save()
+            siblings[swap_idx].save()
+            invalidate_choice_cache()
+    options = ChoiceOption.objects.filter(category=option.category)
+    cat_label = dict(CATEGORY_CHOICES).get(option.category, option.category)
+    return render(request, "dashboard/partials/_choice_category.html", {
+        "cat": {"key": option.category, "label": cat_label, "options": options},
+    })

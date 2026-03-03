@@ -1,13 +1,13 @@
-{% for s in stakeholders %}
+{% load choice_labels %}{% for s in stakeholders %}
 <tr class="hover:bg-gray-700/50 transition-colors">
     <td class="px-4 py-3 w-8">
         <input type="checkbox" name="selected" value="{{ s.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
     </td>
     <td class="px-4 py-3">
         <a href="{{ s.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ s.name }}</a>
-        <p class="text-xs text-gray-400 sm:hidden">{{ s.get_entity_type_display }}</p>
+        <p class="text-xs text-gray-400 sm:hidden">{{ s.entity_type|choice_label:"entity_type" }}</p>
     </td>
-    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ s.get_entity_type_display }}</td>
+    <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">{{ s.entity_type|choice_label:"entity_type" }}</td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden md:table-cell">{{ s.organization|default:"-" }}</td>
     <td class="px-4 py-3 text-sm hidden lg:table-cell">
         {% if s.trust_rating %}
