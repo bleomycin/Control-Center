@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}Activity Timeline - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">
@@ -6,7 +7,59 @@
     <p class="text-sm text-gray-400 mt-1">All activity across modules in chronological order</p>
 </div>
 
-<div class="max-w-3xl">
-    {% include "dashboard/partials/_timeline_items.html" %}
+<!-- Filter Bar -->
+<form id="filter-form" hx-get="{% url 'dashboard:timeline' %}" hx-target="#timeline-content" hx-swap="innerHTML" hx-push-url="true"
+      class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4">
+    <!-- Type checkboxes -->
+    <div class="flex flex-wrap items-center gap-3 mb-3">
+        <span class="text-xs font-medium text-gray-400 uppercase tracking-wide mr-1">Type</span>
+        {% for t in all_types %}
+        <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" name="type" value="{{ t }}"
+                   {% if t in selected_types or not selected_types %}checked{% endif %}
+                   onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                   class="rounded border-gray-600 bg-gray-700 h-3.5 w-3.5
+                   {% if t == 'contact' %}text-blue-500 focus:ring-blue-500
+                   {% elif t == 'note' %}text-indigo-500 focus:ring-indigo-500
+                   {% elif t == 'task' %}text-yellow-500 focus:ring-yellow-500
+                   {% elif t == 'followup' %}text-amber-500 focus:ring-amber-500
+                   {% elif t == 'cashflow' %}text-green-500 focus:ring-green-500
+                   {% elif t == 'evidence' %}text-purple-500 focus:ring-purple-500
+                   {% endif %}">
+            <span class="text-xs text-gray-300 capitalize">{{ t }}</span>
+        </label>
+        {% endfor %}
+    </div>
+    <!-- Date range + stakeholder -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+            <label class="block text-xs font-medium text-gray-400 mb-1">From</label>
+            <input type="date" name="date_from" value="{{ date_from }}"
+                   onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                   class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-400 mb-1">To</label>
+            <input type="date" name="date_to" value="{{ date_to }}"
+                   onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                   class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+        </div>
+        <div>
+            <label class="block text-xs font-medium text-gray-400 mb-1">Stakeholder</label>
+            <select name="stakeholder"
+                    onchange="document.getElementById('filter-form').dispatchEvent(new Event('submit', {cancelable: true}))"
+                    class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                <option value="">All stakeholders</option>
+                {% for s in stakeholders %}
+                <option value="{{ s.pk }}" {% if stakeholder_id == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+</form>
+
+<!-- Content area (HTMX target) -->
+<div id="timeline-content">
+    {% include "dashboard/partials/_timeline_content.html" %}
 </div>
 {% endblock %}
