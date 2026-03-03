@@ -386,14 +386,25 @@ health_check() {
     step "Health check (timeout: ${HEALTH_TIMEOUT}s)"
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "[DRY RUN] Would poll http://localhost:$APP_PORT/ for HTTP 200"
+        log "[DRY RUN] Would poll container for HTTP 200 on port $APP_PORT"
         return 0
     fi
 
     local elapsed=0
     while [[ $elapsed -lt $HEALTH_TIMEOUT ]]; do
         local http_code
-        http_code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${APP_PORT}/" 2>/dev/null || echo "000")
+        # Exec inside the container — works regardless of host port mapping
+        # (e.g., behind Caddy reverse proxy with no ports: exposed).
+        # Uses Python since python:3.12-slim has no curl.
+        http_code=$(docker compose exec -T web python -c "
+import urllib.request
+try:
+    r = urllib.request.urlopen('http://localhost:${APP_PORT}/')
+    print(r.status)
+except Exception:
+    print('000')
+" 2>/dev/null || echo "000")
+        http_code=$(echo "$http_code" | tr -d '[:space:]')
 
         if [[ "$http_code" =~ ^(200|301|302)$ ]]; then
             success "Application responding (HTTP $http_code) after ${elapsed}s"
@@ -472,7 +483,15 @@ rollback() {
     local elapsed=0
     while [[ $elapsed -lt 30 ]]; do
         local http_code
-        http_code=$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${APP_PORT}/" 2>/dev/null || echo "000")
+        http_code=$(docker compose exec -T web python -c "
+import urllib.request
+try:
+    r = urllib.request.urlopen('http://localhost:${APP_PORT}/')
+    print(r.status)
+except Exception:
+    print('000')
+" 2>/dev/null || echo "000")
+        http_code=$(echo "$http_code" | tr -d '[:space:]')
         if [[ "$http_code" =~ ^(200|301|302)$ ]]; then
             success "Rollback successful — application running on ${OLD_SHA:0:12}"
             return 0
