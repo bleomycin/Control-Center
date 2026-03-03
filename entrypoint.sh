@@ -13,20 +13,9 @@ python manage.py createsuperuser --noinput || true
 echo "Setting up notification schedules..."
 python manage.py setup_schedules
 
-# Load sample data if requested and DB is empty
+# Load sample data if requested (command has built-in idempotency guard)
 if [ "$LOAD_SAMPLE_DATA" = "true" ]; then
-    python -c "
-import django, os
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'legacy.settings')
-django.setup()
-from stakeholders.models import Stakeholder
-if not Stakeholder.objects.exists():
-    print('Loading sample data...')
-    import subprocess
-    subprocess.run(['python', 'manage.py', 'load_sample_data'], check=True)
-else:
-    print('Sample data already loaded, skipping.')
-"
+    python manage.py load_sample_data
 fi
 
 echo "Starting qcluster in background..."
