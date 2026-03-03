@@ -125,8 +125,20 @@ class BackupSettings(models.Model):
 class CalendarFeedSettings(models.Model):
     """Singleton model for calendar ICS feed configuration. Always use pk=1."""
 
+    EVENT_TYPE_DEFAULTS = {
+        "tasks": True,
+        "payments": True,
+        "followups": True,
+        "legal": True,
+        "contacts": True,
+        "appointments": True,
+        "refills": True,
+        "leases": True,
+    }
+
     enabled = models.BooleanField("Enable calendar feed", default=False)
     token = models.CharField("Feed token", max_length=64, blank=True, default="")
+    event_types = models.JSONField("Enabled event types", default=dict, blank=True)
 
     class Meta:
         verbose_name = "Calendar Feed Settings"
@@ -140,6 +152,17 @@ class CalendarFeedSettings(models.Model):
         """Return the singleton instance, creating it if needed."""
         obj, _created = cls.objects.get_or_create(pk=1)
         return obj
+
+    def get_event_types(self):
+        """Return merged event type dict (defaults + saved overrides)."""
+        merged = dict(self.EVENT_TYPE_DEFAULTS)
+        if self.event_types:
+            merged.update(self.event_types)
+        return merged
+
+    def is_type_enabled(self, event_type):
+        """Check if a specific event type is enabled."""
+        return self.get_event_types().get(event_type, True)
 
     def regenerate_token(self):
         import secrets

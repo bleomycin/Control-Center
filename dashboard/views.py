@@ -600,128 +600,131 @@ def calendar_feed(request):
     today = timezone.localdate()
     window_start = today - timedelta(days=30)
     window_end = today + timedelta(days=90)
+    types = settings.get_event_types()
 
-    # Tasks (non-meetings)
-    tasks = Task.objects.exclude(status="complete").filter(
-        due_date__isnull=False, due_date__gte=window_start, due_date__lte=window_end,
-    )
-    direction_prefixes = {"outbound": "\u2197 ", "inbound": "\u2199 "}
-    for task in tasks:
-        prefix = direction_prefixes.get(task.direction, "")
-        if task.is_meeting:
+    # Tasks & meetings
+    if types.get("tasks", True):
+        tasks = Task.objects.exclude(status="complete").filter(
+            due_date__isnull=False, due_date__gte=window_start, due_date__lte=window_end,
+        )
+        direction_prefixes = {"outbound": "\u2197 ", "inbound": "\u2199 "}
+        for task in tasks:
+            prefix = direction_prefixes.get(task.direction, "")
             ev = Event()
             ev.add("summary", f"{prefix}{task.title}")
-            if task.due_time:
+            if task.is_meeting and task.due_time:
                 ev.add("dtstart", datetime.combine(task.due_date, task.due_time))
             else:
                 ev.add("dtstart", task.due_date)
             ev.add("uid", f"task-{task.pk}@controlcenter")
             cal.add_component(ev)
-        else:
-            ev = Event()
-            ev.add("summary", f"{prefix}{task.title}")
-            ev.add("dtstart", task.due_date)
-            ev.add("uid", f"task-{task.pk}@controlcenter")
-            cal.add_component(ev)
 
     # Loan payments
-    loans = Loan.objects.filter(
-        status="active", next_payment_date__isnull=False,
-        next_payment_date__gte=window_start, next_payment_date__lte=window_end,
-    )
-    for loan in loans:
-        ev = Event()
-        title = f"${loan.monthly_payment:,.0f} — {loan.name}" if loan.monthly_payment else f"Payment: {loan.name}"
-        ev.add("summary", title)
-        ev.add("dtstart", loan.next_payment_date)
-        ev.add("uid", f"loan-{loan.pk}@controlcenter")
-        cal.add_component(ev)
+    if types.get("payments", True):
+        loans = Loan.objects.filter(
+            status="active", next_payment_date__isnull=False,
+            next_payment_date__gte=window_start, next_payment_date__lte=window_end,
+        )
+        for loan in loans:
+            ev = Event()
+            title = f"${loan.monthly_payment:,.0f} — {loan.name}" if loan.monthly_payment else f"Payment: {loan.name}"
+            ev.add("summary", title)
+            ev.add("dtstart", loan.next_payment_date)
+            ev.add("uid", f"loan-{loan.pk}@controlcenter")
+            cal.add_component(ev)
 
     # Follow-ups
-    followups = FollowUp.objects.filter(
-        response_received=False,
-    ).select_related("stakeholder")
-    for fu in followups:
-        fu_date = timezone.localdate(fu.outreach_date)
-        if fu_date < window_start or fu_date > window_end:
-            continue
-        ev = Event()
-        ev.add("summary", f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}")
-        ev.add("dtstart", fu_date)
-        ev.add("uid", f"followup-{fu.pk}@controlcenter")
-        cal.add_component(ev)
+    if types.get("followups", True):
+        followups = FollowUp.objects.filter(
+            response_received=False,
+        ).select_related("stakeholder")
+        for fu in followups:
+            fu_date = timezone.localdate(fu.outreach_date)
+            if fu_date < window_start or fu_date > window_end:
+                continue
+            ev = Event()
+            ev.add("summary", f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}")
+            ev.add("dtstart", fu_date)
+            ev.add("uid", f"followup-{fu.pk}@controlcenter")
+            cal.add_component(ev)
 
-    # Legal matters
-    matters = LegalMatter.objects.exclude(status="resolved")
-    for matter in matters:
-        if matter.filing_date and window_start <= matter.filing_date <= window_end:
-            ev = Event()
-            ev.add("summary", f"Legal: {matter.title}")
-            ev.add("dtstart", matter.filing_date)
-            ev.add("uid", f"legal-{matter.pk}@controlcenter")
-            cal.add_component(ev)
-        if matter.next_hearing_date and window_start <= matter.next_hearing_date <= window_end:
-            ev = Event()
-            ev.add("summary", f"Hearing: {matter.title}")
-            ev.add("dtstart", matter.next_hearing_date)
-            ev.add("uid", f"hearing-{matter.pk}@controlcenter")
-            cal.add_component(ev)
+    # Legal matters & hearings
+    if types.get("legal", True):
+        matters = LegalMatter.objects.exclude(status="resolved")
+        for matter in matters:
+            if matter.filing_date and window_start <= matter.filing_date <= window_end:
+                ev = Event()
+                ev.add("summary", f"Legal: {matter.title}")
+                ev.add("dtstart", matter.filing_date)
+                ev.add("uid", f"legal-{matter.pk}@controlcenter")
+                cal.add_component(ev)
+            if matter.next_hearing_date and window_start <= matter.next_hearing_date <= window_end:
+                ev = Event()
+                ev.add("summary", f"Hearing: {matter.title}")
+                ev.add("dtstart", matter.next_hearing_date)
+                ev.add("uid", f"hearing-{matter.pk}@controlcenter")
+                cal.add_component(ev)
 
     # Contact follow-ups
-    contacts = ContactLog.objects.filter(
-        follow_up_needed=True, follow_up_date__isnull=False,
-        follow_up_date__gte=window_start, follow_up_date__lte=window_end,
-    ).select_related("stakeholder")
-    for log in contacts:
-        ev = Event()
-        ev.add("summary", f"Contact: {log.stakeholder.name if log.stakeholder else 'Unknown'}")
-        ev.add("dtstart", log.follow_up_date)
-        ev.add("uid", f"contact-{log.pk}@controlcenter")
-        cal.add_component(ev)
+    if types.get("contacts", True):
+        contacts = ContactLog.objects.filter(
+            follow_up_needed=True, follow_up_date__isnull=False,
+            follow_up_date__gte=window_start, follow_up_date__lte=window_end,
+        ).select_related("stakeholder")
+        for log in contacts:
+            ev = Event()
+            ev.add("summary", f"Contact: {log.stakeholder.name if log.stakeholder else 'Unknown'}")
+            ev.add("dtstart", log.follow_up_date)
+            ev.add("uid", f"contact-{log.pk}@controlcenter")
+            cal.add_component(ev)
 
     # Healthcare appointments
-    from healthcare.models import Appointment as HcAppointment, Prescription as HcPrescription
-    hc_appts = HcAppointment.objects.exclude(
-        status__in=["completed", "cancelled"],
-    ).filter(
-        date__gte=window_start, date__lte=window_end,
-    ).select_related("provider")
-    for appt in hc_appts:
-        ev = Event()
-        ev.add("summary", appt.title)
-        if appt.time:
-            ev.add("dtstart", datetime.combine(appt.date, appt.time))
-        else:
-            ev.add("dtstart", appt.date)
-        ev.add("uid", f"appt-{appt.pk}@controlcenter")
-        cal.add_component(ev)
+    if types.get("appointments", True):
+        from healthcare.models import Appointment as HcAppointment
+        hc_appts = HcAppointment.objects.exclude(
+            status__in=["completed", "cancelled"],
+        ).filter(
+            date__gte=window_start, date__lte=window_end,
+        ).select_related("provider")
+        for appt in hc_appts:
+            ev = Event()
+            ev.add("summary", appt.title)
+            if appt.time:
+                ev.add("dtstart", datetime.combine(appt.date, appt.time))
+            else:
+                ev.add("dtstart", appt.date)
+            ev.add("uid", f"appt-{appt.pk}@controlcenter")
+            cal.add_component(ev)
 
     # Prescription refills
-    hc_refills = HcPrescription.objects.filter(
-        status="active", next_refill_date__isnull=False,
-        next_refill_date__gte=window_start, next_refill_date__lte=window_end,
-    )
-    for rx in hc_refills:
-        ev = Event()
-        ev.add("summary", f"Refill: {rx.medication_name}")
-        ev.add("dtstart", rx.next_refill_date)
-        ev.add("uid", f"refill-{rx.pk}@controlcenter")
-        cal.add_component(ev)
+    if types.get("refills", True):
+        from healthcare.models import Prescription as HcPrescription
+        hc_refills = HcPrescription.objects.filter(
+            status="active", next_refill_date__isnull=False,
+            next_refill_date__gte=window_start, next_refill_date__lte=window_end,
+        )
+        for rx in hc_refills:
+            ev = Event()
+            ev.add("summary", f"Refill: {rx.medication_name}")
+            ev.add("dtstart", rx.next_refill_date)
+            ev.add("uid", f"refill-{rx.pk}@controlcenter")
+            cal.add_component(ev)
 
     # Lease expiry
-    from assets.models import Lease
-    lease_qs = Lease.objects.filter(
-        status__in=["active", "month_to_month"],
-        end_date__isnull=False,
-        end_date__gte=window_start, end_date__lte=window_end,
-    )
-    for lease in lease_qs:
-        ev = Event()
-        title = f"${lease.monthly_rent:,.0f}/mo — {lease.name}" if lease.monthly_rent else f"Lease expires: {lease.name}"
-        ev.add("summary", title)
-        ev.add("dtstart", lease.end_date)
-        ev.add("uid", f"lease-{lease.pk}@controlcenter")
-        cal.add_component(ev)
+    if types.get("leases", True):
+        from assets.models import Lease
+        lease_qs = Lease.objects.filter(
+            status__in=["active", "month_to_month"],
+            end_date__isnull=False,
+            end_date__gte=window_start, end_date__lte=window_end,
+        )
+        for lease in lease_qs:
+            ev = Event()
+            title = f"${lease.monthly_rent:,.0f}/mo — {lease.name}" if lease.monthly_rent else f"Lease expires: {lease.name}"
+            ev.add("summary", title)
+            ev.add("dtstart", lease.end_date)
+            ev.add("uid", f"lease-{lease.pk}@controlcenter")
+            cal.add_component(ev)
 
     response = HttpResponse(cal.to_ical(), content_type="text/calendar; charset=utf-8")
     response["Content-Disposition"] = 'inline; filename="controlcenter.ics"'
@@ -742,6 +745,12 @@ def calendar_feed_settings(request):
             settings.save()
         elif action == "regenerate":
             settings.regenerate_token()
+        elif action == "update_types":
+            new_types = {}
+            for key in CalendarFeedSettings.EVENT_TYPE_DEFAULTS:
+                new_types[key] = key in request.POST.getlist("event_types")
+            settings.event_types = new_types
+            settings.save()
         return redirect("dashboard:calendar_feed_settings")
 
     feed_url = ""
@@ -749,9 +758,27 @@ def calendar_feed_settings(request):
         feed_url = request.build_absolute_uri(
             f"/calendar/feed.ics?token={settings.token}"
         )
+
+    type_labels = {
+        "tasks": "Tasks & meetings",
+        "payments": "Loan payments",
+        "followups": "Follow-ups",
+        "legal": "Legal matters & hearings",
+        "contacts": "Contact follow-ups",
+        "appointments": "Healthcare appointments",
+        "refills": "Prescription refills",
+        "leases": "Lease expiry dates",
+    }
+    current_types = settings.get_event_types()
+    event_type_choices = [
+        {"key": key, "label": type_labels[key], "checked": current_types.get(key, True)}
+        for key in CalendarFeedSettings.EVENT_TYPE_DEFAULTS
+    ]
+
     return render(request, "dashboard/calendar_feed_settings.html", {
         "settings": settings,
         "feed_url": feed_url,
+        "event_type_choices": event_type_choices,
     })
 
 

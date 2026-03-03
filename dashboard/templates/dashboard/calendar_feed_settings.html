@@ -88,20 +88,29 @@
         </div>
     </div>
 
-    <!-- What's Included -->
+    <!-- Event Types -->
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-3">Events Included</p>
-        <div class="grid grid-cols-2 gap-2 text-sm">
-            <div class="text-gray-300">Tasks &amp; meetings</div>
-            <div class="text-gray-300">Loan payments</div>
-            <div class="text-gray-300">Follow-ups</div>
-            <div class="text-gray-300">Legal matters &amp; hearings</div>
-            <div class="text-gray-300">Contact follow-ups</div>
-            <div class="text-gray-300">Healthcare appointments</div>
-            <div class="text-gray-300">Prescription refills</div>
-            <div class="text-gray-300">Lease expiry dates</div>
-        </div>
-        <p class="text-xs text-gray-500 mt-3">Shows events from the past 30 days through 90 days ahead. The feed is read-only — changes must be made in Control Center.</p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_types">
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                {% for item in event_type_choices %}
+                <label class="flex items-center gap-2 text-sm cursor-pointer py-1">
+                    <input type="checkbox" name="event_types" value="{{ item.key }}"
+                           {% if item.checked %}checked{% endif %}
+                           class="rounded border-gray-600 bg-gray-900 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
+                    <span class="text-gray-300">{{ item.label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            <div class="flex items-center justify-between">
+                <p class="text-xs text-gray-500">Past 30 days through 90 days ahead. Read-only — changes must be made in Control Center.</p>
+                <button type="submit" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">
+                    Save
+                </button>
+            </div>
+        </form>
     </div>
     {% endif %}
 </div>
