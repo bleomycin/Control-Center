@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{% if object %}Edit {{ object }}{% else %}New Task{% endif %} - Control Center{% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto">
+<div class="max-w-4xl mx-auto">
     <div class="mb-6">
         <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
             <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
@@ -41,69 +41,80 @@
         {% endif %}
         {% endfor %}
 
-        <!-- Task reminder toggle -->
-        <div class="border-t border-gray-700 pt-4 mt-4">
-            <div class="flex items-center gap-2 mb-3">
-                <input type="checkbox" id="reminder-toggle" class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-                       {% if form.reminder_date.value %}checked{% endif %}>
-                <label for="reminder-toggle" class="text-sm font-medium text-gray-300 cursor-pointer">Set a reminder for this task</label>
-            </div>
-            <div id="reminder-field" class="{% if not form.reminder_date.value %}hidden{% endif %}">
-                <label for="{{ form.reminder_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Reminder date &amp; time</label>
-                {{ form.reminder_date }}
-                {% if form.reminder_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reminder_date.errors.0 }}</p>{% endif %}
-            </div>
-        </div>
-
-        <!-- Recurring task toggle -->
-        <div class="border-t border-gray-700 pt-4 mt-4">
-            <div class="flex items-center gap-2 mb-3">
-                {{ form.is_recurring }}
-                <label for="{{ form.is_recurring.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">Recurring task</label>
-            </div>
-            <div id="recurrence-field" class="{% if not form.is_recurring.value %}hidden{% endif %}">
-                <label for="{{ form.recurrence_rule.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Repeat every</label>
-                {{ form.recurrence_rule }}
-                {% if form.recurrence_rule.errors %}<p class="mt-1 text-sm text-red-400">{{ form.recurrence_rule.errors.0 }}</p>{% endif %}
-                <p class="mt-1 text-xs text-gray-500">When completed, a new task will be created with the next due date.</p>
-            </div>
-        </div>
-
-        {% if not object %}
-        <!-- Follow-up section (create only) -->
-        <div id="fu-section-block" class="border-t border-gray-700 pt-4 mt-4">
-            <div class="flex items-center gap-2 mb-3">
-                {{ form.fu_create }}
-                <label for="{{ form.fu_create.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">
-                    {{ form.fu_create.label }}
-                </label>
-            </div>
-            <div id="fu-fields" class="space-y-3 hidden">
+        <!-- Collapsible Options: reminder, recurring, follow-up -->
+        <details class="border-t border-gray-700 pt-4 mt-4"{% if form.reminder_date.value or form.is_recurring.value %} open{% endif %}>
+            <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300 select-none">
+                Options
+                <span class="inline-block transition-transform details-open-rotate">&#9654;</span>
+                {% if form.reminder_date.value %}<span class="text-xs text-blue-400 ml-2">Reminder set</span>{% endif %}
+                {% if form.is_recurring.value %}<span class="text-xs text-indigo-400 ml-2">Recurring</span>{% endif %}
+            </summary>
+            <div class="space-y-4 mt-4">
+                <!-- Task reminder toggle -->
                 <div>
-                    <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
-                    {{ form.fu_method }}
-                </div>
-                <div class="flex items-center gap-3">
-                    <div class="flex items-center gap-2">
-                        {{ form.fu_reminder_enabled }}
-                        <label for="{{ form.fu_reminder_enabled.id_for_label }}" class="text-xs font-medium text-gray-400 cursor-pointer">{{ form.fu_reminder_enabled.label }}</label>
+                    <div class="flex items-center gap-2 mb-3">
+                        <input type="checkbox" id="reminder-toggle" class="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                               {% if form.reminder_date.value %}checked{% endif %}>
+                        <label for="reminder-toggle" class="text-sm font-medium text-gray-300 cursor-pointer">Set a reminder for this task</label>
                     </div>
-                    <div id="fu-days-field" class="hidden">
-                        <div class="flex items-center gap-2">
-                            <label for="{{ form.fu_follow_up_days.id_for_label }}" class="text-xs font-medium text-gray-400">after</label>
-                            <div class="w-20">{{ form.fu_follow_up_days }}</div>
-                            <span class="text-xs text-gray-400">days</span>
+                    <div id="reminder-field" class="{% if not form.reminder_date.value %}hidden{% endif %}">
+                        <label for="{{ form.reminder_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Reminder date &amp; time</label>
+                        {{ form.reminder_date }}
+                        {% if form.reminder_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reminder_date.errors.0 }}</p>{% endif %}
+                    </div>
+                </div>
+
+                <!-- Recurring task toggle -->
+                <div class="border-t border-gray-700 pt-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        {{ form.is_recurring }}
+                        <label for="{{ form.is_recurring.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">Recurring task</label>
+                    </div>
+                    <div id="recurrence-field" class="{% if not form.is_recurring.value %}hidden{% endif %}">
+                        <label for="{{ form.recurrence_rule.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Repeat every</label>
+                        {{ form.recurrence_rule }}
+                        {% if form.recurrence_rule.errors %}<p class="mt-1 text-sm text-red-400">{{ form.recurrence_rule.errors.0 }}</p>{% endif %}
+                        <p class="mt-1 text-xs text-gray-500">When completed, a new task will be created with the next due date.</p>
+                    </div>
+                </div>
+
+                {% if not object %}
+                <!-- Follow-up section (create only) -->
+                <div id="fu-section-block" class="border-t border-gray-700 pt-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        {{ form.fu_create }}
+                        <label for="{{ form.fu_create.id_for_label }}" class="text-sm font-medium text-gray-300 cursor-pointer">
+                            {{ form.fu_create.label }}
+                        </label>
+                    </div>
+                    <div id="fu-fields" class="space-y-3 hidden">
+                        <div>
+                            <label for="{{ form.fu_method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_method.label }}</label>
+                            {{ form.fu_method }}
                         </div>
+                        <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-2">
+                                {{ form.fu_reminder_enabled }}
+                                <label for="{{ form.fu_reminder_enabled.id_for_label }}" class="text-xs font-medium text-gray-400 cursor-pointer">{{ form.fu_reminder_enabled.label }}</label>
+                            </div>
+                            <div id="fu-days-field" class="hidden">
+                                <div class="flex items-center gap-2">
+                                    <label for="{{ form.fu_follow_up_days.id_for_label }}" class="text-xs font-medium text-gray-400">after</label>
+                                    <div class="w-20">{{ form.fu_follow_up_days }}</div>
+                                    <span class="text-xs text-gray-400">days</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="{{ form.fu_notes.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_notes.label }}</label>
+                            {{ form.fu_notes }}
+                        </div>
+                        <p class="text-xs text-gray-500">A follow-up will be created using the stakeholder selected above. If no stakeholder is selected, no follow-up will be created.</p>
                     </div>
                 </div>
-                <div>
-                    <label for="{{ form.fu_notes.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ form.fu_notes.label }}</label>
-                    {{ form.fu_notes }}
-                </div>
-                <p class="text-xs text-gray-500">A follow-up will be created using the stakeholder selected above. If no stakeholder is selected, no follow-up will be created.</p>
+                {% endif %}
             </div>
-        </div>
-        {% endif %}
+        </details>
 
         <script>
             // Meeting time toggle
@@ -143,7 +154,6 @@
                 function updateDirectionUI() {
                     var val = directionSelect.value;
                     var label = document.getElementById('stakeholder-label');
-                    var fuSection = document.querySelector('.border-t.border-gray-700.pt-4.mt-4:last-of-type');
                     if (label) {
                         if (val === 'outbound') label.textContent = 'Requested From';
                         else if (val === 'inbound') label.textContent = 'Requested By';
@@ -165,6 +175,11 @@
                 document.getElementById('fu-days-field').classList.toggle('hidden', !this.checked);
             });
             {% endif %}
+            // Mobile auto-grow for description textarea
+            var descTa = document.getElementById('id_description');
+            if (descTa && window.innerWidth < 640) {
+                descTa.classList.add('auto-grow-textarea');
+            }
         </script>
 
         <div class="flex gap-3 pt-4">

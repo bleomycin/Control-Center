@@ -1,0 +1,51 @@
+<div id="task-metadata-block" class="mt-2 bg-gray-800/50 rounded-lg border border-blue-600/50 p-4">
+    <form hx-post="{% url 'tasks:inline_edit_metadata' task.pk %}"
+          hx-target="#task-metadata-block" hx-swap="outerHTML">
+        {% csrf_token %}
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Status</label>
+                <select name="status"
+                        class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                    {% for val, label in status_choices %}
+                    <option value="{{ val }}" {% if val == task.status %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Priority</label>
+                <select name="priority"
+                        class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                    {% for val, label in priority_choices %}
+                    <option value="{{ val }}" {% if val == task.priority %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Direction</label>
+                <select name="direction"
+                        class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                    {% for val, label in direction_choices %}
+                    <option value="{{ val }}" {% if val == task.direction %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Type</label>
+                <select name="task_type"
+                        class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                    {% for val, label in type_choices %}
+                    <option value="{{ val }}" {% if val == task.task_type %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="flex gap-2 mt-3">
+            <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save</button>
+            <button type="button"
+                    hx-get="{% url 'tasks:inline_edit_metadata' task.pk %}?display=1"
+                    hx-target="#task-metadata-block" hx-swap="outerHTML"
+                    class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
+        </div>
+    </form>
+</div>

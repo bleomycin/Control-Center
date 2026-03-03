@@ -639,3 +639,64 @@ def bulk_complete(request):
             count += 1
         messages.success(request, f"{count} task(s) marked complete.")
     return redirect("tasks:list")
+
+
+def inline_edit_title(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        if title:
+            task.title = title
+            task.save(update_fields=["title"])
+        response = render(request, "tasks/partials/_detail_title_display.html", {"task": task})
+        response["HX-Trigger"] = '{"updateTaskBreadcrumb": {"value": ' + f'"{task.title}"' + '}}'
+        return response
+    if request.GET.get("display"):
+        return render(request, "tasks/partials/_detail_title_display.html", {"task": task})
+    return render(request, "tasks/partials/_detail_title_editor.html", {"task": task})
+
+
+def inline_edit_description(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    if request.method == "POST":
+        task.description = request.POST.get("description", "")
+        task.save(update_fields=["description"])
+        return render(request, "tasks/partials/_detail_description_display.html", {"task": task})
+    if request.GET.get("display"):
+        return render(request, "tasks/partials/_detail_description_display.html", {"task": task})
+    return render(request, "tasks/partials/_detail_description_editor.html", {"task": task})
+
+
+def inline_edit_metadata(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    if request.method == "POST":
+        status = request.POST.get("status", "")
+        if status in dict(Task.STATUS_CHOICES):
+            old_status = task.status
+            task.status = status
+            if status == "complete" and old_status != "complete":
+                task.completed_at = timezone.now()
+            elif status != "complete":
+                task.completed_at = None
+        priority = request.POST.get("priority", "")
+        if priority in dict(Task.PRIORITY_CHOICES):
+            task.priority = priority
+        direction = request.POST.get("direction", "")
+        if direction in dict(Task.DIRECTION_CHOICES):
+            task.direction = direction
+        task_type = request.POST.get("task_type", "")
+        if task_type in dict(Task.TASK_TYPE_CHOICES):
+            task.task_type = task_type
+        task.save()
+        _handle_recurring_completion(task)
+        return render(request, "tasks/partials/_detail_metadata_display.html", {"task": task})
+    if request.GET.get("display"):
+        return render(request, "tasks/partials/_detail_metadata_display.html", {"task": task})
+    ctx = {
+        "task": task,
+        "status_choices": Task.STATUS_CHOICES,
+        "priority_choices": Task.PRIORITY_CHOICES,
+        "direction_choices": Task.DIRECTION_CHOICES,
+        "type_choices": Task.TASK_TYPE_CHOICES,
+    }
+    return render(request, "tasks/partials/_detail_metadata_editor.html", ctx)

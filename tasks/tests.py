@@ -1415,3 +1415,180 @@ class RecurringTaskTests(TestCase):
         })
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(Task.objects.filter(title="No Date Recurring").exists())
+
+
+class InlineEditTitleTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.task = Task.objects.create(title="Original Title", description="Desc")
+
+    def test_get_returns_editor(self):
+        resp = self.client.get(reverse("tasks:inline_edit_title", args=[self.task.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_detail_title_editor.html")
+        self.assertContains(resp, "Original Title")
+
+    def test_get_display_returns_display(self):
+        resp = self.client.get(
+            reverse("tasks:inline_edit_title", args=[self.task.pk]),
+            {"display": "1"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_detail_title_display.html")
+
+    def test_post_saves_title(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_title", args=[self.task.pk]),
+            {"title": "Updated Title"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Updated Title")
+        self.assertIn("HX-Trigger", resp.headers)
+
+    def test_post_empty_title_keeps_original(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_title", args=[self.task.pk]),
+            {"title": "  "},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Original Title")
+
+
+class InlineEditDescriptionTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.task = Task.objects.create(title="Desc Task", description="Original desc")
+
+    def test_get_returns_editor(self):
+        resp = self.client.get(reverse("tasks:inline_edit_description", args=[self.task.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_detail_description_editor.html")
+        self.assertContains(resp, "Original desc")
+
+    def test_get_display_returns_display(self):
+        resp = self.client.get(
+            reverse("tasks:inline_edit_description", args=[self.task.pk]),
+            {"display": "1"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_detail_description_display.html")
+
+    def test_post_saves_description(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_description", args=[self.task.pk]),
+            {"description": "New description text"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.description, "New description text")
+
+    def test_post_clear_description(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_description", args=[self.task.pk]),
+            {"description": ""},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.description, "")
+
+    def test_display_shows_no_description_placeholder(self):
+        self.task.description = ""
+        self.task.save()
+        resp = self.client.get(
+            reverse("tasks:inline_edit_description", args=[self.task.pk]),
+            {"display": "1"},
+        )
+        self.assertContains(resp, "No description")
+
+
+class InlineEditMetadataTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.task = Task.objects.create(
+            title="Meta Task",
+            status="not_started",
+            priority="medium",
+            direction="personal",
+            task_type="one_time",
+        )
+
+    def test_get_returns_editor(self):
+        resp = self.client.get(reverse("tasks:inline_edit_metadata", args=[self.task.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_detail_metadata_editor.html")
+
+    def test_get_display_returns_display(self):
+        resp = self.client.get(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"display": "1"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTemplateUsed(resp, "tasks/partials/_detail_metadata_display.html")
+
+    def test_post_updates_status(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"status": "in_progress", "priority": "medium", "direction": "personal", "task_type": "one_time"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "in_progress")
+
+    def test_post_updates_priority(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"status": "not_started", "priority": "critical", "direction": "personal", "task_type": "one_time"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.priority, "critical")
+
+    def test_post_updates_direction(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"status": "not_started", "priority": "medium", "direction": "outbound", "task_type": "one_time"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.direction, "outbound")
+
+    def test_post_updates_task_type(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"status": "not_started", "priority": "medium", "direction": "personal", "task_type": "meeting"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.task_type, "meeting")
+
+    def test_post_complete_sets_completed_at(self):
+        resp = self.client.post(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"status": "complete", "priority": "medium", "direction": "personal", "task_type": "one_time"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "complete")
+        self.assertIsNotNone(self.task.completed_at)
+
+    def test_post_reopen_clears_completed_at(self):
+        self.task.status = "complete"
+        self.task.completed_at = timezone.now()
+        self.task.save()
+        resp = self.client.post(
+            reverse("tasks:inline_edit_metadata", args=[self.task.pk]),
+            {"status": "not_started", "priority": "medium", "direction": "personal", "task_type": "one_time"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "not_started")
+        self.assertIsNone(self.task.completed_at)
+
+    def test_editor_context_has_choices(self):
+        resp = self.client.get(reverse("tasks:inline_edit_metadata", args=[self.task.pk]))
+        self.assertIn("status_choices", resp.context)
+        self.assertIn("priority_choices", resp.context)
+        self.assertIn("direction_choices", resp.context)
+        self.assertIn("type_choices", resp.context)

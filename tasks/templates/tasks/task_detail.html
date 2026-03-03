@@ -8,23 +8,10 @@
             <span class="text-gray-600">/</span>
             <a href="{% url 'tasks:list' %}" class="hover:text-gray-300">Tasks</a>
             <span class="text-gray-600">/</span>
-            <span class="text-gray-200">{{ task.title }}</span>
+            <span class="text-gray-200" id="task-breadcrumb-title">{{ task.title }}</span>
         </nav>
-        <h1 class="text-2xl font-bold text-white mt-2 {% if task.status == 'complete' %}line-through opacity-60{% endif %}">{{ task.title }}</h1>
-        <div class="flex items-center gap-2 mt-2">
-            <span id="task-status-area">{% include "tasks/partials/_task_status_badge.html" %}</span>
-            <span class="text-xs px-2 py-0.5 rounded-full
-                {% if task.priority == 'critical' %}bg-red-900/50 text-red-300
-                {% elif task.priority == 'high' %}bg-orange-900/50 text-orange-300
-                {% elif task.priority == 'medium' %}bg-yellow-900/50 text-yellow-300
-                {% else %}bg-gray-700 text-gray-300{% endif %}">{{ task.get_priority_display }}</span>
-            {% if task.direction == "outbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-cyan-900/50 text-cyan-300">&nearr; Outbound</span>
-            {% elif task.direction == "inbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300">&swarr; Inbound</span>
-            {% endif %}
-            {% if task.is_meeting %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Meeting</span>
-            {% else %}<span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>{% endif %}
-            {% if task.is_recurring %}<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300">&#x21bb; {{ task.get_recurrence_rule_display }}</span>{% endif %}
-        </div>
+        {% include "tasks/partials/_detail_title_display.html" %}
+        {% include "tasks/partials/_detail_metadata_display.html" %}
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
         <button hx-post="{% url 'tasks:toggle_complete' task.pk %}" hx-vals='{"context":"detail"}' hx-target="#task-status-area" hx-swap="innerHTML"
@@ -58,12 +45,7 @@
     </div>
 </div>
 
-{% if task.description %}
-<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
-    <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Description</p>
-    <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.description }}</p>
-</div>
-{% endif %}
+{% include "tasks/partials/_detail_description_display.html" %}
 
 <!-- Checklist -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
@@ -120,4 +102,10 @@
     </div>
 </div>
 {% endif %}
+<script>
+document.body.addEventListener('updateTaskBreadcrumb', function(e) {
+    var bc = document.getElementById('task-breadcrumb-title');
+    if (bc && e.detail && e.detail.value) bc.textContent = e.detail.value;
+});
+</script>
 {% endblock %}

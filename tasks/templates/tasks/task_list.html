@@ -220,6 +220,22 @@ function applyMobileSort(val) {
     htmx.ajax('GET', '{% url "tasks:list" %}', { target: '#task-content', swap: 'innerHTML', source: form });
 }
 
+function toggleTaskExpand(pk) {
+    var preview = document.getElementById('task-preview-' + pk);
+    var full = document.getElementById('task-full-' + pk);
+    var btn = document.getElementById('task-expand-btn-' + pk);
+    if (!full) return;
+    if (full.classList.contains('hidden')) {
+        if (preview) preview.classList.add('hidden');
+        full.classList.remove('hidden');
+        if (btn) btn.textContent = 'Show less';
+    } else {
+        if (preview) preview.classList.remove('hidden');
+        full.classList.add('hidden');
+        if (btn) btn.textContent = 'Show more';
+    }
+}
+
 function toggleInlineSubtasks(taskPk) {
     var panel = document.getElementById('subtask-expand-' + taskPk);
     if (!panel) return;
