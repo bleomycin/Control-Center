@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Manage Tags - Control Center{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="mb-6">
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'dashboard:settings_hub' %}" class="hover:text-gray-300">Settings</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">Manage Tags</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">Manage Tags</h1>
+        <p class="text-sm text-gray-400 mt-1">Create and edit tags to organize your notes.</p>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Tags</h2>
+            <button hx-get="{% url 'notes:tag_add' %}" hx-target="#tag-form-container" hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Add Tag</button>
+        </div>
+        <div id="tag-form-container"></div>
+        <div id="tag-list">
+            {% include "notes/partials/_tag_list.html" %}
+        </div>
+    </div>
+</div>
+{% endblock %}

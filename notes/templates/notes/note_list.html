@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load tag_colors %}
 {% block title %}Notes - Control Center{% endblock %}
 {% block content %}
 <div class="flex items-center justify-between mb-6">
@@ -11,22 +12,74 @@
     </div>
 </div>
 
+<!-- Folder Tabs -->
+<div class="flex flex-wrap gap-1 mb-4 border-b border-gray-700 pb-2">
+    <button onclick="switchFolder('')" class="px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == '' or current_folder == 'all' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
+        All Notes
+    </button>
+    {% for folder in folders %}
+    {% folder_classes folder.color as fc %}
+    <button onclick="switchFolder('{{ folder.pk }}')" class="px-3 py-1.5 text-sm rounded-md transition-colors inline-flex items-center gap-1 {% if current_folder == folder.pk|stringformat:'d' %}{{ fc.bg }} {{ fc.text }}{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+        {{ folder.name }}
+        <span class="text-xs opacity-75">({{ folder.note_count }})</span>
+    </button>
+    {% endfor %}
+    <button onclick="switchFolder('unfiled')" class="px-3 py-1.5 text-sm rounded-md transition-colors {% if current_folder == 'unfiled' %}bg-gray-700 text-gray-200{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700/50{% endif %}">
+        Unfiled
+        <span class="text-xs opacity-75">({{ unfiled_count }})</span>
+    </button>
+</div>
+
 <form id="filter-form" class="flex flex-col gap-3 mb-4">
+    <input type="hidden" name="folder" id="current-folder" value="{{ current_folder }}">
+    <input type="hidden" name="view" id="current-view" value="{{ current_view }}">
     <div class="flex flex-col sm:flex-row gap-3">
         <input type="text" name="q" value="{{ search_query }}" placeholder="Search notes..."
                hx-get="{% url 'notes:list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
-        <select name="type" hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
-            <option value="">All Types</option>
-            {% for val, label in note_types %}<option value="{{ val }}" {% if selected_type == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
-        </select>
         <select name="stakeholder" hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                 class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-3 py-2">
             <option value="">All People</option>
             {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_stakeholder == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
         </select>
     </div>
+    <!-- Type checkboxes -->
+    <div class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-400">Type:</span>
+        {% for val, label in note_types %}
+        <label class="inline-flex items-center gap-1 text-xs text-gray-300">
+            <input type="checkbox" name="type" value="{{ val }}"
+                   {% if val in selected_types %}checked{% endif %}
+                   hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
+                   hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   class="rounded border-gray-600 bg-gray-700 text-blue-600 h-3.5 w-3.5">
+            {{ label }}
+        </label>
+        {% endfor %}
+    </div>
+    <!-- Tag filter pills -->
+    {% if all_tags %}
+    <div class="flex flex-wrap gap-1.5 items-center">
+        <span class="text-xs text-gray-400">Tags:</span>
+        {% for tag in all_tags %}
+        {% tag_classes tag.color as tc %}
+        <label class="cursor-pointer">
+            <input type="checkbox" name="tag" value="{{ tag.slug }}"
+                   {% if tag.slug in selected_tags %}checked{% endif %}
+                   hx-get="{% url 'notes:list' %}" hx-trigger="change" hx-target="#note-content"
+                   hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   class="hidden peer">
+            <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                         peer-checked:{{ tc.bg }} peer-checked:{{ tc.text }} peer-checked:{{ tc.border }}
+                         border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500">
+                #{{ tag.name }}
+            </span>
+        </label>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <!-- Date range -->
     <div class="flex flex-wrap gap-2 items-center">
         <span class="text-xs text-gray-400">Date:</span>
         <input type="date" name="date_from" value="{{ date_from }}"
@@ -38,6 +91,22 @@
                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
     </div>
 </form>
+
+<!-- View Toggle -->
+<div class="flex items-center gap-1 mb-3">
+    <button id="btn-cards" onclick="switchNoteView('cards')" class="px-2.5 py-1 text-xs rounded-md transition-colors {% if current_view == 'cards' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
+        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        Cards
+    </button>
+    <button id="btn-list" onclick="switchNoteView('list')" class="px-2.5 py-1 text-xs rounded-md transition-colors {% if current_view == 'list' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
+        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+        List
+    </button>
+    <button id="btn-timeline" onclick="switchNoteView('timeline')" class="px-2.5 py-1 text-xs rounded-md transition-colors {% if current_view == 'timeline' %}bg-blue-900/50 text-blue-300{% else %}text-gray-400 hover:text-gray-200 hover:bg-gray-700{% endif %}">
+        <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Timeline
+    </button>
+</div>
 
 <div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>
 
@@ -55,4 +124,42 @@
 <div id="note-content">
     {% include "notes/partials/_note_list_content.html" %}
 </div>
+
+<script>
+function switchFolder(folderId) {
+    document.getElementById('current-folder').value = folderId;
+    htmx.ajax('GET', '{% url "notes:list" %}', {
+        target: '#note-content',
+        source: document.getElementById('filter-form'),
+        indicator: '#loading-spinner'
+    });
+    // Update URL
+    var url = new URL(window.location);
+    if (folderId) { url.searchParams.set('folder', folderId); } else { url.searchParams.delete('folder'); }
+    history.pushState({}, '', url);
+    // Visual: reload page to update tab highlights
+    setTimeout(function() { window.location.href = url; }, 100);
+}
+
+function switchNoteView(mode) {
+    document.getElementById('current-view').value = mode;
+    // Update button classes
+    ['cards', 'list', 'timeline'].forEach(function(m) {
+        var btn = document.getElementById('btn-' + m);
+        if (m === mode) {
+            btn.className = btn.className.replace(/text-gray-400 hover:text-gray-200 hover:bg-gray-700/g, '').replace(/bg-blue-900\/50 text-blue-300/g, '') + ' bg-blue-900/50 text-blue-300';
+        } else {
+            btn.className = btn.className.replace(/bg-blue-900\/50 text-blue-300/g, '') + ' text-gray-400 hover:text-gray-200 hover:bg-gray-700';
+        }
+    });
+    htmx.ajax('GET', '{% url "notes:list" %}', {
+        target: '#note-content',
+        source: document.getElementById('filter-form'),
+        indicator: '#loading-spinner'
+    });
+    var url = new URL(window.location);
+    if (mode !== 'cards') { url.searchParams.set('view', mode); } else { url.searchParams.delete('view'); }
+    history.pushState({}, '', url);
+}
+</script>
 {% endblock %}
