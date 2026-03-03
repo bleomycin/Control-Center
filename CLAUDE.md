@@ -295,6 +295,7 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - **Primary repo**: `https://github.com/bleomycin/Control-Center.git` (remote name: `origin`)
 - The old `Nexus` repo is retired — do NOT push or sync to it
 - There is only one remote (`origin`). If you see a `nexus` remote, remove it.
+- **Git identity (CRITICAL)**: ALL commits MUST use `bleomycin <bleomycin@users.noreply.github.com>` as both Author AND Committer. Before the first commit in any session, verify with `git config user.name && git config user.email`. If not set to `bleomycin` / `bleomycin@users.noreply.github.com`, run `git config user.name "bleomycin" && git config user.email "bleomycin@users.noreply.github.com"` before committing. NEVER commit as the local machine user.
 
 ## Deployment
 - After implementing features, always rebuild Docker and push GitHub release when the user asks. Standard deployment flow: run all tests → git push → docker build → push alpha release tag. Don't wait to be asked twice.
