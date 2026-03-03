@@ -127,7 +127,7 @@ class TaskListView(ListView):
             else:
                 qs = qs.order_by(f"{direction}{sort}")
         else:
-            qs = qs.order_by("due_date", "-priority", "pk")
+            qs = qs.order_by("-created_at")
         return qs
 
     def get_paginate_by(self, queryset):
@@ -158,8 +158,8 @@ class TaskListView(ListView):
         ctx["date_from"] = self.request.GET.get("date_from", "")
         ctx["date_to"] = self.request.GET.get("date_to", "")
         ctx["selected_statuses"] = self.request.GET.getlist("status")
-        ctx["current_sort"] = self.request.GET.get("sort", "")
-        ctx["current_dir"] = self.request.GET.get("dir", "")
+        ctx["current_sort"] = self.request.GET.get("sort", "") or "created_at"
+        ctx["current_dir"] = self.request.GET.get("dir", "") or "desc"
         ctx["direction_choices"] = Task.DIRECTION_CHOICES
         ctx["selected_directions"] = self.request.GET.getlist("direction")
         ctx["type_choices"] = Task.TASK_TYPE_CHOICES
