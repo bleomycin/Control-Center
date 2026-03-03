@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.utils import timezone
@@ -7,9 +8,65 @@ from django.views.decorators.http import require_POST
 
 from django.http import HttpResponse
 
+from datetime import date as _date, timedelta
+
 from dashboard.choices import get_choice_label
-from .forms import FollowUpForm, QuickTaskForm, TaskForm
-from .models import FollowUp, Task
+from stakeholders.models import Stakeholder
+from .forms import FollowUpForm, QuickTaskForm, SubTaskForm, TaskForm
+from .models import FollowUp, SubTask, Task
+
+
+def _build_grouped_tasks(tasks, group_by):
+    """Group a list of tasks by the given field for grouped table view."""
+    if group_by == "status":
+        order = ["not_started", "in_progress", "waiting", "complete"]
+        labels = dict(Task.STATUS_CHOICES)
+        buckets = {k: [] for k in order}
+        for t in tasks:
+            buckets.get(t.status, buckets["not_started"]).append(t)
+        return [{"label": labels[k], "tasks": buckets[k], "count": len(buckets[k])} for k in order]
+
+    if group_by == "priority":
+        order = ["critical", "high", "medium", "low"]
+        labels = dict(Task.PRIORITY_CHOICES)
+        buckets = {k: [] for k in order}
+        for t in tasks:
+            buckets.get(t.priority, buckets["medium"]).append(t)
+        return [{"label": labels[k], "tasks": buckets[k], "count": len(buckets[k])} for k in order]
+
+    if group_by == "due_date":
+        today = timezone.localdate()
+        end_of_week = today + timedelta(days=(6 - today.weekday()))
+        buckets = {"Overdue": [], "Today": [], "This Week": [], "Later": [], "No Date": []}
+        for t in tasks:
+            if not t.due_date:
+                buckets["No Date"].append(t)
+            elif t.due_date < today:
+                buckets["Overdue"].append(t)
+            elif t.due_date == today:
+                buckets["Today"].append(t)
+            elif t.due_date <= end_of_week:
+                buckets["This Week"].append(t)
+            else:
+                buckets["Later"].append(t)
+        return [{"label": k, "tasks": v, "count": len(v)} for k, v in buckets.items() if v]
+
+    if group_by == "stakeholder":
+        buckets = {}
+        no_stakeholder = []
+        for t in tasks:
+            stakeholders = list(t.related_stakeholders.all())
+            if not stakeholders:
+                no_stakeholder.append(t)
+            else:
+                for s in stakeholders:
+                    buckets.setdefault(s.name, []).append(t)
+        groups = [{"label": name, "tasks": tlist, "count": len(tlist)} for name, tlist in sorted(buckets.items())]
+        if no_stakeholder:
+            groups.append({"label": "No Stakeholder", "tasks": no_stakeholder, "count": len(no_stakeholder)})
+        return groups
+
+    return []
 
 
 class TaskListView(ListView):
@@ -19,7 +76,10 @@ class TaskListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related("related_stakeholders")
+        qs = super().get_queryset().prefetch_related("related_stakeholders", "follow_ups").annotate(
+            subtask_count=Count("subtasks", distinct=True),
+            subtask_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
+        )
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(title__icontains=q)
@@ -41,6 +101,9 @@ class TaskListView(ListView):
         task_types = [t for t in self.request.GET.getlist("task_type") if t]
         if task_types:
             qs = qs.filter(task_type__in=task_types)
+        stakeholder = self.request.GET.get("stakeholder", "").strip()
+        if stakeholder:
+            qs = qs.filter(related_stakeholders__pk=stakeholder).distinct()
         ALLOWED_SORTS = {"title", "status", "priority", "due_date", "direction", "created_at"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
@@ -50,14 +113,19 @@ class TaskListView(ListView):
 
     def get_paginate_by(self, queryset):
         if self.request.GET.get("view") == "board":
-            return None  # No pagination for board view
+            return None
+        if self.request.GET.get("group"):
+            return None
         return self.paginate_by
 
     def get_template_names(self):
         view_mode = self.request.GET.get("view", "table")
+        group_by = self.request.GET.get("group", "")
         if self.request.headers.get("HX-Request"):
             if view_mode == "board":
                 return ["tasks/partials/_kanban_board.html"]
+            if group_by:
+                return ["tasks/partials/_grouped_table_view.html"]
             # Sort headers target #task-table-body — return just rows
             hx_target = self.request.headers.get("HX-Target", "")
             if hx_target == "task-table-body":
@@ -83,6 +151,17 @@ class TaskListView(ListView):
         ctx["type_choices"] = Task.TASK_TYPE_CHOICES
         ctx["selected_types"] = self.request.GET.getlist("task_type")
         ctx["current_view"] = self.request.GET.get("view", "table")
+        ctx["stakeholders"] = Stakeholder.objects.all().order_by("name")
+        ctx["selected_stakeholder"] = self.request.GET.get("stakeholder", "")
+        group_by = self.request.GET.get("group", "")
+        ctx["current_group"] = group_by
+        ctx["group_choices"] = [
+            ("", "No Grouping"), ("status", "Status"), ("priority", "Priority"),
+            ("due_date", "Due Date"), ("stakeholder", "Stakeholder"),
+        ]
+        if group_by in ("status", "priority", "due_date", "stakeholder"):
+            all_tasks = list(self.get_queryset())
+            ctx["grouped_tasks"] = _build_grouped_tasks(all_tasks, group_by)
 
         # Build kanban columns for board view
         if ctx["current_view"] == "board":
@@ -152,6 +231,11 @@ class TaskDetailView(DetailView):
         ctx["follow_ups"] = self.object.follow_ups.select_related("stakeholder").all()
         ctx["followup_form"] = FollowUpForm()
         ctx["notes"] = self.object.notes.all()[:5]
+        subtasks = self.object.subtasks.all()
+        ctx["subtasks"] = subtasks
+        ctx["subtask_form"] = SubTaskForm()
+        ctx["subtask_count"] = subtasks.count()
+        ctx["subtask_done"] = subtasks.filter(is_completed=True).count()
         return ctx
 
 
@@ -191,7 +275,10 @@ def quick_create(request):
 
 def export_csv(request):
     from legacy.export import export_csv as do_export
-    qs = Task.objects.prefetch_related("related_stakeholders").all()
+    qs = Task.objects.prefetch_related("related_stakeholders").annotate(
+        _st_count=Count("subtasks", distinct=True),
+        _st_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
+    ).all()
     fields = [
         ("title", "Title"),
         ("direction", "Direction"),
@@ -200,15 +287,18 @@ def export_csv(request):
         ("due_date", "Due Date"),
         ("_due_time_str", "Time"),
         ("_stakeholder_names", "Stakeholders"),
+        ("_subtask_progress", "Checklist"),
+        ("_recurrence_str", "Recurrence"),
         ("description", "Description"),
     ]
-    # Annotate tasks with a joined stakeholder names string
     tasks_list = []
     for task in qs:
         task._stakeholder_names = ", ".join(
             s.name for s in task.related_stakeholders.all()
         ) or ""
         task._due_time_str = task.due_time.strftime("%-I:%M %p") if task.due_time else ""
+        task._subtask_progress = f"{task._st_done}/{task._st_count}" if task._st_count else ""
+        task._recurrence_str = task.get_recurrence_rule_display() if task.is_recurring else ""
         tasks_list.append(task)
     return do_export(tasks_list, fields, "tasks")
 
@@ -242,8 +332,15 @@ def export_pdf_detail(request, pk):
         sections[0]["rows"].append(("Legal Matter", t.related_legal_matter.title))
     if t.related_property:
         sections[0]["rows"].append(("Property", t.related_property.name))
+    if t.is_recurring:
+        sections[0]["rows"].append(("Recurrence", t.get_recurrence_rule_display()))
     if t.description:
         sections.append({"heading": "Description", "type": "text", "content": t.description})
+    subtasks = t.subtasks.all()
+    if subtasks:
+        sections.append({"heading": "Checklist", "type": "table",
+                         "headers": ["Item", "Status"],
+                         "rows": [[st.title, "Done" if st.is_completed else "Pending"] for st in subtasks]})
     follow_ups = t.follow_ups.select_related("stakeholder").all()
     if follow_ups:
         def _fu_notes(fu):
@@ -272,6 +369,13 @@ def export_pdf_detail(request, pk):
                       f"{t.get_status_display()} — {t.get_priority_display()} Priority", sections)
 
 
+def _handle_recurring_completion(task):
+    """Create the next recurrence when a recurring task is completed."""
+    if task.is_recurring and task.status == "complete":
+        return task.create_next_recurrence()
+    return None
+
+
 def toggle_complete(request, pk):
     task = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
     if task.status == "complete":
@@ -281,6 +385,7 @@ def toggle_complete(request, pk):
         task.status = "complete"
         task.completed_at = timezone.now()
     task.save()
+    _handle_recurring_completion(task)
     # Return full row for table context, badge for detail context
     context = request.POST.get("context", "")
     if context == "detail":
@@ -290,7 +395,7 @@ def toggle_complete(request, pk):
 
 @require_POST
 def kanban_update(request, pk):
-    task = get_object_or_404(Task, pk=pk)
+    task = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
     status = request.POST.get("status", "")
     valid_statuses = [c[0] for c in Task.STATUS_CHOICES]
     if status not in valid_statuses:
@@ -301,6 +406,7 @@ def kanban_update(request, pk):
     else:
         task.completed_at = None
     task.save()
+    _handle_recurring_completion(task)
     return HttpResponse(status=204)
 
 
@@ -329,6 +435,8 @@ def inline_update(request, pk):
     else:
         return HttpResponse(status=400)
     task.save()
+    if field == "status":
+        _handle_recurring_completion(task)
     return render(request, "tasks/partials/_task_row.html", {"task": task})
 
 
@@ -398,6 +506,45 @@ def followup_delete(request, pk):
                   {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
 
 
+def _subtask_list_context(task):
+    subtasks = task.subtasks.all()
+    return {
+        "subtasks": subtasks,
+        "task": task,
+        "subtask_form": SubTaskForm(),
+        "subtask_count": subtasks.count(),
+        "subtask_done": subtasks.filter(is_completed=True).count(),
+    }
+
+
+def subtask_add(request, pk):
+    task = get_object_or_404(Task, pk=pk)
+    if request.method == "POST":
+        form = SubTaskForm(request.POST)
+        if form.is_valid():
+            st = form.save(commit=False)
+            st.task = task
+            st.sort_order = task.subtasks.count()
+            st.save()
+    return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(task))
+
+
+@require_POST
+def subtask_toggle(request, pk):
+    st = get_object_or_404(SubTask, pk=pk)
+    st.is_completed = not st.is_completed
+    st.save()
+    return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(st.task))
+
+
+@require_POST
+def subtask_delete(request, pk):
+    st = get_object_or_404(SubTask, pk=pk)
+    task = st.task
+    st.delete()
+    return render(request, "tasks/partials/_subtask_list.html", _subtask_list_context(task))
+
+
 def bulk_delete(request):
     if request.method == "POST":
         pks = request.POST.getlist("selected")
@@ -434,6 +581,13 @@ def bulk_export_csv(request):
 def bulk_complete(request):
     if request.method == "POST":
         pks = request.POST.getlist("selected")
-        count = Task.objects.filter(pk__in=pks).exclude(status="complete").update(status="complete")
+        tasks = Task.objects.filter(pk__in=pks).exclude(status="complete").prefetch_related("related_stakeholders")
+        count = 0
+        for task in tasks:
+            task.status = "complete"
+            task.completed_at = timezone.now()
+            task.save()
+            _handle_recurring_completion(task)
+            count += 1
         messages.success(request, f"{count} task(s) marked complete.")
     return redirect("tasks:list")

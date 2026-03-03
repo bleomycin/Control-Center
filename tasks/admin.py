@@ -1,5 +1,11 @@
 from django.contrib import admin
-from .models import Task, FollowUp
+from .models import Task, FollowUp, SubTask
+
+
+class SubTaskInline(admin.TabularInline):
+    model = SubTask
+    extra = 1
+    fields = ["title", "is_completed", "sort_order"]
 
 
 class FollowUpInline(admin.TabularInline):
@@ -14,7 +20,7 @@ class TaskAdmin(admin.ModelAdmin):
     list_filter = ["status", "priority", "task_type", "direction"]
     search_fields = ["title", "description"]
     filter_horizontal = ["related_stakeholders"]
-    inlines = [FollowUpInline]
+    inlines = [SubTaskInline, FollowUpInline]
 
 
 @admin.register(FollowUp)
