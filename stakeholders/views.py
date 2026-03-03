@@ -8,7 +8,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from django.views.decorators.http import require_POST
 
 from dashboard.choices import get_choice_label, get_choices
-from .forms import ContactLogForm, StakeholderForm, StakeholderPropertyForm, StakeholderInvestmentForm, StakeholderLoanForm, StakeholderTabForm
+from .forms import ContactLogForm, EmployeeAssignForm, StakeholderForm, StakeholderPropertyForm, StakeholderInvestmentForm, StakeholderLoanForm, StakeholderTabForm
 from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
 
 
@@ -591,6 +591,43 @@ def loan_party_delete(request, pk):
     return render(request, "stakeholders/partials/_sh_party_list.html",
                   {"parties": LoanParty.objects.filter(stakeholder=stakeholder).select_related("loan"),
                    "stakeholder": stakeholder})
+
+
+# --- Inline employee management (firm detail) ---
+
+def _employee_list_context(firm):
+    return {
+        "employees": firm.employees.all(),
+        "stakeholder": firm,
+    }
+
+
+def employee_add(request, pk):
+    firm = get_object_or_404(Stakeholder, pk=pk, entity_type="firm")
+    if request.method == "POST":
+        form = EmployeeAssignForm(request.POST, firm=firm)
+        if form.is_valid():
+            emp = form.cleaned_data["stakeholder"]
+            emp.parent_organization = firm
+            emp.save()
+            return render(request, "stakeholders/partials/_employee_list.html",
+                          _employee_list_context(firm))
+    else:
+        form = EmployeeAssignForm(firm=firm)
+    return render(request, "stakeholders/partials/_employee_form.html",
+                  {"form": form, "stakeholder": firm})
+
+
+@require_POST
+def employee_remove(request, pk):
+    emp = get_object_or_404(Stakeholder, pk=pk)
+    firm = emp.parent_organization
+    emp.parent_organization = None
+    emp.save()
+    if firm:
+        return render(request, "stakeholders/partials/_employee_list.html",
+                      _employee_list_context(firm))
+    return HttpResponse("")
 
 
 # --- Inline entity type editing ---
