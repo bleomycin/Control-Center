@@ -163,10 +163,13 @@
 </div>
 {% endif %}
 
-{# --- TEST RESULTS --- #}
+{# --- TEST RESULTS (grouped by condition) --- #}
 {% if "test_results" in current_healthcare_types %}
 {% if current_healthcare_types|length > 1 %}
-<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Test Results ({{ test_results|length }})</h3>
+<div class="flex items-center justify-between mb-2 mt-4">
+    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Test Results ({{ test_result_total }})</h3>
+    <a href="{% url 'healthcare:testresult_create' %}" class="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Test Result</a>
+</div>
 {% endif %}
 {% if current_healthcare_types|length == 1 %}
 <div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
@@ -178,36 +181,62 @@
     </form>
 </div>
 {% endif %}
-<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
-    <div class="overflow-x-auto">
-        <table class="w-full">
-            <thead>
-                <tr class="border-b border-gray-700 text-left">
-                    {% if current_healthcare_types|length == 1 %}
-                    <th class="px-4 py-2 w-8"><input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"></th>
-                    {% endif %}
-                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Test</th>
-                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Type</th>
-                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Result</th>
-                    <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-700/50">
-                {% for result in test_results %}
-                {% include "healthcare/partials/_testresult_row.html" %}
-                {% empty %}
-                <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No test results found</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+
+{% for group in test_result_groups %}
+<div class="mb-4">
+    <div class="flex items-center justify-between mb-1.5">
+        <h4 class="text-sm font-medium text-gray-300">
+            {% if group.condition %}
+                <a href="{{ group.condition.get_absolute_url }}" class="hover:text-blue-400 transition-colors">{{ group.condition.name }}</a>
+                {% if group.condition.status == "active" %}<span class="ml-1.5 text-xs px-1.5 py-0.5 bg-green-900/50 text-green-400 rounded">Active</span>{% endif %}
+                {% if group.condition.status == "monitoring" %}<span class="ml-1.5 text-xs px-1.5 py-0.5 bg-yellow-900/50 text-yellow-400 rounded">Monitoring</span>{% endif %}
+            {% else %}
+                Routine Labs
+            {% endif %}
+            <span class="text-gray-500 text-xs ml-1">({{ group.results|length }})</span>
+        </h4>
+        <a href="{% url 'healthcare:testresult_create' %}{% if group.condition %}?condition={{ group.condition.pk }}{% endif %}"
+           class="text-xs text-blue-400 hover:text-blue-300 font-medium whitespace-nowrap">+ Test Result</a>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-gray-700 text-left">
+                        {% if current_healthcare_types|length == 1 %}
+                        <th class="px-4 py-2 w-8"><input type="checkbox" class="group-select-all rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0" onchange="document.querySelectorAll('[data-group=\'{{ group.condition.pk|default:'routine' }}\'] input[name=selected]').forEach(cb => cb.checked = this.checked); if(typeof updateBulkCount === 'function') updateBulkCount();"></th>
+                        {% endif %}
+                        <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase">Test</th>
+                        <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden sm:table-cell">Type</th>
+                        <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden md:table-cell">Result</th>
+                        <th class="px-4 py-2 text-xs font-medium text-gray-400 uppercase hidden lg:table-cell">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-700/50" data-group="{{ group.condition.pk|default:'routine' }}">
+                    {% for result in group.results %}
+                    {% include "healthcare/partials/_testresult_row.html" %}
+                    {% empty %}
+                    <tr><td colspan="5" class="px-4 py-8 text-center text-sm text-gray-500">No test results found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+{% empty %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_healthcare_types|length > 1 %}mb-6{% endif %}">
+    <div class="px-4 py-8 text-center text-sm text-gray-500">No test results found</div>
+</div>
+{% endfor %}
 {% endif %}
 
 {# --- VISITS --- #}
 {% if "visits" in current_healthcare_types %}
 {% if current_healthcare_types|length > 1 %}
-<h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Visits ({{ visits|length }})</h3>
+<div class="flex items-center justify-between mb-2 mt-4">
+    <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Visits ({{ visits|length }})</h3>
+    <a href="{% url 'healthcare:visit_create' %}" class="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Visit</a>
+</div>
 {% endif %}
 {% if current_healthcare_types|length == 1 %}
 <div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">

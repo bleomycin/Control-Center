@@ -124,6 +124,20 @@
                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
     </div>
     {% endif %}
+    {% if all_conditions %}
+    <div id="condition-filter" class="flex flex-wrap gap-2 items-center">
+        <span class="text-xs text-gray-400">Condition:</span>
+        <select name="condition_filter"
+                hx-get="{% url 'healthcare:healthcare_list' %}" hx-trigger="change" hx-target="#healthcare-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
+            <option value="">All Conditions</option>
+            {% for cond in all_conditions %}
+            <option value="{{ cond.pk }}" {% if condition_filter == cond.pk|stringformat:"d" %}selected{% endif %}>{{ cond.name }}</option>
+            {% endfor %}
+            <option value="routine" {% if condition_filter == "routine" %}selected{% endif %}>Routine Labs</option>
+        </select>
+    </div>
+    {% endif %}
 </form>
 
 <div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>

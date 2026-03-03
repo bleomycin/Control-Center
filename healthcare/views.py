@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 from django.contrib import messages
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -136,18 +138,52 @@ def healthcare_list(request):
         ctx["supplement_status_choices"] = Supplement.STATUS_CHOICES
 
     if "test_results" in current_healthcare_types:
-        qs = TestResult.objects.select_related("ordering_provider").all()
+        qs = TestResult.objects.select_related("ordering_provider", "related_condition").all()
         if q:
             qs = qs.filter(test_name__icontains=q)
         statuses = [s for s in request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
+
+        # Condition filter
+        condition_filter = request.GET.get("condition_filter", "")
+        if condition_filter == "routine":
+            qs = qs.filter(related_condition__isnull=True)
+        elif condition_filter.isdigit():
+            qs = qs.filter(related_condition_id=int(condition_filter))
+
         if len(current_healthcare_types) == 1:
             ALLOWED_SORTS = {"test_name", "status", "date", "test_type"}
             if sort in ALLOWED_SORTS:
                 qs = qs.order_by(f"{direction}{sort}")
         ctx["test_results"] = qs
         ctx["test_result_status_choices"] = TestResult.STATUS_CHOICES
+
+        # Build condition-grouped data
+        all_conditions = Condition.objects.all()
+        ctx["all_conditions"] = all_conditions
+
+        # Group test results by condition
+        groups = OrderedDict()
+        for tr in qs:
+            cond = tr.related_condition
+            if cond not in groups:
+                groups[cond] = []
+            groups[cond].append(tr)
+
+        # Sort: active conditions first, then by name; None ("Routine Labs") last
+        sorted_groups = []
+        active_statuses = {"active", "monitoring"}
+        cond_groups = [(c, results) for c, results in groups.items() if c is not None]
+        cond_groups.sort(key=lambda x: (0 if x[0].status in active_statuses else 1, x[0].name))
+        for cond, results in cond_groups:
+            sorted_groups.append({"condition": cond, "results": results})
+        if None in groups:
+            sorted_groups.append({"condition": None, "results": groups[None]})
+
+        ctx["test_result_groups"] = sorted_groups
+        ctx["test_result_total"] = sum(len(g["results"]) for g in sorted_groups)
+        ctx["condition_filter"] = condition_filter
 
     if "visits" in current_healthcare_types:
         qs = Visit.objects.select_related("provider").all()

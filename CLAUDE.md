@@ -25,11 +25,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Run Commands
 
-### Docker (recommended)
+### Docker via OrbStack (required for dev/testing)
+
+The dev server runs in **OrbStack Docker** on port 8000. Always use the Docker container — never use `python manage.py runserver`.
+
+- **Rebuild after code changes**: `docker compose up --build -d`
+- **Tear down**: `docker compose down` (never `lsof -ti:8000 | xargs kill`)
+- **Always leave Docker running** when done so the user can connect to test
+- OK to tear down for rebuilds, but always bring it back up when finished
 
 ```bash
 cp .env.example .env    # edit SECRET_KEY for production
-docker compose up --build
+docker compose up --build -d
 
 # Run tests inside container
 docker compose exec web python manage.py test
@@ -42,7 +49,7 @@ docker compose exec web python manage.py restore /app/backups/<archive>.tar.gz
 docker compose exec web bash
 ```
 
-### Local Development
+### Local Development (tests only)
 
 ```bash
 # Create virtual environment
