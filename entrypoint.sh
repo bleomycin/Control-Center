@@ -32,5 +32,7 @@ fi
 echo "Starting qcluster in background..."
 python manage.py qcluster &
 
+mkdir -p /app/backups
+
 echo "Starting Gunicorn..."
-exec gunicorn legacy.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 5
+exec gunicorn legacy.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 30

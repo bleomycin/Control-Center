@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |-------|-----------|
 | Language | Python 3.12 |
 | Framework | Django 6.0.2 |
-| Database | SQLite |
+| Database | SQLite (WAL mode) |
 | Frontend | Django Templates + HTMX 2.0.4 |
 | CSS | Tailwind CSS 3.4 (standalone CLI) |
 | Charts | Chart.js 4.x (CDN) |
@@ -31,6 +31,10 @@ docker compose up --build
 
 # Run tests inside container
 docker compose exec web python manage.py test
+
+# Backup / restore
+docker compose exec web python manage.py backup
+docker compose exec web python manage.py restore /app/backups/<archive>.tar.gz
 
 # Shell into container
 docker compose exec web bash
@@ -75,6 +79,11 @@ python manage.py test <app_name>.tests.<TestClass>
 
 # Make migrations after model changes
 python manage.py makemigrations
+
+# Backup / restore (local)
+python manage.py backup                    # → backups/controlcenter-backup-*.tar.gz
+python manage.py backup --keep 7           # keep only 7 most recent
+python manage.py restore backups/<file>.tar.gz
 
 # Tailwind CSS (standalone CLI — no Node.js required)
 make tailwind-install   # download binary to ./bin/tailwindcss
@@ -124,12 +133,15 @@ Seven Django apps, all relationally linked:
 - **Tailwind CSS**: Standalone CLI binary (v3.4.17, no Node.js). Config in `tailwind.config.js`, source in `static/css/input.css`, output at `static/css/tailwind.css`. Local dev: `make tailwind-install && make tailwind-watch`. Docker builds CSS during image build and discards the binary. After adding/changing Tailwind classes, rebuild with `make tailwind-build`.
 - **Static files**: WhiteNoise serves static files in production (`CompressedManifestStaticFilesStorage` when `DEBUG=False`); standard Django staticfiles in dev
 - **Media serving**: Unconditional `re_path` in `urls.py` (no Nginx needed for single-user app)
-- **Editable Choices**: `dashboard/models.py` — `ChoiceOption` model stores dropdown options in DB (replaces hardcoded `choices=` on model fields). 4 categories: `entity_type` (Stakeholder), `contact_method` (ContactLog/FollowUp), `matter_type` (LegalMatter), `note_type` (Note). `dashboard/choices.py` provides `get_choices(category)` (cached DB lookup returning Django choice tuples), `get_choice_label(category, value)` (display label with raw-value fallback), `invalidate_choice_cache()`. Template filter: `{% load choice_labels %}` then `{{ value|choice_label:"category" }}`. Forms load choices dynamically in `__init__`. Settings UI at `/settings/choices/` with HTMX add/edit/toggle-active/reorder per category. Seed data in migration `0004_seed_choice_options.py`. Status/workflow fields (task status, priority, loan status, etc.) are NOT included — their values are referenced in business logic.
+- **Editable Choices**: `dashboard/models.py` — `ChoiceOption` model stores dropdown options in DB (replaces hardcoded `choices=` on model fields). 4 categories: `entity_type` (Stakeholder), `contact_method` (ContactLog/FollowUp), `matter_type` (LegalMatter), `note_type` (Note). `dashboard/choices.py` provides `get_choices(category)` (cached DB lookup returning Django choice tuples), `get_choice_label(category, value)` (display label with raw-value fallback), `invalidate_choice_cache()`. Template filter: `{% load choice_labels %}` then `{{ value|choice_label:"category" }}`. Forms load choices dynamically in `__init__`. Settings UI at `/settings/choices/` with HTMX add/edit/toggle-active/reorder per category. Seed data in squashed `0001_initial.py` migration. Status/workflow fields (task status, priority, loan status, etc.) are NOT included — their values are referenced in business logic.
 - **Multi-Stakeholder Ownership**: Properties, investments, and loans support multiple stakeholders via M2M through models (`PropertyOwnership`, `InvestmentParticipant`, `LoanParty`). Each link stores ownership percentage and role. Detail pages show all stakeholders with color-coded percentages (green for properties, purple for investments, orange for loans). HTMX inline add/delete on all 3 detail pages (same pattern as contact logs). Admin also has inline editors.
 - **Stakeholder Detail Tabs**: Tabbed "All Connections" interface replaces individual preview cards on stakeholder detail page. 8 tabs with count badges showing all related entities (no 5-item limits). Cash flow entries included. Zero information redundancy with the relationship graph.
 - **Follow-Up Reminders**: `FollowUp` model has `reminder_enabled` (default=False) opt-in toggle and `follow_up_days` (default=3) for per-follow-up configurable reminder windows. `is_stale` property only fires when `reminder_enabled=True`. UI shows: green (responded), red "Overdue" (stale + reminder on), yellow "Awaiting" (pending + reminder on), gray "no reminder" (pending + reminder off). HTMX "Mark Responded" button on pending follow-ups. Task create form has optional inline follow-up section with separate "Enable reminder" checkbox. `check_stale_followups()` filters on `reminder_enabled=True` and excludes completed tasks.
-- **Docker**: Single container runs Gunicorn (foreground) + qcluster (background). `entrypoint.sh` handles migrate, collectstatic, createsuperuser, sample data loading. Named volumes for SQLite (`legacy-data`) and media (`legacy-media`)
-- **Firm/Employee Hierarchy**: `Stakeholder.parent_organization` self-FK (SET_NULL). Firms have `entity_type="firm"`. Detail page shows Team Members section with count and "Add Employee" link. Employee detail links back to firm. Graph shows firm→employee + sibling edges. Form filters `parent_organization` queryset to firms. CSV/PDF exports include firm. Global search includes `parent_organization__name`. Stakeholder table rows link Organization column to firm. "firm" entity type seeded via `dashboard/migrations/0005_add_firm_entity_type.py` and `choice_seed_data.py`.
+- **SQLite Hardening**: `DashboardConfig.ready()` in `dashboard/apps.py` sets pragmas via `connection_created` signal — WAL mode, `synchronous=NORMAL`, `busy_timeout=5000`, `cache_size=-20000` (20MB), `foreign_keys=ON`. WAL mode eliminates reader/writer blocking between Gunicorn workers and qcluster.
+- **Database Indexes**: `db_index=True` on frequently-filtered fields: `Stakeholder.entity_type`/`name`, `Task.status`/`due_date`, `CashFlowEntry.date`/`entry_type`, `LegalMatter.status`, `Note.date`.
+- **Backup/Restore**: `python manage.py backup` uses Python's `sqlite3.backup()` API for safe live-DB snapshots (handles WAL mode), copies `media/`, packages into timestamped `.tar.gz`. `--keep N` prunes old backups. `python manage.py restore <archive>` validates, replaces DB + media, runs `migrate`. `dashboard/backup_task.py` provides django-q2 callable (`run_backup`) for automated daily backups (keeps 7). Backup dir: `BACKUP_DIR` env var or `BASE_DIR/backups`.
+- **Docker**: Single container runs Gunicorn (foreground, 2 workers, 30s timeout) + qcluster (background). `entrypoint.sh` handles migrate, collectstatic, createsuperuser, sample data loading. Named volumes for SQLite (`legacy-data`), media (`legacy-media`), and backups (`legacy-backups`)
+- **Firm/Employee Hierarchy**: `Stakeholder.parent_organization` self-FK (SET_NULL). Firms have `entity_type="firm"`. Detail page shows Team Members section with count and "Add Employee" link. Employee detail links back to firm. Graph shows firm→employee + sibling edges. Form filters `parent_organization` queryset to firms. CSV/PDF exports include firm. Global search includes `parent_organization__name`. Stakeholder table rows link Organization column to firm. "firm" entity type seeded via squashed `dashboard/0001_initial.py` and `choice_seed_data.py`.
 - **Bidirectional Task Direction**: `Task.direction` CharField with choices: `personal` (default), `outbound` ("I asked them"), `inbound` ("they asked me"). NOT a DB-backed ChoiceOption (values in business logic). Cyan badges/arrows for outbound, amber for inbound. Direction-aware stakeholder label on detail ("Requested From"/"Requested By"). Follow-up section hidden for inbound tasks. Direction filter checkboxes on list page. Calendar event titles prefixed `[OUT]`/`[IN]`. Notification messages prefixed `[OUTBOUND]`/`[INBOUND]`. Stakeholder detail Tasks tab has convenience links: "+ Request from them" (outbound) and "+ They requested" (inbound) with prefilled direction + stakeholder.
 - **Stakeholder List Tabs**: 7-tab navigation on stakeholder list page: All (default, excludes employees), Firms & Teams (card layout with nested employees), Attorneys, Lenders, Business Partners, Advisors, Other. `TAB_DEFINITIONS` dict in `stakeholders/views.py` defines tab keys, labels, and entity type filters. `tab` query param drives filtering; HTMX swaps `#stakeholder-content` div. Firms tab uses `_firm_cards.html` partial (card per firm with employee rows, "+ Add Employee" link). Table tabs reuse `_stakeholder_table_rows.html` inside `_tab_content.html` wrapper. Tab counts shown as badges. Search on Firms tab matches firm name OR employee name via `Q` objects. Type filter dropdown only shown on All tab.
 - **Notes List Cards**: Card-based layout replaces table on `/notes/`. Each card shows: color-coded type badge with icon, date, attachment count (paperclip), content preview (`truncatewords:40` + `line-clamp-2`), and linked entity chips (indigo=participants, blue=stakeholders, green=properties, amber=legal, yellow=tasks). `NoteListView` uses `prefetch_related` for all 5 M2M fields + `annotate(attachment_count=Count("attachments"))`. Search matches `title` and `content`. Stakeholder filter dropdown filters by `participants` OR `related_stakeholders`. Sort toolbar above cards (date/title/type). `_note_cards.html` partial swapped into `#note-card-list` div. `bulk-actions.js` handles card-based afterSwap reset.
@@ -166,7 +178,7 @@ Seven Django apps, all relationally linked:
 - HTMX loading indicators on all list page filters/searches
 - Colour-coded action buttons (purple exports, blue edit, green complete, red delete)
 - Docker deployment — single container with Gunicorn + WhiteNoise, env var config, named volumes
-- Unit/integration tests (286 tests across all modules)
+- Unit/integration tests (300 tests across all modules)
 - Tailwind CSS switched from CDN to standalone CLI (v3.4.17) — compiled at build time, no Node.js required
 - GitHub repo: `trialskid/control-center`
 - Security hardening — conditional SECRET_KEY, production SSL/HSTS/cookie security headers (gated behind `not DEBUG`)
@@ -188,6 +200,8 @@ Seven Django apps, all relationally linked:
 - Stakeholder list category tabs — 7-tab navigation (All, Firms & Teams, Attorneys, Lenders, Business Partners, Advisors, Other). "All" tab excludes employees (they appear under their firm). "Firms & Teams" uses card layout with firm cards containing nested employee rows and "+ Add Employee" links. Tab counts as badges. HTMX tab switching with `hx-push-url`. Search works per-tab (Firms tab matches firm OR employee name). Type filter dropdown only on All tab. Bulk actions/sorting/pagination on table tabs. `_tab_content.html` and `_firm_cards.html` partials. 5 new tests.
 
 - Notes list rich cards — table replaced with card layout showing content previews (`truncatewords:40` + `line-clamp-2`), color-coded type badges with icons (call/email/meeting/research/legal_update/general), attachment count with paperclip icon, and linked entity chips (indigo participants, blue stakeholders, green properties, amber legal matters, yellow tasks). Stakeholder filter dropdown (participants OR related_stakeholders). Search expanded to match note content. Prefetch + annotation eliminates N+1 queries. Sort toolbar (date/title/type). Bulk actions work with card layout via `bulk-actions.js` afterSwap fix. 4 new tests.
+
+- Sustainability hardening (Phase 1) — SQLite WAL mode + pragmas via `connection_created` signal (`dashboard/apps.py`). Gunicorn tuned from 4 workers/5s timeout to 2 workers/30s timeout. Database indexes on 8 frequently-filtered fields across 5 apps. Backup system: `python manage.py backup` (sqlite3 backup API + media → timestamped .tar.gz), `python manage.py restore <archive>` (validates, replaces DB + media, runs migrate), automated daily backup via django-q2 (keeps 7). Docker backup volume (`legacy-backups`). All 21 migrations squashed to 7 (one `0001_initial.py` per app). `.gitignore` updated for WAL files and backups dir. 14 new tests.
 
 ### Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)

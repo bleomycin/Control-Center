@@ -8,8 +8,10 @@ services:
     volumes:
       - legacy-data:/app/data
       - legacy-media:/app/media
+      - legacy-backups:/app/backups
     restart: unless-stopped
 
 volumes:
   legacy-data:
   legacy-media:
+  legacy-backups:

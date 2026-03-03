@@ -20,7 +20,7 @@ class LegalMatter(models.Model):
     title = models.CharField(max_length=255)
     case_number = models.CharField(max_length=100, blank=True)
     matter_type = models.CharField(max_length=30, default="other")
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active", db_index=True)
     jurisdiction = models.CharField(max_length=255, blank=True)
     court = models.CharField(max_length=255, blank=True)
     filing_date = models.DateField(null=True, blank=True)
