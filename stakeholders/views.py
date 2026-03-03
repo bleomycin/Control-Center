@@ -5,19 +5,47 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
-from dashboard.choices import get_choice_label, get_choices
-from .forms import ContactLogForm, StakeholderForm, StakeholderPropertyForm, StakeholderInvestmentForm, StakeholderLoanForm
-from .models import ContactLog, Relationship, Stakeholder
+from django.views.decorators.http import require_POST
 
-TAB_DEFINITIONS = {
-    "all": {"label": "All"},
-    "firms": {"label": "Firms & Teams"},
-    "attorneys": {"label": "Attorneys", "types": ["attorney"]},
-    "lenders": {"label": "Lenders", "types": ["lender"]},
-    "business_partners": {"label": "Business Partners", "types": ["business_partner"]},
-    "advisors": {"label": "Advisors", "types": ["advisor", "professional"]},
-    "other": {"label": "Other", "types": ["contact", "other"]},
-}
+from dashboard.choices import get_choice_label, get_choices
+from .forms import ContactLogForm, StakeholderForm, StakeholderPropertyForm, StakeholderInvestmentForm, StakeholderLoanForm, StakeholderTabForm
+from .models import ContactLog, Relationship, Stakeholder, StakeholderTab
+
+
+def _get_tab_config():
+    """Build dynamic tab config from StakeholderTab + computed Other tab."""
+    tabs = list(StakeholderTab.objects.all())
+    # Collect all entity_types claimed by user tabs (excluding builtins)
+    claimed = set()
+    for tab in tabs:
+        if not tab.is_builtin:
+            claimed.update(tab.entity_types)
+
+    # Get all active entity_type values (excluding "firm")
+    all_types = {v for v, _label in get_choices("entity_type") if v != "firm"}
+    unclaimed = all_types - claimed
+
+    result = []
+    for tab in tabs:
+        result.append({
+            "key": tab.key,
+            "label": tab.label,
+            "types": tab.entity_types,
+            "is_builtin": tab.is_builtin,
+            "pk": tab.pk,
+        })
+
+    # Add dynamic "Other" tab if unclaimed types exist
+    if unclaimed:
+        result.append({
+            "key": "other",
+            "label": "Other",
+            "types": sorted(unclaimed),
+            "is_builtin": False,
+            "pk": None,  # dynamic, not stored
+        })
+
+    return result
 
 
 class StakeholderListView(ListView):
@@ -26,9 +54,21 @@ class StakeholderListView(ListView):
     context_object_name = "stakeholders"
     paginate_by = 25
 
+    def get_tab_config(self):
+        if not hasattr(self, "_tab_config"):
+            self._tab_config = _get_tab_config()
+        return self._tab_config
+
     def get_current_tab(self):
         tab = self.request.GET.get("tab", "all")
-        return tab if tab in TAB_DEFINITIONS else "all"
+        valid_keys = {t["key"] for t in self.get_tab_config()}
+        return tab if tab in valid_keys else "all"
+
+    def _get_tab_types(self, tab_key):
+        for t in self.get_tab_config():
+            if t["key"] == tab_key:
+                return t["types"]
+        return []
 
     def get_queryset(self):
         tab = self.get_current_tab()
@@ -43,7 +83,7 @@ class StakeholderListView(ListView):
         if tab == "all":
             qs = qs.filter(parent_organization__isnull=True)
         else:
-            tab_types = TAB_DEFINITIONS[tab].get("types", [])
+            tab_types = self._get_tab_types(tab)
             if tab_types:
                 qs = qs.filter(entity_type__in=tab_types, parent_organization__isnull=True)
 
@@ -82,9 +122,11 @@ class StakeholderListView(ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         tab = self.get_current_tab()
+        tab_config = self.get_tab_config()
         ctx["current_tab"] = tab
         ctx["search_query"] = self.request.GET.get("q", "")
         ctx["entity_types"] = get_choices("entity_type")
+        ctx["entity_type_choices"] = get_choices("entity_type")
         ctx["selected_type"] = self.request.GET.get("type", "")
         ctx["selected_types"] = self.request.GET.getlist("type")
         ctx["current_sort"] = self.request.GET.get("sort", "")
@@ -93,21 +135,22 @@ class StakeholderListView(ListView):
         # Tab counts
         all_qs = Stakeholder.objects.filter(parent_organization__isnull=True)
         ctx["total_count"] = Stakeholder.objects.count()
-        tab_counts = {
-            "all": all_qs.count(),
-            "firms": Stakeholder.objects.filter(entity_type="firm").count(),
-            "attorneys": all_qs.filter(entity_type__in=["attorney"]).count(),
-            "lenders": all_qs.filter(entity_type__in=["lender"]).count(),
-            "business_partners": all_qs.filter(entity_type__in=["business_partner"]).count(),
-            "advisors": all_qs.filter(entity_type__in=["advisor", "professional"]).count(),
-            "other": all_qs.filter(entity_type__in=["contact", "other"]).count(),
-        }
+        tab_counts = {}
+        for t in tab_config:
+            if t["key"] == "all":
+                tab_counts["all"] = all_qs.count()
+            elif t["key"] == "firms":
+                tab_counts["firms"] = Stakeholder.objects.filter(entity_type="firm").count()
+            elif t["types"]:
+                tab_counts[t["key"]] = all_qs.filter(entity_type__in=t["types"]).count()
+            else:
+                tab_counts[t["key"]] = 0
         ctx["tab_counts"] = tab_counts
 
         # Build tabs list for template iteration
         ctx["tabs"] = [
-            {"key": key, "label": defn["label"], "count": tab_counts[key]}
-            for key, defn in TAB_DEFINITIONS.items()
+            {"key": t["key"], "label": t["label"], "count": tab_counts.get(t["key"], 0)}
+            for t in tab_config
         ]
 
         # Firms data for firms tab
@@ -544,3 +587,69 @@ def loan_party_delete(request, pk):
     return render(request, "stakeholders/partials/_sh_party_list.html",
                   {"parties": LoanParty.objects.filter(stakeholder=stakeholder).select_related("loan"),
                    "stakeholder": stakeholder})
+
+
+# --- Inline entity type editing ---
+
+@require_POST
+def inline_update_type(request, pk):
+    stakeholder = get_object_or_404(Stakeholder.objects.select_related("parent_organization"), pk=pk)
+    value = request.POST.get("entity_type", "")
+    valid_values = {v for v, _l in get_choices("entity_type")}
+    if value not in valid_values:
+        return HttpResponse(status=400)
+    stakeholder.entity_type = value
+    stakeholder.save()
+    return render(request, "stakeholders/partials/_stakeholder_row.html", {
+        "s": stakeholder,
+        "entity_type_choices": get_choices("entity_type"),
+    })
+
+
+# --- Tab management views ---
+
+def tab_settings(request):
+    tabs = StakeholderTab.objects.all()
+    return render(request, "stakeholders/tab_settings.html", {"tabs": tabs})
+
+
+def tab_add(request):
+    if request.method == "POST":
+        form = StakeholderTabForm(request.POST)
+        if form.is_valid():
+            form.save()
+            tabs = StakeholderTab.objects.all()
+            return render(request, "stakeholders/partials/_tab_settings_list.html", {"tabs": tabs})
+    else:
+        form = StakeholderTabForm()
+    return render(request, "stakeholders/partials/_tab_settings_form.html", {"form": form})
+
+
+def tab_edit(request, pk):
+    tab = get_object_or_404(StakeholderTab, pk=pk)
+    if tab.is_builtin:
+        return HttpResponse(status=403)
+    if request.method == "POST":
+        form = StakeholderTabForm(request.POST, instance=tab)
+        if form.is_valid():
+            form.save()
+            tabs = StakeholderTab.objects.all()
+            return render(request, "stakeholders/partials/_tab_settings_list.html", {"tabs": tabs})
+    else:
+        form = StakeholderTabForm(instance=tab)
+    from django.urls import reverse
+    return render(request, "stakeholders/partials/_tab_settings_form.html", {
+        "form": form,
+        "form_url": reverse("stakeholders:tab_edit", args=[pk]),
+        "edit_mode": True,
+    })
+
+
+def tab_delete(request, pk):
+    tab = get_object_or_404(StakeholderTab, pk=pk)
+    if tab.is_builtin:
+        return HttpResponse(status=403)
+    if request.method == "POST":
+        tab.delete()
+    tabs = StakeholderTab.objects.all()
+    return render(request, "stakeholders/partials/_tab_settings_list.html", {"tabs": tabs})
