@@ -67,47 +67,72 @@
     <div id="filter-panel" class="{% if not selected_statuses and not selected_directions and not selected_types and not date_from and not date_to %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
         <!-- Desktop: horizontal flex wrap. Mobile: vertical stack -->
         <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
+            <!-- Status pills -->
             <div>
-                <span class="text-xs text-gray-400 font-medium">Status:</span>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                <span class="text-xs text-gray-400 font-medium mr-1">Status:</span>
+                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:inline-flex items-center">
                     {% for val, label in status_choices %}
-                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                    <label class="cursor-pointer">
                         <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
                                hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                               class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                        {{ label }}
+                               class="hidden"
+                               onchange="toggleTaskPill(this)">
+                        <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                     {% if val in selected_statuses %}{% if val == 'not_started' %}bg-gray-700/40 text-gray-300 border-gray-600{% elif val == 'in_progress' %}bg-blue-900/40 text-blue-300 border-blue-700{% elif val == 'waiting' %}bg-yellow-900/40 text-yellow-300 border-yellow-700{% elif val == 'complete' %}bg-green-900/40 text-green-300 border-green-700{% endif %}{% else %}border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500{% endif %}"
+                              data-active-bg="{% if val == 'not_started' %}bg-gray-700/40{% elif val == 'in_progress' %}bg-blue-900/40{% elif val == 'waiting' %}bg-yellow-900/40{% elif val == 'complete' %}bg-green-900/40{% endif %}"
+                              data-active-text="{% if val == 'not_started' %}text-gray-300{% elif val == 'in_progress' %}text-blue-300{% elif val == 'waiting' %}text-yellow-300{% elif val == 'complete' %}text-green-300{% endif %}"
+                              data-active-border="{% if val == 'not_started' %}border-gray-600{% elif val == 'in_progress' %}border-blue-700{% elif val == 'waiting' %}border-yellow-700{% elif val == 'complete' %}border-green-700{% endif %}">
+                            {{ label }}
+                        </span>
                     </label>
                     {% endfor %}
                 </div>
             </div>
+            <!-- Direction pills -->
             <div>
-                <span class="text-xs text-gray-400 font-medium">Direction:</span>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                <span class="text-xs text-gray-400 font-medium mr-1">Direction:</span>
+                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:inline-flex items-center">
                     {% for val, label in direction_choices %}
-                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                    <label class="cursor-pointer">
                         <input type="checkbox" name="direction" value="{{ val }}" {% if val in selected_directions %}checked{% endif %}
                                hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                               class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                        {{ label }}
+                               class="hidden"
+                               onchange="toggleTaskPill(this)">
+                        <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                     {% if val in selected_directions %}{% if val == 'personal' %}bg-gray-700/40 text-gray-300 border-gray-600{% elif val == 'outbound' %}bg-cyan-900/40 text-cyan-300 border-cyan-700{% elif val == 'inbound' %}bg-amber-900/40 text-amber-300 border-amber-700{% endif %}{% else %}border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500{% endif %}"
+                              data-active-bg="{% if val == 'personal' %}bg-gray-700/40{% elif val == 'outbound' %}bg-cyan-900/40{% elif val == 'inbound' %}bg-amber-900/40{% endif %}"
+                              data-active-text="{% if val == 'personal' %}text-gray-300{% elif val == 'outbound' %}text-cyan-300{% elif val == 'inbound' %}text-amber-300{% endif %}"
+                              data-active-border="{% if val == 'personal' %}border-gray-600{% elif val == 'outbound' %}border-cyan-700{% elif val == 'inbound' %}border-amber-700{% endif %}">
+                            {{ label }}
+                        </span>
                     </label>
                     {% endfor %}
                 </div>
             </div>
+            <!-- Type pills -->
             <div>
-                <span class="text-xs text-gray-400 font-medium">Type:</span>
-                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-1 sm:mt-0 sm:inline-flex sm:flex-wrap sm:gap-2 sm:ml-0">
+                <span class="text-xs text-gray-400 font-medium mr-1">Type:</span>
+                <div class="flex flex-wrap gap-1.5 mt-1 sm:mt-0 sm:inline-flex items-center">
                     {% for val, label in type_choices %}
-                    <label class="inline-flex items-center gap-1 text-xs text-gray-300 cursor-pointer">
+                    <label class="cursor-pointer">
                         <input type="checkbox" name="task_type" value="{{ val }}" {% if val in selected_types %}checked{% endif %}
                                hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
-                               class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
-                        {{ label }}
+                               class="hidden"
+                               onchange="toggleTaskPill(this)">
+                        <span class="inline-flex items-center text-xs px-2 py-0.5 rounded-full border transition-colors
+                                     {% if val in selected_types %}{% if val == 'one_time' %}bg-gray-700/40 text-gray-300 border-gray-600{% elif val == 'reference' %}bg-purple-900/40 text-purple-300 border-purple-700{% elif val == 'meeting' %}bg-blue-900/40 text-blue-300 border-blue-700{% endif %}{% else %}border-gray-600 text-gray-500 hover:text-gray-300 hover:border-gray-500{% endif %}"
+                              data-active-bg="{% if val == 'one_time' %}bg-gray-700/40{% elif val == 'reference' %}bg-purple-900/40{% elif val == 'meeting' %}bg-blue-900/40{% endif %}"
+                              data-active-text="{% if val == 'one_time' %}text-gray-300{% elif val == 'reference' %}text-purple-300{% elif val == 'meeting' %}text-blue-300{% endif %}"
+                              data-active-border="{% if val == 'one_time' %}border-gray-600{% elif val == 'reference' %}border-purple-700{% elif val == 'meeting' %}border-blue-700{% endif %}">
+                            {{ label }}
+                        </span>
                     </label>
                     {% endfor %}
                 </div>
             </div>
+            <!-- Date range -->
             <div class="w-full sm:w-auto">
-                <span class="text-xs text-gray-400 font-medium">Due:</span>
+                <span class="text-xs text-gray-400 font-medium mr-1">Due:</span>
                 <div class="flex items-center gap-2 mt-1 sm:mt-0 sm:inline-flex">
                     <input type="date" name="date_from" value="{{ date_from }}"
                            hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
@@ -188,9 +213,30 @@ function toggleFilters() {
     }
 }
 
+function toggleTaskPill(checkbox) {
+    var span = checkbox.nextElementSibling;
+    var bg = span.dataset.activeBg || '';
+    var text = span.dataset.activeText || '';
+    var border = span.dataset.activeBorder || '';
+    if (checkbox.checked) {
+        span.classList.add(...bg.split(' '), ...text.split(' '), ...border.split(' '));
+        span.classList.remove('border-gray-600', 'text-gray-500');
+    } else {
+        span.classList.remove(...bg.split(' '), ...text.split(' '), ...border.split(' '));
+        span.classList.add('border-gray-600', 'text-gray-500');
+    }
+}
+
 function clearFilters() {
     var panel = document.getElementById('filter-panel');
-    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) {
+        cb.checked = false;
+        var span = cb.nextElementSibling;
+        if (span && span.dataset.activeBg) {
+            span.classList.remove(...(span.dataset.activeBg || '').split(' '), ...(span.dataset.activeText || '').split(' '), ...(span.dataset.activeBorder || '').split(' '));
+            span.classList.add('border-gray-600', 'text-gray-500');
+        }
+    });
     panel.querySelectorAll('input[type=date]').forEach(function(d) { d.value = ''; });
     // Remove badge
     var badge = document.getElementById('filter-count');
