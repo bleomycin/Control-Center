@@ -90,7 +90,7 @@ Seven Django apps, all relationally linked:
 |-----|--------|---------|
 | **dashboard** | ChoiceOption, EmailSettings, Notification | Master homepage, global search, activity timeline, calendar view, email/SMTP settings, notification center, editable choice management |
 | **stakeholders** | Stakeholder, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationship mapping, contact logs |
-| **assets** | RealEstate, Investment, Loan | Asset & liability tracker — properties, investments, loans with payment schedules |
+| **assets** | RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty | Asset & liability tracker — properties, investments, loans with payment schedules; M2M through models for multi-stakeholder ownership with percentages and roles |
 | **legal** | LegalMatter, Evidence | Legal matter management — case status, attorneys (M2M), evidence, related stakeholders/properties |
 | **tasks** | Task, FollowUp | Task system — deadlines, priorities, status tracking, follow-up/stale outreach workflows |
 | **cashflow** | CashFlowEntry | Cash flow — actual + projected inflows/outflows with category filtering |
@@ -116,7 +116,7 @@ Seven Django apps, all relationally linked:
 - **Email Settings**: `dashboard/models.py` — `EmailSettings` singleton (pk=1) stores SMTP config in DB. UI at `/settings/email/` with HTMX test-email button. `dashboard/email.py` provides `get_smtp_connection()`, `get_notification_addresses()`, `notifications_are_enabled()`. Admin registered with singleton enforcement (no add if exists, no delete)
 - **Breadcrumbs**: All detail/form pages have `Home / Module / Record` breadcrumb navigation
 - **Notifications**: `dashboard/models.py` — `Notification` model with levels (info/warning/critical). Sidebar bell icon with HTMX badge polling (every 60s). Full list page at `/notifications/`. Auto-created by scheduled task functions alongside emails.
-- **Relationship Graph**: Cytoscape.js network visualization on stakeholder detail page. JSON endpoint returns 1st + 2nd degree relationship data. `cose` layout, dark theme, clickable nodes.
+- **Relationship Graph**: Cytoscape.js network visualization on stakeholder detail page (500px). Shows ALL entity types: stakeholders (circles), properties (rectangles), investments (diamonds), loans (triangles), legal matters (hexagons), tasks (stars) — all color-coded. Edges display role and ownership percentage (e.g., "Co-owner (50%)"). JSON endpoint returns 1st + 2nd degree relationship data. `cose` layout, dark theme, clickable nodes. Node IDs prefixed by type (s-, p-, i-, l-, m-, t-).
 - **Advanced Filtering**: All list pages use `<form id="filter-form">` wrapping all inputs. Sortable column headers with `sort`/`dir` query params and arrow indicators. Date range `<input type="date">` filters. Multi-select status/type via checkbox groups with `getlist()`.
 - **Bulk Operations**: All list pages have select-all checkbox, per-row checkboxes, and a sticky bulk action bar (hidden until items selected). `static/js/bulk-actions.js` handles select-all toggle, count tracking, and bar visibility. Bulk delete (with confirmation modal), bulk export CSV, and bulk mark-complete (tasks only) views per app.
 - **Button colour scheme**: Detail pages use purple (PDF/export), blue (Edit), green (Complete), red (Delete). List pages use purple for export buttons, blue for "+ New".
@@ -125,6 +125,8 @@ Seven Django apps, all relationally linked:
 - **Static files**: WhiteNoise serves static files in production (`CompressedManifestStaticFilesStorage` when `DEBUG=False`); standard Django staticfiles in dev
 - **Media serving**: Unconditional `re_path` in `urls.py` (no Nginx needed for single-user app)
 - **Editable Choices**: `dashboard/models.py` — `ChoiceOption` model stores dropdown options in DB (replaces hardcoded `choices=` on model fields). 4 categories: `entity_type` (Stakeholder), `contact_method` (ContactLog/FollowUp), `matter_type` (LegalMatter), `note_type` (Note). `dashboard/choices.py` provides `get_choices(category)` (cached DB lookup returning Django choice tuples), `get_choice_label(category, value)` (display label with raw-value fallback), `invalidate_choice_cache()`. Template filter: `{% load choice_labels %}` then `{{ value|choice_label:"category" }}`. Forms load choices dynamically in `__init__`. Settings UI at `/settings/choices/` with HTMX add/edit/toggle-active/reorder per category. Seed data in migration `0004_seed_choice_options.py`. Status/workflow fields (task status, priority, loan status, etc.) are NOT included — their values are referenced in business logic.
+- **Multi-Stakeholder Ownership**: Properties, investments, and loans support multiple stakeholders via M2M through models (`PropertyOwnership`, `InvestmentParticipant`, `LoanParty`). Each link stores ownership percentage and role. Detail pages show all stakeholders with color-coded percentages (green for properties, purple for investments, orange for loans). Admin has inline editors for through model records. Note: create/edit forms don't include inline formsets yet — use admin for complex multi-stakeholder management.
+- **Stakeholder Detail Tabs**: Tabbed "All Connections" interface replaces individual preview cards on stakeholder detail page. 8 tabs with count badges showing all related entities (no 5-item limits). Cash flow entries included. Zero information redundancy with the relationship graph.
 - **Docker**: Single container runs Gunicorn (foreground) + qcluster (background). `entrypoint.sh` handles migrate, collectstatic, createsuperuser, sample data loading. Named volumes for SQLite (`legacy-data`) and media (`legacy-media`)
 
 ## Current Status
@@ -159,7 +161,7 @@ Seven Django apps, all relationally linked:
 - HTMX loading indicators on all list page filters/searches
 - Colour-coded action buttons (purple exports, blue edit, green complete, red delete)
 - Docker deployment — single container with Gunicorn + WhiteNoise, env var config, named volumes
-- Unit/integration tests (247 tests across all modules)
+- Unit/integration tests (234 tests across all modules)
 - Tailwind CSS switched from CDN to standalone CLI (v3.4.17) — compiled at build time, no Node.js required
 - GitHub repo: `trialskid/control-center`
 - Security hardening — conditional SECRET_KEY, production SSL/HSTS/cookie security headers (gated behind `not DEBUG`)
@@ -171,6 +173,9 @@ Seven Django apps, all relationally linked:
 - Advanced filtering on all list pages — sortable column headers (click to toggle asc/desc with arrow indicators), date range inputs, multi-select status/type checkbox groups, unified `<form id="filter-form">` with `hx-include`
 - Bulk operations on all list pages — select-all checkbox, per-row checkboxes, bulk action bar (delete selected, export selected CSV), tasks also have bulk mark-complete; confirmation modal for bulk delete
 - Editable choice fields — DB-backed `ChoiceOption` model replacing hardcoded `choices=` on 5 model fields across 4 categories (entity type, contact method, matter type, note type). Settings UI at `/settings/choices/` with HTMX inline add/edit/toggle-active/reorder. Template filter `|choice_label` for display. Cached choice lookups. Seed data migration. Forms load choices dynamically. PDF exports and notifications updated. 19 new tests.
+- Enhanced stakeholder detail page — comprehensive relationship view with tabbed "All Connections" interface (8 tabs with count badges), expanded Cytoscape.js graph showing all entity types (stakeholders, properties, investments, loans, legal matters, tasks) with color-coded shapes, cash flow entries added to detail view
+- Multi-stakeholder support — M2M through models (`PropertyOwnership`, `InvestmentParticipant`, `LoanParty`) replacing single FKs on properties, investments, and loans. Each link stores ownership percentage and role. Graph edges display "Role (X%)" labels. Admin inline editors. Sample data updated with co-owners and co-borrowers.
 
 ### Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)
+- Inline formsets for multi-stakeholder management on create/edit forms (currently admin-only)
