@@ -58,26 +58,9 @@ def dashboard(request):
         task__status="complete",
     ).select_related("task", "stakeholder")
 
-    # Cash flow summary for current month
-    current_month_entries = CashFlowEntry.objects.filter(
-        date__year=today.year,
-        date__month=today.month,
-    )
-
-    actual_inflows = current_month_entries.filter(
-        entry_type="inflow", is_projected=False,
-    ).aggregate(total=Sum("amount"))["total"] or 0
-
-    actual_outflows = current_month_entries.filter(
-        entry_type="outflow", is_projected=False,
-    ).aggregate(total=Sum("amount"))["total"] or 0
-
     from cashflow.alerts import get_liquidity_alerts
 
-    # Monthly net flow
-    monthly_net_flow = actual_inflows - actual_outflows
-
-    # Net Worth calculation
+    # Asset overview counts & values (for asset summary card)
     properties_qs = RealEstate.objects.exclude(status="sold")
     total_real_estate = properties_qs.aggregate(
         total=Sum("estimated_value"),
@@ -90,15 +73,11 @@ def dashboard(request):
     )["total"] or 0
     investment_count = investments_qs.count()
 
-    total_assets = total_real_estate + total_investments
-
     active_loans_qs = Loan.objects.filter(status="active")
     total_liabilities = active_loans_qs.aggregate(
         total=Sum("current_balance"),
     )["total"] or 0
     active_loan_count = active_loans_qs.count()
-
-    net_worth = total_assets - total_liabilities
 
     # Upcoming meetings (next 14 days)
     upcoming_meetings = Task.objects.filter(
@@ -157,12 +136,6 @@ def dashboard(request):
         "recent_activity": recent_activity,
         "stale_followups": stale_followups,
         "liquidity_alerts": get_liquidity_alerts(),
-        "monthly_net_flow": monthly_net_flow,
-        "net_worth": {
-            "total_assets": total_assets,
-            "total_liabilities": total_liabilities,
-            "net_worth": net_worth,
-        },
         "property_count": property_count,
         "property_value": total_real_estate,
         "investment_count": investment_count,
