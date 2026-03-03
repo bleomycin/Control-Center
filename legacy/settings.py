@@ -144,15 +144,17 @@ if not DEBUG:
         },
     }
 
-    # Production security settings
-    SECURE_SSL_REDIRECT = os.environ.get('SECURE_SSL_REDIRECT', 'false').lower() in ('true', '1', 'yes')
+    # Production security settings — gated behind ENABLE_SSL env var
+    # Default off: this app runs behind VPN/ngrok which handles SSL termination
+    _enable_ssl = os.environ.get('ENABLE_SSL', 'false').lower() in ('true', '1', 'yes')
+    SECURE_SSL_REDIRECT = _enable_ssl
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SESSION_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000 if _enable_ssl else 0
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = _enable_ssl
+    SECURE_HSTS_PRELOAD = _enable_ssl
+    SESSION_COOKIE_SECURE = _enable_ssl
     SESSION_COOKIE_HTTPONLY = True
-    CSRF_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = _enable_ssl
     CSRF_COOKIE_HTTPONLY = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
