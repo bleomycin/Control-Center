@@ -1,0 +1,70 @@
+<div id="note-content-block" class="bg-gray-800 rounded-lg border border-blue-600 p-6 mb-6">
+    <div class="flex items-center justify-between mb-2">
+        <h2 class="text-xs font-semibold text-blue-400 uppercase tracking-wide">Editing Content</h2>
+    </div>
+    <form hx-post="{% url 'notes:inline_edit_content' note.pk %}"
+          hx-target="#note-content-block" hx-swap="outerHTML"
+          id="inline-content-form">
+        {% csrf_token %}
+        <textarea name="content" id="id_inline_content" rows="12"
+                  class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-3 py-2 focus:border-blue-500 focus:ring-blue-500">{{ note.content }}</textarea>
+        <!-- Mobile markdown helper bar -->
+        <div class="sm:hidden flex flex-wrap gap-1 mt-2 mb-2" id="md-helper-bar">
+            <button type="button" onclick="mdInsert('**','**')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded font-bold">B</button>
+            <button type="button" onclick="mdInsert('*','*')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded italic">I</button>
+            <button type="button" onclick="mdInsert('## ','')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">H2</button>
+            <button type="button" onclick="mdInsert('- ','')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">List</button>
+            <button type="button" onclick="mdInsert('[','](url)')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">Link</button>
+            <button type="button" onclick="mdInsert('`','`')" class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded font-mono">Code</button>
+        </div>
+        <div class="flex gap-2 mt-3 sticky bottom-0 bg-gray-800 py-2">
+            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save</button>
+            <button type="button"
+                    hx-get="{% url 'notes:inline_edit_content' note.pk %}?display=1"
+                    hx-target="#note-content-block" hx-swap="outerHTML"
+                    class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
+        </div>
+    </form>
+</div>
+<script>
+(function() {
+    var ta = document.getElementById('id_inline_content');
+    if (ta && window.innerWidth >= 640 && typeof EasyMDE !== 'undefined') {
+        var easyMDE = new EasyMDE({
+            element: ta,
+            spellChecker: false,
+            status: false,
+            autoDownloadFontAwesome: true,
+            toolbar: [
+                "bold", "italic", "strikethrough", "|",
+                "heading-1", "heading-2", "heading-3", "|",
+                "unordered-list", "ordered-list", "checklist", "|",
+                "link", "quote", "code", "|",
+                "preview", "side-by-side", "|",
+                "guide"
+            ],
+            minHeight: "300px",
+        });
+        easyMDE.codemirror.on("change", function() {
+            easyMDE.codemirror.save();
+        });
+        var bar = document.getElementById('md-helper-bar');
+        if (bar) bar.style.display = 'none';
+    } else if (ta) {
+        ta.classList.add('inline-mobile-textarea');
+    }
+})();
+
+function mdInsert(before, after) {
+    var ta = document.getElementById('id_inline_content');
+    if (!ta) return;
+    var start = ta.selectionStart;
+    var end = ta.selectionEnd;
+    var text = ta.value;
+    var selected = text.substring(start, end);
+    ta.value = text.substring(0, start) + before + selected + after + text.substring(end);
+    ta.selectionStart = start + before.length;
+    ta.selectionEnd = start + before.length + selected.length;
+    ta.focus();
+}
+</script>

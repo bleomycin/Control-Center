@@ -1,4 +1,4 @@
-{% load choice_labels tag_colors %}
+{% load choice_labels tag_colors markdown_filter %}
 <div id="note-card-{{ note.pk }}" class="bg-gray-800 rounded-lg border border-gray-700 hover:border-gray-600 transition-colors mb-3 p-4 {% if note.is_pinned %}border-l-2 border-l-yellow-500/50{% endif %}">
     <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-3">
@@ -48,8 +48,20 @@
 
     <a href="{{ note.get_absolute_url }}" class="block group">
         <h3 class="text-sm font-medium text-blue-400 group-hover:text-blue-300 transition-colors">{{ note.title }}</h3>
-        {% if note.content %}<p class="text-xs text-gray-400 mt-1 line-clamp-2">{{ note.content|truncatewords:40 }}</p>{% endif %}
     </a>
+    {% if note.content %}
+    <div class="mt-1">
+        <p class="text-xs text-gray-400 line-clamp-2" id="note-preview-{{ note.pk }}">{{ note.content|truncatewords:40 }}</p>
+        <div class="hidden prose-markdown text-xs text-gray-400" id="note-full-{{ note.pk }}">
+            {{ note.content|render_markdown }}
+        </div>
+        {% if note.content|length > 150 %}
+        <button onclick="event.preventDefault();toggleNoteExpand({{ note.pk }})"
+                class="text-xs text-blue-500 hover:text-blue-400 mt-1"
+                id="note-expand-btn-{{ note.pk }}">Show more</button>
+        {% endif %}
+    </div>
+    {% endif %}
 
     {% with participants=note.participants.all stakeholders=note.related_stakeholders.all properties=note.related_properties.all legal=note.related_legal_matters.all tasks=note.related_tasks.all tags=note.tags.all %}
     {% if participants or stakeholders or properties or legal or tasks or tags %}

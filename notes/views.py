@@ -318,6 +318,56 @@ def export_pdf_detail(request, pk):
                       f"{get_choice_label('note_type', n.note_type)} — {n.date.strftime('%b %d, %Y %I:%M %p')}", sections)
 
 
+def inline_edit_content(request, pk):
+    note = get_object_or_404(Note, pk=pk)
+    if request.method == "POST":
+        content = request.POST.get("content", "")
+        note.content = content
+        note.save(update_fields=["content"])
+        return render(request, "notes/partials/_detail_content_display.html", {"note": note})
+    if request.GET.get("display"):
+        return render(request, "notes/partials/_detail_content_display.html", {"note": note})
+    return render(request, "notes/partials/_detail_content_editor.html", {"note": note})
+
+
+def inline_edit_title(request, pk):
+    note = get_object_or_404(Note, pk=pk)
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        if title:
+            note.title = title
+            note.save(update_fields=["title"])
+        resp = render(request, "notes/partials/_detail_title_display.html", {"note": note})
+        resp["HX-Trigger"] = '{"updateBreadcrumb": "' + note.title.replace('"', '\\"') + '"}'
+        return resp
+    if request.GET.get("display"):
+        return render(request, "notes/partials/_detail_title_display.html", {"note": note})
+    return render(request, "notes/partials/_detail_title_editor.html", {"note": note})
+
+
+def inline_edit_metadata(request, pk):
+    note = get_object_or_404(Note, pk=pk)
+    if request.method == "POST":
+        note.note_type = request.POST.get("note_type", note.note_type)
+        folder_id = request.POST.get("folder", "")
+        note.folder_id = int(folder_id) if folder_id else None
+        note.is_pinned = "is_pinned" in request.POST
+        note.save(update_fields=["note_type", "folder", "is_pinned"])
+        tag_pks = request.POST.getlist("tags")
+        note.tags.set(tag_pks)
+        return render(request, "notes/partials/_detail_metadata_display.html", {"note": note})
+    if request.GET.get("display"):
+        return render(request, "notes/partials/_detail_metadata_display.html", {"note": note})
+    ctx = {
+        "note": note,
+        "note_types": get_choices("note_type"),
+        "folders": Folder.objects.all(),
+        "all_tags": Tag.objects.all(),
+        "current_tag_pks": list(note.tags.values_list("pk", flat=True)),
+    }
+    return render(request, "notes/partials/_detail_metadata_editor.html", ctx)
+
+
 def toggle_pin(request, pk):
     note = get_object_or_404(Note, pk=pk)
     if request.method == "POST":

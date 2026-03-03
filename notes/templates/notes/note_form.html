@@ -35,10 +35,12 @@
     .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-string { color: rgb(134 239 172); }
     .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-comment { color: rgb(156 163 175); }
     .EasyMDEContainer .CodeMirror .CodeMirror-code .cm-formatting { color: rgb(107 114 128); }
+    /* Mobile auto-grow textarea */
+    .mobile-content-textarea { field-sizing: content; min-height: 200px; max-height: 70vh; }
 </style>
 {% endblock %}
 {% block content %}
-<div class="max-w-2xl mx-auto">
+<div class="max-w-4xl mx-auto">
     <div class="mb-6">
         <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
             <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
@@ -52,14 +54,38 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
-        <div>
-            <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
-                {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
-            </label>
-            {{ field }}
-            {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
-        </div>
+            {% if field.name in form.CORE_FIELDS %}
+            <div>
+                <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
+                </label>
+                {{ field }}
+                {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+            </div>
+            {% endif %}
         {% endfor %}
+        <details class="mt-4" {% if form.entity_linked_count %}open{% endif %}>
+            <summary class="text-sm text-gray-400 cursor-pointer hover:text-gray-300 select-none">
+                Related Entities
+                <span class="inline-block transition-transform details-open-rotate">&#9654;</span>
+                {% with cnt=form.entity_linked_count %}
+                {% if cnt %}<span class="text-xs text-gray-500">({{ cnt }} linked)</span>{% endif %}
+                {% endwith %}
+            </summary>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                {% for field in form %}
+                    {% if field.name in form.ENTITY_FIELDS %}
+                    <div>
+                        <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                            {{ field.label }}
+                        </label>
+                        {{ field }}
+                        {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </details>
         <div class="flex gap-3 pt-4">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
                 {% if object %}Update{% else %}Create{% endif %} Note
@@ -72,7 +98,7 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     var ta = document.getElementById("id_content");
-    if (ta) {
+    if (ta && window.innerWidth >= 640) {
         var easyMDE = new EasyMDE({
             element: ta,
             spellChecker: false,
@@ -86,13 +112,13 @@ document.addEventListener("DOMContentLoaded", function() {
                 "preview", "side-by-side", "|",
                 "guide"
             ],
-            minHeight: "200px",
+            minHeight: "400px",
         });
-        // Sync content to hidden textarea on every change so browser
-        // validation sees the value (EasyMDE hides the original textarea)
         easyMDE.codemirror.on("change", function() {
             easyMDE.codemirror.save();
         });
+    } else if (ta) {
+        ta.classList.add('mobile-content-textarea');
     }
 });
 </script>

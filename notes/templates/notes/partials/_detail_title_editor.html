@@ -1,0 +1,15 @@
+<div id="note-title-block">
+    <form hx-post="{% url 'notes:inline_edit_title' note.pk %}"
+          hx-target="#note-title-block" hx-swap="outerHTML"
+          class="flex items-center gap-2">
+        {% csrf_token %}
+        <input type="text" name="title" value="{{ note.title }}" required
+               class="flex-1 text-xl font-bold rounded-md border-gray-600 bg-gray-700 text-white px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500"
+               autofocus>
+        <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save</button>
+        <button type="button"
+                hx-get="{% url 'notes:inline_edit_title' note.pk %}?display=1"
+                hx-target="#note-title-block" hx-swap="outerHTML"
+                class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
+    </form>
+</div>

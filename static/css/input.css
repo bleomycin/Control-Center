@@ -32,6 +32,9 @@
 /* Details/summary chevron rotation */
 details[open] > summary .details-open-rotate { transform: rotate(90deg); }
 
+/* Auto-growing textarea for inline notes */
+.auto-grow-textarea { field-sizing: content; min-height: 2.5rem; max-height: 12rem; }
+
 /* HTMX loading indicators */
 .htmx-indicator { display: none; }
 .htmx-request .htmx-indicator { display: inline-block; }
