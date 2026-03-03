@@ -1,0 +1,40 @@
+{% load humanize %}
+{% if upcoming_meetings %}
+<div class="mb-6 bg-gray-800 rounded-lg border border-blue-900/50">
+    <div class="px-4 py-3 border-b border-blue-900/50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold text-blue-300 uppercase tracking-wide">Upcoming Meetings</h2>
+            <span class="text-xs px-1.5 py-0.5 rounded-full bg-blue-900/50 text-blue-300">{{ upcoming_meetings|length }}</span>
+        </div>
+        <a href="{% url 'dashboard:calendar' %}" class="text-xs text-blue-400 hover:text-blue-300 transition-colors">View Calendar &rarr;</a>
+    </div>
+    <div class="divide-y divide-gray-700/50">
+        {% for meeting in upcoming_meetings %}
+        <div class="flex items-center px-4 py-3 hover:bg-gray-750 transition-colors">
+            <a href="{{ meeting.get_absolute_url }}" class="flex items-center gap-4 flex-1 min-w-0">
+                <div class="flex-shrink-0 w-16 text-center">
+                    {% if meeting.due_date == today %}
+                    <p class="text-xs font-bold text-green-400 uppercase">Today</p>
+                    {% else %}
+                    <p class="text-xs font-medium text-gray-300">{{ meeting.due_date|date:"M j" }}</p>
+                    {% endif %}
+                    {% if meeting.due_time %}
+                    <p class="text-xs text-blue-400 mt-0.5">{{ meeting.due_time|time:"g:i A" }}</p>
+                    {% endif %}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="text-sm text-gray-200 truncate">{{ meeting.title }}</p>
+                    {% with s=meeting.related_stakeholders.first %}
+                    {% if s %}
+                    <p class="text-xs text-gray-500 truncate">{{ s.name }}</p>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+            </a>
+            <a href="{% url 'notes:create' %}?task={{ meeting.pk }}&title=Meeting%20Notes%3A%20{{ meeting.title|urlencode }}&note_type=meeting{% with s=meeting.related_stakeholders.first %}{% if s %}&stakeholder={{ s.pk }}{% endif %}{% endwith %}{% if meeting.due_date %}&date={{ meeting.due_date|date:'Y-m-d' }}T{% if meeting.due_time %}{{ meeting.due_time|time:'H:i' }}{% else %}09:00{% endif %}{% endif %}"
+               class="flex-shrink-0 ml-3 px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 rounded transition-colors">+ Notes</a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
