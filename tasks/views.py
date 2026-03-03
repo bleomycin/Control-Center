@@ -235,8 +235,26 @@ def followup_add(request, pk):
         if task.related_stakeholder:
             initial["stakeholder"] = task.related_stakeholder.pk
         form = FollowUpForm(initial=initial)
+    from django.urls import reverse
     return render(request, "tasks/partials/_followup_form.html",
-                  {"form": form, "task": task})
+                  {"form": form, "task": task, "form_url": reverse("tasks:followup_add", args=[pk])})
+
+
+def followup_edit(request, pk):
+    fu = get_object_or_404(FollowUp, pk=pk)
+    task = fu.task
+    if request.method == "POST":
+        form = FollowUpForm(request.POST, instance=fu)
+        if form.is_valid():
+            form.save()
+            return render(request, "tasks/partials/_followup_list.html",
+                          {"follow_ups": task.follow_ups.select_related("stakeholder").all(), "task": task})
+    else:
+        form = FollowUpForm(instance=fu)
+    from django.urls import reverse
+    return render(request, "tasks/partials/_followup_form.html",
+                  {"form": form, "task": task, "form_url": reverse("tasks:followup_edit", args=[pk]),
+                   "edit_mode": True})
 
 
 def followup_respond(request, pk):
