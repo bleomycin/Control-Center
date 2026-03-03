@@ -602,13 +602,19 @@ def calendar_feed(request):
     window_end = today + timedelta(days=90)
     types = settings.get_event_types()
 
-    # Tasks & meetings
-    if types.get("tasks", True):
+    # Tasks & meetings (separate toggles)
+    include_tasks = types.get("tasks", True)
+    include_meetings = types.get("meetings", True)
+    if include_tasks or include_meetings:
         tasks = Task.objects.exclude(status="complete").filter(
             due_date__isnull=False, due_date__gte=window_start, due_date__lte=window_end,
         )
         direction_prefixes = {"outbound": "\u2197 ", "inbound": "\u2199 "}
         for task in tasks:
+            if task.is_meeting and not include_meetings:
+                continue
+            if not task.is_meeting and not include_tasks:
+                continue
             prefix = direction_prefixes.get(task.direction, "")
             ev = Event()
             ev.add("summary", f"{prefix}{task.title}")
@@ -760,7 +766,8 @@ def calendar_feed_settings(request):
         )
 
     type_labels = {
-        "tasks": "Tasks & meetings",
+        "tasks": "Tasks",
+        "meetings": "Meetings",
         "payments": "Loan payments",
         "followups": "Follow-ups",
         "legal": "Legal matters & hearings",

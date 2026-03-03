@@ -127,6 +127,7 @@ class CalendarFeedSettings(models.Model):
 
     EVENT_TYPE_DEFAULTS = {
         "tasks": True,
+        "meetings": True,
         "payments": True,
         "followups": True,
         "legal": True,
