@@ -75,10 +75,10 @@ class NoteForm(TailwindFormMixin, forms.ModelForm):
 
 class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
     """Simplified form for quick capture modal."""
-    stakeholder = forms.ModelChoiceField(
+    stakeholder = forms.ModelMultipleChoiceField(
         queryset=None,
         required=False,
-        empty_label="- Stakeholder (optional) -",
+        widget=forms.SelectMultiple(),
     )
     task = forms.ModelChoiceField(
         queryset=None,
@@ -91,13 +91,14 @@ class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
         fields = ["title", "content", "date", "note_type", "folder", "tags"]
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
-            "content": forms.Textarea(attrs={"rows": 4}),
+            "content": forms.Textarea(attrs={"rows": 6, "placeholder": "Start typing\u2026"}),
             "note_type": forms.Select(),
             "tags": forms.CheckboxSelectMultiple(),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["title"].required = False
         self.fields["note_type"].widget.choices = get_choices("note_type")
         from stakeholders.models import Stakeholder
         from tasks.models import Task

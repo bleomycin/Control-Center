@@ -539,7 +539,7 @@ def calendar_events(request):
         tasks = tasks.filter(due_date__gte=start)
     if end:
         tasks = tasks.filter(due_date__lte=end)
-    direction_prefixes = {"outbound": "[OUT] ", "inbound": "[IN] "}
+    direction_prefixes = {"outbound": "\u2197 ", "inbound": "\u2199 "}
     for task in tasks.filter(due_date__isnull=False):
         prefix = direction_prefixes.get(task.direction, "")
         if task.is_meeting:
@@ -551,6 +551,8 @@ def calendar_events(request):
                 "display": "block",
                 "extendedProps": {"type": "meeting"},
             }
+            if task.due_time:
+                event["allDay"] = False
         else:
             event = {
                 "title": f"{prefix}{task.title}",
@@ -568,8 +570,11 @@ def calendar_events(request):
     if end:
         loans = loans.filter(next_payment_date__lte=end)
     for loan in loans:
+        title = f"Payment: {loan.name}"
+        if loan.monthly_payment:
+            title = f"${loan.monthly_payment:,.0f} — {loan.name}"
         events.append({
-            "title": f"Payment: {loan.name}",
+            "title": title,
             "start": str(loan.next_payment_date),
             "url": loan.get_absolute_url(),
             "color": "#dc2626",

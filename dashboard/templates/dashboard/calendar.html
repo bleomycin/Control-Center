@@ -275,12 +275,29 @@
                 if (hiddenTypes[eventType]) {
                     info.el.style.display = 'none';
                 }
+                // Tooltip on hover
+                info.el.title = info.event.title;
             },
-            dayMaxEvents: isMobile ? 3 : false,
+            dayMaxEvents: isMobile ? 3 : 4,
+            slotMinTime: '07:00:00',
+            slotMaxTime: '22:00:00',
+            expandRows: true,
             dateClick: function(info) {
-                // Mobile: tap a day in month view to jump to list view for that date
                 if (isMobile && calendar.view.type === 'dayGridMonth') {
+                    // Mobile: tap a day in month view to jump to list view for that date
                     calendar.changeView('listWeek', info.dateStr);
+                } else if (!isMobile) {
+                    // Desktop: click empty slot to create a new task with date (+ time if week view)
+                    var params = '';
+                    if (info.dateStr.includes('T')) {
+                        // Week view: dateStr is ISO datetime like "2026-02-18T14:00:00"
+                        var parts = info.dateStr.split('T');
+                        params = 'due_date=' + parts[0] + '&due_time=' + parts[1].substring(0, 5) + '&task_type=meeting';
+                    } else {
+                        // Month view: dateStr is just "2026-02-18"
+                        params = 'due_date=' + info.dateStr;
+                    }
+                    window.location.href = '/tasks/create/?' + params;
                 }
             },
             height: 'auto',

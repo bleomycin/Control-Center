@@ -464,14 +464,35 @@ def quick_capture(request):
     if request.method == "POST":
         form = QuickNoteForm(request.POST)
         if form.is_valid():
-            form.save()
+            note = form.save(commit=False)
+            if not note.title:
+                # Auto-generate title from first ~50 chars of content
+                content = (note.content or "").strip()
+                if content:
+                    first_line = content.split("\n", 1)[0].strip()
+                    if len(first_line) > 50:
+                        note.title = first_line[:47].rsplit(" ", 1)[0] + "..."
+                    else:
+                        note.title = first_line
+                else:
+                    note.title = "Untitled Note"
+            note.save()
+            form.save_m2m()
+            # Link optional stakeholders / task
+            stakeholders = form.cleaned_data.get("stakeholder")
+            if stakeholders:
+                note.participants.add(*stakeholders)
+            task = form.cleaned_data.get("task")
+            if task:
+                note.related_tasks.add(task)
             response = HttpResponse(status=204)
             response["HX-Trigger"] = "closeModal"
             response["HX-Redirect"] = reverse_lazy("notes:list")
             return response
     else:
         form = QuickNoteForm()
-    return render(request, "notes/partials/_quick_capture_form.html", {"form": form})
+    tags = Tag.objects.all()
+    return render(request, "notes/partials/_quick_capture_form.html", {"form": form, "tags": tags})
 
 
 def bulk_delete(request):
