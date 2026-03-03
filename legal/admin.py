@@ -10,7 +10,7 @@ class EvidenceInline(admin.TabularInline):
 
 @admin.register(LegalMatter)
 class LegalMatterAdmin(admin.ModelAdmin):
-    list_display = ["title", "case_number", "matter_type", "status", "jurisdiction", "filing_date"]
+    list_display = ["title", "case_number", "matter_type", "status", "jurisdiction", "filing_date", "next_hearing_date"]
     list_filter = ["matter_type", "status", "jurisdiction"]
     search_fields = ["title", "case_number", "description"]
     filter_horizontal = ["attorneys", "related_stakeholders", "related_properties"]

@@ -3,7 +3,13 @@
 {% block content %}
 <div class="mb-6">
     <div>
-        <a href="{% url 'tasks:list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Tasks</a>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'tasks:list' %}" class="hover:text-gray-300">Tasks</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ task.title }}</span>
+        </nav>
         <h1 class="text-2xl font-bold text-white mt-2 {% if task.status == 'complete' %}line-through opacity-60{% endif %}">{{ task.title }}</h1>
         <div class="flex items-center gap-2 mt-2">
             {% include "tasks/partials/_task_status_badge.html" %}

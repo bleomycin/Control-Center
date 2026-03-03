@@ -4,7 +4,13 @@
 {% block content %}
 <div class="mb-6">
     <div>
-        <a href="{% url 'assets:loan_list' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Loans</a>
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'assets:loan_list' %}" class="hover:text-gray-300">Loans</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ loan.name }}</span>
+        </nav>
         <h1 class="text-2xl font-bold text-white mt-2">{{ loan.name }}</h1>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">

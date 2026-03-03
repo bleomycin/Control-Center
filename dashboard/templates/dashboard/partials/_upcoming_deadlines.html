@@ -1,0 +1,24 @@
+{% if upcoming_deadlines %}
+<div class="mt-6 bg-gray-800 rounded-lg border border-gray-700">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Upcoming Deadlines (Next 30 Days)</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for item in upcoming_deadlines %}
+        <a href="{{ item.url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-750 transition-colors">
+            <div class="flex items-center gap-3">
+                <span class="text-xs px-2 py-0.5 rounded-full
+                    {% if item.color == 'yellow' %}bg-yellow-900/50 text-yellow-300
+                    {% elif item.color == 'red' %}bg-red-900/50 text-red-300
+                    {% elif item.color == 'purple' %}bg-purple-900/50 text-purple-300
+                    {% else %}bg-gray-700 text-gray-300{% endif %}">
+                    {% if item.type == 'task' %}Task{% elif item.type == 'payment' %}Payment{% elif item.type == 'hearing' %}Hearing{% endif %}
+                </span>
+                <p class="text-sm text-gray-200">{{ item.title }}</p>
+            </div>
+            <p class="text-xs text-gray-400 whitespace-nowrap ml-4">{{ item.date|date:"M j" }}</p>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

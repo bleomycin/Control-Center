@@ -1,6 +1,9 @@
 {% load tz %}
 {% for task in tasks %}
 <tr class="hover:bg-gray-700/50 transition-colors {% if task.status == 'complete' %}opacity-50{% endif %}">
+    <td class="px-4 py-3 w-8">
+        <input type="checkbox" name="selected" value="{{ task.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
+    </td>
     <td class="px-4 py-3">
         <button hx-post="{% url 'tasks:toggle_complete' task.pk %}" hx-target="closest tr" hx-swap="outerHTML"
                 class="w-5 h-5 rounded border {% if task.status == 'complete' %}bg-blue-600 border-blue-600{% else %}border-gray-500 hover:border-blue-400{% endif %} flex items-center justify-center">
@@ -26,7 +29,7 @@
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="6" class="px-4 py-12 text-center">
+<tr><td colspan="7" class="px-4 py-12 text-center">
     <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
     <p class="text-sm text-gray-500 mb-3">No tasks found</p>
     <a href="{% url 'tasks:create' %}" class="inline-block px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">+ Add Task</a>
