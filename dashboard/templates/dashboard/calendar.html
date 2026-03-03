@@ -102,6 +102,10 @@
 
 <!-- Toggle filters -->
 <div class="flex flex-wrap gap-2 mb-4" id="calendar-filters">
+    <button type="button" id="cal-toggle-all" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-gray-700 border-gray-500 text-gray-200">
+        All
+    </button>
+    <span class="border-l border-gray-600 mx-0.5"></span>
     <button type="button" data-type="task" class="cal-toggle active inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors bg-yellow-900/30 border-yellow-700 text-yellow-300">
         <span class="w-2 h-2 rounded-full bg-yellow-500 inline-block"></span> Tasks
     </button>
@@ -159,19 +163,43 @@
         });
         calendar.render();
 
-        // Toggle filter buttons
-        document.querySelectorAll('.cal-toggle').forEach(function(btn) {
+        function applyTypeVisibility(type, visible) {
+            hiddenTypes[type] = !visible;
+            var restoreDisplay = (type === 'meeting') ? 'block' : 'auto';
+            calendar.getEvents().forEach(function(event) {
+                if (event.extendedProps.type === type) {
+                    event.setProp('display', visible ? restoreDisplay : 'none');
+                }
+            });
+        }
+
+        function updateAllButton() {
+            var toggles = document.querySelectorAll('.cal-toggle[data-type]');
+            var allActive = Array.from(toggles).every(function(b) { return b.classList.contains('active'); });
+            document.getElementById('cal-toggle-all').classList.toggle('active', allActive);
+        }
+
+        // Individual type toggles
+        document.querySelectorAll('.cal-toggle[data-type]').forEach(function(btn) {
             btn.addEventListener('click', function() {
                 var type = this.dataset.type;
                 this.classList.toggle('active');
-                hiddenTypes[type] = !this.classList.contains('active');
-                // Re-render events to apply filter
-                calendar.getEvents().forEach(function(event) {
-                    if (event.extendedProps.type === type) {
-                        event.setProp('display', hiddenTypes[type] ? 'none' : 'auto');
-                    }
-                });
+                applyTypeVisibility(type, this.classList.contains('active'));
+                updateAllButton();
             });
+        });
+
+        // All toggle
+        document.getElementById('cal-toggle-all').addEventListener('click', function() {
+            var toggles = document.querySelectorAll('.cal-toggle[data-type]');
+            var anyOff = Array.from(toggles).some(function(b) { return !b.classList.contains('active'); });
+            var setActive = anyOff; // if any are off, turn all on; otherwise turn all off
+            toggles.forEach(function(btn) {
+                var type = btn.dataset.type;
+                if (setActive) { btn.classList.add('active'); } else { btn.classList.remove('active'); }
+                applyTypeVisibility(type, setActive);
+            });
+            this.classList.toggle('active', setActive);
         });
     });
 </script>
