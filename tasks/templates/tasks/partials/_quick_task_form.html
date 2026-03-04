@@ -12,16 +12,20 @@
             {{ form.task_type }}
             {% if form.task_type.errors %}<p class="mt-1 text-sm text-red-400">{{ form.task_type.errors.0 }}</p>{% endif %}
         </div>
-        <div class="flex gap-4">
-            <div class="flex-1">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
                 <label for="{{ form.due_date.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="qt-due-date-label">{{ form.due_date.label }}</label>
                 {{ form.due_date }}
                 {% if form.due_date.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_date.errors.0 }}</p>{% endif %}
             </div>
-            <div id="qt-due-time-wrapper" class="flex-1 hidden">
+            <div id="qt-due-time-wrapper" class="hidden">
                 <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Time</label>
                 {{ form.due_time }}
                 {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
+            </div>
+            <div id="qt-duration-wrapper" class="hidden">
+                <label for="{{ form.duration_minutes.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Duration</label>
+                {{ form.duration_minutes }}
             </div>
         </div>
         <div>
@@ -59,11 +63,13 @@
             if (typeSelect) {
                 function updateMeetingFields() {
                     var wrapper = document.getElementById('qt-due-time-wrapper');
+                    var durationWrapper = document.getElementById('qt-duration-wrapper');
                     var dateLabel = document.getElementById('qt-due-date-label');
                     var notesWrapper = document.getElementById('qt-notes-wrapper');
                     var notesToggle = document.getElementById('qt-notes-toggle');
                     if (typeSelect.value === 'meeting') {
                         wrapper.classList.remove('hidden');
+                        durationWrapper.classList.remove('hidden');
                         if (dateLabel) dateLabel.textContent = 'Meeting date';
                         if (notesWrapper.classList.contains('hidden')) {
                             notesWrapper.classList.remove('hidden');
@@ -71,7 +77,9 @@
                         }
                     } else {
                         wrapper.classList.add('hidden');
+                        durationWrapper.classList.add('hidden');
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
+                        document.getElementById('{{ form.duration_minutes.id_for_label }}').value = '';
                         if (dateLabel) dateLabel.textContent = 'Due date';
                     }
                 }

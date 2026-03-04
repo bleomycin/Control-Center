@@ -52,7 +52,7 @@
         </div>
 
         <!-- Due date + time -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
                 <label for="{{ form.due_date.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="due-date-label">{{ form.due_date.label }}</label>
                 {{ form.due_date }}
@@ -62,6 +62,10 @@
                 <label for="{{ form.due_time.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Time</label>
                 {{ form.due_time }}
                 {% if form.due_time.errors %}<p class="mt-1 text-sm text-red-400">{{ form.due_time.errors.0 }}</p>{% endif %}
+            </div>
+            <div id="duration-wrapper" class="hidden">
+                <label for="{{ form.duration_minutes.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Duration</label>
+                {{ form.duration_minutes }}
             </div>
         </div>
 
@@ -183,13 +187,17 @@
             if (taskTypeSelect) {
                 function updateMeetingTimeVisibility() {
                     var wrapper = document.getElementById('due-time-wrapper');
+                    var durationWrapper = document.getElementById('duration-wrapper');
                     var dateLabel = document.getElementById('due-date-label');
                     if (taskTypeSelect.value === 'meeting') {
                         wrapper.classList.remove('hidden');
+                        durationWrapper.classList.remove('hidden');
                         if (dateLabel) dateLabel.textContent = 'Meeting date';
                     } else {
                         wrapper.classList.add('hidden');
+                        durationWrapper.classList.add('hidden');
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
+                        document.getElementById('{{ form.duration_minutes.id_for_label }}').value = '';
                         if (dateLabel) dateLabel.textContent = 'Due date';
                     }
                 }

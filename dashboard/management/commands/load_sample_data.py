@@ -569,7 +569,7 @@ class Command(BaseCommand):
             # Armanino inbound tasks
             ("Schedule meeting with Michael Torres",
              "Michael Torres requested a meeting to discuss Q4 tax planning strategy and year-end adjustments.",
-             today + timedelta(days=7), "not_started", "medium", "one_time", "inbound",
+             today + timedelta(days=7), "not_started", "medium", "meeting", "inbound",
              "Michael Torres", None, None),
             ("Send Oak Ave receipts to Sarah",
              "Sarah Chen asked me to send all renovation receipts for 1200 Oak Ave for the capital improvement deduction.",
@@ -591,6 +591,14 @@ class Command(BaseCommand):
             if sh_name and sh_name in stakeholders:
                 t.related_stakeholders.add(stakeholders[sh_name])
             tasks[title] = t
+
+        # Set meeting time/duration for meeting-type tasks
+        from datetime import time as t_time
+        meeting_task = tasks.get("Schedule meeting with Michael Torres")
+        if meeting_task:
+            meeting_task.due_time = t_time(14, 0)
+            meeting_task.duration_minutes = 60
+            meeting_task.save(update_fields=["due_time", "duration_minutes"])
 
         self.stdout.write("Creating follow-ups...")
         # Tuple: (task_title, stakeholder, days_ago, method, reminder_on, fu_days, responded, resp_date, notes)

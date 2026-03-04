@@ -4,6 +4,18 @@ from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
 from .models import Task, FollowUp, SubTask
 
+DURATION_CHOICES = [
+    ("", "---------"),
+    (15, "15 minutes"),
+    (30, "30 minutes"),
+    (45, "45 minutes"),
+    (60, "1 hour"),
+    (90, "1.5 hours"),
+    (120, "2 hours"),
+    (180, "3 hours"),
+    (240, "4 hours"),
+]
+
 
 def _grouped_stakeholder_choices():
     """Build optgroup-style choices grouped by entity type."""
@@ -29,13 +41,15 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 
     class Meta:
         model = Task
-        fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "reminder_date", "status",
+        fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "duration_minutes",
+                  "reminder_date", "status",
                   "priority", "related_stakeholders",
                   "related_legal_matter", "related_property",
                   "is_recurring", "recurrence_rule"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
+            "duration_minutes": forms.Select(choices=DURATION_CHOICES),
             "reminder_date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "description": forms.Textarea(attrs={"rows": 6}),
             "related_stakeholders": forms.SelectMultiple(attrs={"size": "5"}),
@@ -60,10 +74,11 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Task
-        fields = ["title", "task_type", "due_date", "due_time", "priority", "description"]
+        fields = ["title", "task_type", "due_date", "due_time", "duration_minutes", "priority", "description"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
+            "duration_minutes": forms.Select(choices=DURATION_CHOICES),
             "description": forms.Textarea(attrs={"rows": 2, "placeholder": "Location, link, or other details..."}),
         }
 

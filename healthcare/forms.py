@@ -4,6 +4,18 @@ from dashboard.choices import get_choices
 from .models import (Advice, Appointment, Condition, HealthcareTab, Prescription,
                      Provider, Supplement, TestResult, Visit)
 
+DURATION_CHOICES = [
+    ("", "---------"),
+    (15, "15 minutes"),
+    (30, "30 minutes"),
+    (45, "45 minutes"),
+    (60, "1 hour"),
+    (90, "1.5 hours"),
+    (120, "2 hours"),
+    (180, "3 hours"),
+    (240, "4 hours"),
+]
+
 
 class HealthcareTabForm(TailwindFormMixin, forms.Form):
     label = forms.CharField(max_length=100)
@@ -159,9 +171,13 @@ class AppointmentForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "time": forms.TimeInput(attrs={"type": "time"}),
+            "duration_minutes": forms.Select(choices=DURATION_CHOICES),
             "purpose": forms.Textarea(attrs={"rows": 2}),
             "preparation": forms.Textarea(attrs={"rows": 2}),
             "notes_text": forms.Textarea(attrs={"rows": 3}),
+        }
+        labels = {
+            "duration_minutes": "Duration",
         }
 
     def __init__(self, *args, **kwargs):

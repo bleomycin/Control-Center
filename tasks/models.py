@@ -42,6 +42,7 @@ class Task(models.Model):
     description = models.TextField(blank=True)
     due_date = models.DateField(null=True, blank=True, db_index=True)
     due_time = models.TimeField(null=True, blank=True)
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
     reminder_date = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="not_started", db_index=True)
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
@@ -104,6 +105,7 @@ class Task(models.Model):
             description=self.description,
             due_date=next_date,
             due_time=self.due_time,
+            duration_minutes=self.duration_minutes,
             priority=self.priority,
             task_type=self.task_type,
             direction=self.direction,

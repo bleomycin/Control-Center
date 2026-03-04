@@ -630,7 +630,10 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"{prefix}{task.title}")
             if task.is_meeting and task.due_time:
-                ev.add("dtstart", datetime.combine(task.due_date, task.due_time))
+                start = datetime.combine(task.due_date, task.due_time)
+                ev.add("dtstart", start)
+                if task.duration_minutes:
+                    ev.add("dtend", start + timedelta(minutes=task.duration_minutes))
                 _add_alarms(ev, "meetings")
             else:
                 ev.add("dtstart", task.due_date)
@@ -730,7 +733,10 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", appt.title)
             if appt.time:
-                ev.add("dtstart", datetime.combine(appt.date, appt.time))
+                start = datetime.combine(appt.date, appt.time)
+                ev.add("dtstart", start)
+                if appt.duration_minutes:
+                    ev.add("dtend", start + timedelta(minutes=appt.duration_minutes))
             else:
                 ev.add("dtstart", appt.date)
             _add_alarms(ev, "appointments")
@@ -916,6 +922,10 @@ def calendar_events(request):
             }
             if task.due_time:
                 event["allDay"] = False
+                if task.duration_minutes:
+                    from datetime import datetime as dt_cls
+                    end_dt = dt_cls.combine(task.due_date, task.due_time) + timedelta(minutes=task.duration_minutes)
+                    event["end"] = end_dt.isoformat()
         else:
             event = {
                 "title": f"{prefix}{task.title}",
@@ -1023,6 +1033,10 @@ def calendar_events(request):
         }
         if appt.time:
             event["allDay"] = False
+            if appt.duration_minutes:
+                from datetime import datetime as dt_cls
+                end_dt = dt_cls.combine(appt.date, appt.time) + timedelta(minutes=appt.duration_minutes)
+                event["end"] = end_dt.isoformat()
         events.append(event)
 
     # Prescription refill events (amber)
