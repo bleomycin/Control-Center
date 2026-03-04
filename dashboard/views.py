@@ -749,10 +749,9 @@ def calendar_feed(request):
                 desc_parts.append(f"Location: {appt.facility}")
             if appt.address:
                 desc_parts.append(f"Address: {appt.address}")
-            if appt.url:
-                desc_parts.append(f"Link: {appt.url}")
-            if desc_parts:
-                ev.add("description", "\n".join(desc_parts))
+            # Always include Control Center link in description
+            desc_parts.append(f"Details: {base_url}{appt.get_absolute_url()}")
+            ev.add("description", "\n".join(desc_parts))
             # LOCATION: combine facility + address
             location_parts = []
             if appt.facility:
