@@ -137,9 +137,22 @@ class CalendarFeedSettings(models.Model):
         "leases": True,
     }
 
+    REMINDER_DEFAULTS = {
+        "meetings": [60, 15],
+        "appointments": [60, 15],
+        "tasks": [],
+        "payments": [],
+        "followups": [],
+        "legal": [],
+        "contacts": [],
+        "refills": [],
+        "leases": [],
+    }
+
     enabled = models.BooleanField("Enable calendar feed", default=False)
     token = models.CharField("Feed token", max_length=64, blank=True, default="")
     event_types = models.JSONField("Enabled event types", default=dict, blank=True)
+    reminders = models.JSONField("Reminder settings", default=dict, blank=True)
 
     class Meta:
         verbose_name = "Calendar Feed Settings"
@@ -164,6 +177,13 @@ class CalendarFeedSettings(models.Model):
     def is_type_enabled(self, event_type):
         """Check if a specific event type is enabled."""
         return self.get_event_types().get(event_type, True)
+
+    def get_reminders(self, event_type):
+        """Return list of reminder minutes for an event type."""
+        merged = dict(self.REMINDER_DEFAULTS)
+        if self.reminders:
+            merged.update(self.reminders)
+        return merged.get(event_type, [])
 
     def regenerate_token(self):
         import secrets

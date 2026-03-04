@@ -603,14 +603,15 @@ def calendar_feed(request):
     types = settings.get_event_types()
     base_url = request.build_absolute_uri("/").rstrip("/")
 
-    def _add_alarm(ev, minutes=15):
-        """Add a VALARM reminder to a timed event."""
+    def _add_alarms(ev, event_type):
+        """Add VALARM reminders for an event type based on settings."""
         from icalendar import Alarm
-        alarm = Alarm()
-        alarm.add("action", "DISPLAY")
-        alarm.add("description", "Reminder")
-        alarm.add("trigger", timedelta(minutes=-minutes))
-        ev.add_component(alarm)
+        for minutes in settings.get_reminders(event_type):
+            alarm = Alarm()
+            alarm.add("action", "DISPLAY")
+            alarm.add("description", "Reminder")
+            alarm.add("trigger", timedelta(minutes=-minutes))
+            ev.add_component(alarm)
 
     # Tasks & meetings (separate toggles)
     include_tasks = types.get("tasks", True)
@@ -630,9 +631,10 @@ def calendar_feed(request):
             ev.add("summary", f"{prefix}{task.title}")
             if task.is_meeting and task.due_time:
                 ev.add("dtstart", datetime.combine(task.due_date, task.due_time))
-                _add_alarm(ev, 15)
+                _add_alarms(ev, "meetings")
             else:
                 ev.add("dtstart", task.due_date)
+                _add_alarms(ev, "meetings" if task.is_meeting else "tasks")
             if task.description:
                 ev.add("description", task.description)
             ev.add("url", f"{base_url}{task.get_absolute_url()}")
@@ -650,6 +652,7 @@ def calendar_feed(request):
             title = f"${loan.monthly_payment:,.0f} — {loan.name}" if loan.monthly_payment else f"Payment: {loan.name}"
             ev.add("summary", title)
             ev.add("dtstart", loan.next_payment_date)
+            _add_alarms(ev, "payments")
             ev.add("url", f"{base_url}{loan.get_absolute_url()}")
             ev.add("uid", f"loan-{loan.pk}@controlcenter")
             cal.add_component(ev)
@@ -666,6 +669,7 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}")
             ev.add("dtstart", fu_date)
+            _add_alarms(ev, "followups")
             if fu.notes_text:
                 ev.add("description", fu.notes_text)
             ev.add("url", f"{base_url}{fu.get_absolute_url()}")
@@ -680,6 +684,7 @@ def calendar_feed(request):
                 ev = Event()
                 ev.add("summary", f"Legal: {matter.title}")
                 ev.add("dtstart", matter.filing_date)
+                _add_alarms(ev, "legal")
                 if matter.description:
                     ev.add("description", matter.description)
                 ev.add("url", f"{base_url}{matter.get_absolute_url()}")
@@ -689,6 +694,7 @@ def calendar_feed(request):
                 ev = Event()
                 ev.add("summary", f"Hearing: {matter.title}")
                 ev.add("dtstart", matter.next_hearing_date)
+                _add_alarms(ev, "legal")
                 if matter.description:
                     ev.add("description", matter.description)
                 ev.add("url", f"{base_url}{matter.get_absolute_url()}")
@@ -705,6 +711,7 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"Contact: {log.stakeholder.name if log.stakeholder else 'Unknown'}")
             ev.add("dtstart", log.follow_up_date)
+            _add_alarms(ev, "contacts")
             if log.summary:
                 ev.add("description", log.summary)
             ev.add("url", f"{base_url}{log.get_absolute_url()}")
@@ -724,9 +731,9 @@ def calendar_feed(request):
             ev.add("summary", appt.title)
             if appt.time:
                 ev.add("dtstart", datetime.combine(appt.date, appt.time))
-                _add_alarm(ev, 60)
             else:
                 ev.add("dtstart", appt.date)
+            _add_alarms(ev, "appointments")
             desc_parts = []
             if appt.purpose:
                 desc_parts.append(appt.purpose)
@@ -753,6 +760,7 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"Refill: {rx.medication_name}")
             ev.add("dtstart", rx.next_refill_date)
+            _add_alarms(ev, "refills")
             desc_parts = [f"Medication: {rx.medication_name}"]
             if rx.dosage:
                 desc_parts.append(f"Dosage: {rx.dosage}")
@@ -776,6 +784,7 @@ def calendar_feed(request):
             title = f"${lease.monthly_rent:,.0f}/mo — {lease.name}" if lease.monthly_rent else f"Lease expires: {lease.name}"
             ev.add("summary", title)
             ev.add("dtstart", lease.end_date)
+            _add_alarms(ev, "leases")
             ev.add("url", f"{base_url}{lease.get_absolute_url()}")
             ev.add("uid", f"lease-{lease.pk}@controlcenter")
             cal.add_component(ev)
@@ -805,6 +814,21 @@ def calendar_feed_settings(request):
                 new_types[key] = key in request.POST.getlist("event_types")
             settings.event_types = new_types
             settings.save()
+        elif action == "update_reminders":
+            new_reminders = {}
+            for key in CalendarFeedSettings.REMINDER_DEFAULTS:
+                vals = []
+                for slot in ("1", "2"):
+                    raw = request.POST.get(f"reminder_{key}_{slot}", "")
+                    if raw:
+                        try:
+                            vals.append(int(raw))
+                        except ValueError:
+                            pass
+                # Sort descending so longer reminder comes first
+                new_reminders[key] = sorted(vals, reverse=True)
+            settings.reminders = new_reminders
+            settings.save()
         return redirect("dashboard:calendar_feed_settings")
 
     feed_url = ""
@@ -830,10 +854,33 @@ def calendar_feed_settings(request):
         for key in CalendarFeedSettings.EVENT_TYPE_DEFAULTS
     ]
 
+    reminder_options = [
+        ("", "None"),
+        ("5", "5 minutes"),
+        ("10", "10 minutes"),
+        ("15", "15 minutes"),
+        ("30", "30 minutes"),
+        ("60", "1 hour"),
+        ("120", "2 hours"),
+        ("1440", "1 day"),
+        ("2880", "2 days"),
+    ]
+    reminder_config = []
+    for key in CalendarFeedSettings.REMINDER_DEFAULTS:
+        vals = settings.get_reminders(key)
+        reminder_config.append({
+            "key": key,
+            "label": type_labels[key],
+            "val1": str(vals[0]) if len(vals) > 0 else "",
+            "val2": str(vals[1]) if len(vals) > 1 else "",
+        })
+
     return render(request, "dashboard/calendar_feed_settings.html", {
         "settings": settings,
         "feed_url": feed_url,
         "event_type_choices": event_type_choices,
+        "reminder_config": reminder_config,
+        "reminder_options": reminder_options,
     })
 
 

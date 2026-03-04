@@ -112,6 +112,52 @@
             </div>
         </form>
     </div>
+
+    <!-- Reminders -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Reminders</p>
+        <p class="text-xs text-gray-500 mb-3">Set up to 2 alerts per event type. Subscribed calendars are read-only so alerts must be baked into the feed.</p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="update_reminders">
+            <div class="space-y-2">
+                <!-- Header row (hidden on mobile) -->
+                <div class="hidden sm:grid sm:grid-cols-[1fr_1fr_1fr] gap-2 text-xs text-gray-500 pb-1 border-b border-gray-700">
+                    <span>Event type</span>
+                    <span>1st reminder</span>
+                    <span>2nd reminder</span>
+                </div>
+                {% for item in reminder_config %}
+                <div class="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr] gap-1 sm:gap-2 items-center py-1 {% if not forloop.last %}border-b border-gray-700/50{% endif %}">
+                    <span class="text-sm text-gray-300">{{ item.label }}</span>
+                    <div>
+                        <label class="text-xs text-gray-500 sm:hidden">1st reminder</label>
+                        <select name="reminder_{{ item.key }}_1"
+                                class="w-full bg-gray-900 border border-gray-600 rounded-md px-2 py-1.5 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                            {% for val, label in reminder_options %}
+                            <option value="{{ val }}" {% if val == item.val1 %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500 sm:hidden">2nd reminder</label>
+                        <select name="reminder_{{ item.key }}_2"
+                                class="w-full bg-gray-900 border border-gray-600 rounded-md px-2 py-1.5 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                            {% for val, label in reminder_options %}
+                            <option value="{{ val }}" {% if val == item.val2 %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="flex justify-end mt-3">
+                <button type="submit" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">
+                    Save
+                </button>
+            </div>
+        </form>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
