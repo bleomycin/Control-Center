@@ -53,14 +53,14 @@
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
             </button>
             <div class="hidden absolute right-0 mt-1 w-44 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30 py-1" data-dropdown-menu>
-                {% if "providers" in current_healthcare_types %}<a href="{% url 'healthcare:provider_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Provider</a>{% endif %}
-                {% if "prescriptions" in current_healthcare_types %}<a href="{% url 'healthcare:prescription_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Prescription</a>{% endif %}
-                {% if "supplements" in current_healthcare_types %}<a href="{% url 'healthcare:supplement_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Supplement</a>{% endif %}
-                {% if "test_results" in current_healthcare_types %}<a href="{% url 'healthcare:testresult_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Test Result</a>{% endif %}
-                {% if "visits" in current_healthcare_types %}<a href="{% url 'healthcare:visit_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Visit</a>{% endif %}
-                {% if "advice" in current_healthcare_types %}<a href="{% url 'healthcare:advice_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Advice</a>{% endif %}
-                {% if "appointments" in current_healthcare_types %}<a href="{% url 'healthcare:appointment_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Appointment</a>{% endif %}
-                {% if "conditions" in current_healthcare_types %}<a href="{% url 'healthcare:condition_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Condition</a>{% endif %}
+                <a href="{% url 'healthcare:provider_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Provider</a>
+                <a href="{% url 'healthcare:prescription_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Prescription</a>
+                <a href="{% url 'healthcare:supplement_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Supplement</a>
+                <a href="{% url 'healthcare:condition_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Condition</a>
+                <a href="{% url 'healthcare:testresult_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Test Result</a>
+                <a href="{% url 'healthcare:visit_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Visit</a>
+                <a href="{% url 'healthcare:appointment_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Appointment</a>
+                <a href="{% url 'healthcare:advice_create' %}" class="block px-4 py-2 text-sm text-gray-300 hover:bg-gray-700">Advice</a>
             </div>
         </div>
         {% endif %}
