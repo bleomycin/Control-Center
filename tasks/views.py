@@ -285,7 +285,23 @@ def quick_create(request):
     if request.method == "POST":
         form = QuickTaskForm(request.POST)
         if form.is_valid():
-            form.save()
+            if form.cleaned_data["task_type"] == "appointment":
+                from healthcare.models import Appointment
+                Appointment.objects.create(
+                    title=form.cleaned_data["title"],
+                    date=form.cleaned_data["due_date"],
+                    time=form.cleaned_data.get("due_time"),
+                    duration_minutes=form.cleaned_data.get("duration_minutes"),
+                    provider=form.cleaned_data.get("provider"),
+                    purpose=form.cleaned_data.get("description", ""),
+                )
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = "closeModal"
+                response["HX-Redirect"] = reverse_lazy("healthcare:healthcare_list")
+                return response
+            task = form.save(commit=False)
+            task.task_type = form.cleaned_data["task_type"]
+            task.save()
             response = HttpResponse(status=204)
             response["HX-Trigger"] = "closeModal"
             response["HX-Redirect"] = reverse_lazy("tasks:list")

@@ -28,7 +28,12 @@
                 {{ form.duration_minutes }}
             </div>
         </div>
-        <div>
+        <div id="qt-provider-wrapper" class="hidden">
+            <label for="{{ form.provider.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.provider.label }}</label>
+            {{ form.provider }}
+            {% if form.provider.errors %}<p class="mt-1 text-sm text-red-400">{{ form.provider.errors.0 }}</p>{% endif %}
+        </div>
+        <div id="qt-priority-wrapper">
             <label for="{{ form.priority.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.priority.label }}</label>
             {{ form.priority }}
             {% if form.priority.errors %}<p class="mt-1 text-sm text-red-400">{{ form.priority.errors.0 }}</p>{% endif %}
@@ -36,13 +41,13 @@
         <div id="qt-notes-section">
             <button type="button" id="qt-notes-toggle" onclick="toggleQuickTaskNotes()" class="text-sm text-blue-400 hover:text-blue-300 transition-colors">+ Add notes</button>
             <div id="qt-notes-wrapper" class="hidden mt-2">
-                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Notes</label>
+                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1" id="qt-notes-label">Notes</label>
                 {{ form.description }}
                 {% if form.description.errors %}<p class="mt-1 text-sm text-red-400">{{ form.description.errors.0 }}</p>{% endif %}
             </div>
         </div>
         <div class="flex gap-3 pt-2">
-            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Task</button>
+            <button type="submit" id="qt-submit-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">Save Task</button>
             <button type="button" onclick="closeModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</button>
         </div>
     </form>
@@ -61,30 +66,54 @@
         (function() {
             var typeSelect = document.getElementById('{{ form.task_type.id_for_label }}');
             if (typeSelect) {
-                function updateMeetingFields() {
-                    var wrapper = document.getElementById('qt-due-time-wrapper');
+                function updateTypeFields() {
+                    var timeWrapper = document.getElementById('qt-due-time-wrapper');
                     var durationWrapper = document.getElementById('qt-duration-wrapper');
+                    var providerWrapper = document.getElementById('qt-provider-wrapper');
+                    var priorityWrapper = document.getElementById('qt-priority-wrapper');
                     var dateLabel = document.getElementById('qt-due-date-label');
                     var notesWrapper = document.getElementById('qt-notes-wrapper');
                     var notesToggle = document.getElementById('qt-notes-toggle');
-                    if (typeSelect.value === 'meeting') {
-                        wrapper.classList.remove('hidden');
+                    var notesLabel = document.getElementById('qt-notes-label');
+                    var submitBtn = document.getElementById('qt-submit-btn');
+                    var val = typeSelect.value;
+                    if (val === 'meeting' || val === 'appointment') {
+                        timeWrapper.classList.remove('hidden');
                         durationWrapper.classList.remove('hidden');
-                        if (dateLabel) dateLabel.textContent = 'Meeting date';
+                        if (dateLabel) dateLabel.textContent = val === 'appointment' ? 'Date' : 'Meeting date';
                         if (notesWrapper.classList.contains('hidden')) {
                             notesWrapper.classList.remove('hidden');
                             notesToggle.textContent = '− Hide notes';
                         }
                     } else {
-                        wrapper.classList.add('hidden');
+                        timeWrapper.classList.add('hidden');
                         durationWrapper.classList.add('hidden');
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
                         document.getElementById('{{ form.duration_minutes.id_for_label }}').value = '';
                         if (dateLabel) dateLabel.textContent = 'Due date';
                     }
+                    if (val === 'appointment') {
+                        providerWrapper.classList.remove('hidden');
+                        priorityWrapper.classList.add('hidden');
+                        if (notesLabel) notesLabel.textContent = 'Purpose';
+                        if (notesToggle) {
+                            notesToggle.textContent = notesWrapper.classList.contains('hidden') ? '+ Add details' : '− Hide details';
+                        }
+                        submitBtn.textContent = 'Create Appointment';
+                        submitBtn.className = 'px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white text-sm font-medium rounded-md transition-colors';
+                    } else {
+                        providerWrapper.classList.add('hidden');
+                        priorityWrapper.classList.remove('hidden');
+                        if (notesLabel) notesLabel.textContent = 'Notes';
+                        if (notesToggle) {
+                            notesToggle.textContent = notesWrapper.classList.contains('hidden') ? '+ Add notes' : '− Hide notes';
+                        }
+                        submitBtn.textContent = 'Save Task';
+                        submitBtn.className = 'px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors';
+                    }
                 }
-                typeSelect.addEventListener('change', updateMeetingFields);
-                updateMeetingFields();
+                typeSelect.addEventListener('change', updateTypeFields);
+                updateTypeFields();
             }
         })();
     </script>

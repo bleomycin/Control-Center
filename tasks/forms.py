@@ -72,9 +72,21 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
 
 
 class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
+    QUICK_TYPE_CHOICES = [
+        ("one_time", "One-Time"),
+        ("reference", "Reference"),
+        ("meeting", "Meeting"),
+        ("appointment", "Appointment"),
+    ]
+
+    task_type = forms.ChoiceField(choices=QUICK_TYPE_CHOICES, initial="one_time", label="Type")
+    provider = forms.ModelChoiceField(
+        queryset=None, required=False, label="Provider",
+    )
+
     class Meta:
         model = Task
-        fields = ["title", "task_type", "due_date", "due_time", "duration_minutes", "priority", "description"]
+        fields = ["title", "due_date", "due_time", "duration_minutes", "priority", "description"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
@@ -82,10 +94,20 @@ class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
             "description": forms.Textarea(attrs={"rows": 2, "placeholder": "Location, link, or other details..."}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from healthcare.models import Provider
+        self.fields["provider"].queryset = Provider.objects.filter(status="active")
+        # Reorder so task_type appears after title
+        self.order_fields(["title", "task_type", "due_date", "due_time", "duration_minutes",
+                           "provider", "priority", "description"])
+
     def clean(self):
         cleaned = super().clean()
         if cleaned.get("due_time") and not cleaned.get("due_date"):
             self.add_error("due_time", "A due date is required when setting a time.")
+        if cleaned.get("task_type") == "appointment" and not cleaned.get("due_date"):
+            self.add_error("due_date", "A date is required for appointments.")
         return cleaned
 
 
