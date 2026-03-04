@@ -7,6 +7,7 @@
     {% endif %}
     <td class="px-4 py-3">
         <a href="{{ prop.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ prop.name }}</a>
+        {% if prop.tenant %}<p class="text-xs text-blue-300/60">{{ prop.tenant }}</p>{% endif %}
         <p class="text-xs text-gray-400 truncate max-w-xs">{{ prop.address|truncatewords:8 }}</p>
         {% if prop.loan_count %}<p class="text-xs text-orange-400">{{ prop.loan_count }} loan{{ prop.loan_count|pluralize }} · ${{ prop.loan_balance|floatformat:0|intcomma }}</p>{% endif %}
     </td>

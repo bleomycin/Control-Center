@@ -93,7 +93,7 @@
                hx-get="{% url 'assets:asset_list' %}" hx-trigger="keyup changed delay:300ms" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
     </div>
-    {% if status_choices %}
+    {% if status_choices and "properties" not in current_asset_types %}
     <div id="status-filters" class="flex flex-wrap gap-2 items-center">
         <span class="text-xs text-gray-400">Status:</span>
         {% for val, label in status_choices %}
@@ -106,7 +106,7 @@
         {% endfor %}
     </div>
     <div id="date-filters" class="flex flex-wrap gap-2 items-center">
-        <span class="text-xs text-gray-400">{% if "properties" in current_asset_types %}Acquired:{% else %}Next Due:{% endif %}</span>
+        <span class="text-xs text-gray-400">Next Due:</span>
         <input type="date" name="date_from" value="{{ date_from }}"
                hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 sm:text-sm px-2 py-1.5">
@@ -150,5 +150,43 @@ function closeAllDropdowns() {
 document.addEventListener('click', function(e) {
     if (!e.target.closest('[data-dropdown]')) closeAllDropdowns();
 });
+function togglePropFilters() {
+    var panel = document.getElementById('prop-filter-panel');
+    if (!panel) return;
+    var btn = document.getElementById('prop-filter-toggle-btn');
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) {
+        btn.classList.add('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.remove('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    } else if (!document.querySelector('#prop-filter-panel input:checked') && !document.querySelector('#prop-filter-panel select') && !Array.from(document.querySelectorAll('#prop-filter-panel input[type=date]')).some(function(d) { return d.value; })) {
+        btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    }
+}
+function clearPropFilters() {
+    var panel = document.getElementById('prop-filter-panel');
+    if (!panel) return;
+    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+    panel.querySelectorAll('input[type=date]').forEach(function(d) { d.value = ''; });
+    panel.querySelectorAll('select').forEach(function(s) { s.selectedIndex = 0; });
+    var badge = document.getElementById('prop-filter-count');
+    if (badge) badge.remove();
+    var btn = document.getElementById('prop-filter-toggle-btn');
+    if (btn) {
+        btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    }
+    // Trigger HTMX refresh
+    var searchInput = document.querySelector('#filter-form input[name=q]');
+    if (searchInput) htmx.trigger(searchInput, 'keyup');
+}
+function toggleAllGroups() {
+    var details = document.querySelectorAll('#asset-content details');
+    if (!details.length) return;
+    var anyOpen = Array.from(details).some(function(d) { return d.open; });
+    details.forEach(function(d) { d.open = !anyOpen; });
+    var text = document.getElementById('collapse-all-text');
+    if (text) text.textContent = anyOpen ? 'Expand All' : 'Collapse All';
+}
 </script>
 {% endblock %}

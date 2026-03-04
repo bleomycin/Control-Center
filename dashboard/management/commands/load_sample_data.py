@@ -155,33 +155,70 @@ class Command(BaseCommand):
         self.stdout.write("Creating real estate...")
         from assets.models import PropertyOwnership
         properties = {}
-        # Format: (name, addr, juris, ptype, val, acq, status, notes, [(stakeholder_name, ownership%, role)])
+        # Format: (name, tenant, addr, juris, ptype, val, acq, status, notes, [(stakeholder_name, ownership%, role)])
         prop_data = [
-            ("1200 Oak Avenue", "1200 Oak Ave, Austin, TX 78701", "Travis County, TX", "Single Family",
+            ("1200 Oak Avenue", "", "1200 Oak Ave, Austin, TX 78701", "Travis County, TX", "Single Family",
              Decimal("385000.00"), today - timedelta(days=730), "owned",
              "Rental property. Currently undergoing bathroom renovation. Tenant issues with Ray Holston.",
-             []),  # Sole ownership (implied, no partners listed)
-            ("450 Elm Street", "450 Elm St, Austin, TX 78702", "Travis County, TX", "Duplex",
+             []),
+            ("450 Elm Street", "", "450 Elm St, Austin, TX 78702", "Travis County, TX", "Duplex",
              Decimal("520000.00"), today - timedelta(days=1095), "owned",
              "Co-owned 50/50 with Tom Driscoll. Both units rented. Needs roof inspection.",
-             [("Tom Driscoll", Decimal("50.00"), "Co-owner")]),  # 50/50 split with Tom
-            ("3300 Magnolia Blvd", "3300 Magnolia Blvd, San Antonio, TX 78205", "Bexar County, TX", "Commercial",
+             [("Tom Driscoll", Decimal("50.00"), "Co-owner")]),
+            ("3300 Magnolia Blvd", "", "3300 Magnolia Blvd, San Antonio, TX 78205", "Bexar County, TX", "Commercial",
              Decimal("1250000.00"), None, "under_contract",
              "Under contract. Closing scheduled for next month. Co-investing with Nina Patel.",
-             [("Nina Patel", Decimal("50.00"), "Co-investor")]),  # 50/50 with Nina
-            ("890 Cedar Lane", "890 Cedar Ln, Dallas, TX 75201", "Dallas County, TX", "Single Family",
+             [("Nina Patel", Decimal("50.00"), "Co-investor")]),
+            ("890 Cedar Lane", "", "890 Cedar Ln, Dallas, TX 75201", "Dallas County, TX", "Single Family",
              Decimal("275000.00"), today - timedelta(days=1460), "in_dispute",
              "Property boundary dispute with neighbor. Marcus Reed handling litigation.",
-             []),  # Sole ownership
-            ("15 Riverside Dr", "15 Riverside Dr, Houston, TX 77001", "Harris County, TX", "Vacant Land",
+             []),
+            ("15 Riverside Dr", "", "15 Riverside Dr, Houston, TX 77001", "Harris County, TX", "Vacant Land",
              Decimal("180000.00"), today - timedelta(days=365), "owned",
              "Undeveloped lot. Zoning permits under review for residential development.",
-             []),  # Sole ownership
+             []),
+            ("7-Eleven - 509 Bates Ave", "7-Eleven", "509 Bates Ave, San Antonio, TX 78204", "Bexar County, TX", "Commercial",
+             Decimal("836000.00"), today - timedelta(days=500), "owned",
+             "NNN lease. 15 year term remaining.",
+             [], {
+                 "equity": Decimal("168396.00"),
+                 "monthly_income": Decimal("1098.00"),
+                 "loan_balance_snapshot": Decimal("445054.00"),
+                 "unreturned_capital": Decimal("991973.00"),
+                 "total_unreturned_capital": Decimal("1283000.00"),
+                 "total_accrued_pref_return": Decimal("202415.00"),
+                 "income_source": "D",
+             }),
+            ("7-Eleven - 10710 W Loop", "7-Eleven", "10710 W Loop 1604 N, San Antonio, TX 78254", "Bexar County, TX", "Commercial",
+             Decimal("2800000.00"), today - timedelta(days=400), "owned",
+             "NNN lease. High traffic corner lot.",
+             [], {
+                 "equity": Decimal("512000.00"),
+                 "monthly_income": Decimal("3450.00"),
+                 "monthly_accrued_income": Decimal("5515.00"),
+                 "loan_balance_snapshot": Decimal("1890000.00"),
+                 "unreturned_capital": Decimal("1650000.00"),
+                 "total_unreturned_capital": Decimal("2100000.00"),
+                 "total_accrued_pref_return": Decimal("98750.00"),
+                 "income_source": "D",
+             }),
+            ("Dollar Tree - 2100 Main St", "Dollar Tree", "2100 Main St, Houston, TX 77002", "Harris County, TX", "Commercial",
+             Decimal("650000.00"), today - timedelta(days=300), "owned",
+             "NNN lease. 10 year term.",
+             [], {
+                 "equity": Decimal("95200.00"),
+                 "monthly_income": Decimal("875.00"),
+                 "loan_balance_snapshot": Decimal("380000.00"),
+                 "unreturned_capital": Decimal("540000.00"),
+                 "income_source": "D",
+             }),
         ]
-        for name, addr, juris, ptype, val, acq, status, notes, owners in prop_data:
+        for name, tenant, addr, juris, ptype, val, acq, status, notes, owners, *rest in prop_data:
+            financials = rest[0] if rest else {}
             p = RealEstate.objects.create(
-                name=name, address=addr, jurisdiction=juris, property_type=ptype,
+                name=name, tenant=tenant, address=addr, jurisdiction=juris, property_type=ptype,
                 estimated_value=val, acquisition_date=acq, status=status, notes_text=notes,
+                **financials,
             )
             properties[name] = p
             # Add ownership records

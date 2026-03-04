@@ -49,17 +49,33 @@ class RealEstateForm(TailwindFormMixin, forms.ModelForm):
         max_digits=5, decimal_places=2, required=False, label="Ownership %",
     )
 
-    field_order = ["name", "address", "jurisdiction", "property_type",
+    FINANCIAL_FIELDS = [
+        "sold_date", "unreturned_capital", "total_unreturned_capital",
+        "loan_balance_snapshot", "equity", "deferred_gain",
+        "monthly_income", "monthly_accrued_income", "total_accrued_pref_return",
+        "income_source",
+    ]
+
+    field_order = ["name", "tenant", "address", "jurisdiction", "property_type",
                    "estimated_value", "acquisition_date", "status", "notes_text",
+                   "sold_date", "unreturned_capital", "total_unreturned_capital",
+                   "loan_balance_snapshot", "equity", "deferred_gain",
+                   "monthly_income", "monthly_accrued_income", "total_accrued_pref_return",
+                   "income_source",
                    "initial_stakeholder", "initial_role", "initial_percentage"]
 
     class Meta:
         model = RealEstate
-        fields = ["name", "address", "jurisdiction", "property_type",
-                  "estimated_value", "acquisition_date", "status", "notes_text"]
+        fields = ["name", "tenant", "address", "jurisdiction", "property_type",
+                  "estimated_value", "acquisition_date", "status", "notes_text",
+                  "sold_date", "unreturned_capital", "total_unreturned_capital",
+                  "loan_balance_snapshot", "equity", "deferred_gain",
+                  "monthly_income", "monthly_accrued_income", "total_accrued_pref_return",
+                  "income_source"]
         widgets = {
             "address": forms.Textarea(attrs={"rows": 2}),
             "acquisition_date": forms.DateInput(attrs={"type": "date"}),
+            "sold_date": forms.DateInput(attrs={"type": "date"}),
             "notes_text": forms.Textarea(attrs={"rows": 3}),
         }
 

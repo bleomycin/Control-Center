@@ -1,6 +1,8 @@
+from collections import OrderedDict
 from decimal import Decimal
 
 from django.contrib import messages
+from django.core.paginator import Paginator
 from django.db.models import Count, Q, Sum
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -15,6 +17,57 @@ from .forms import (AircraftForm, AircraftOwnerForm, AssetPolicyLinkForm, AssetT
 from .models import (Aircraft, AircraftOwner, AssetTab, InsurancePolicy, Investment,
                      InvestmentParticipant, Lease, LeaseParty, Loan, LoanParty,
                      PolicyHolder, PropertyOwnership, RealEstate, Vehicle, VehicleOwner)
+
+
+# --- Property Grouping ---
+
+PROPERTY_GROUP_CHOICES = [
+    ("", "No Grouping"),
+    ("tenant", "Tenant"),
+    ("property_type", "Type"),
+    ("jurisdiction", "State"),
+    ("status", "Status"),
+]
+
+
+def _build_grouped_properties(properties, group_by):
+    """Group a queryset of properties by the given field for grouped table view."""
+    all_props = list(properties)
+
+    if group_by == "status":
+        labels = dict(RealEstate.STATUS_CHOICES)
+        order = [k for k, _ in RealEstate.STATUS_CHOICES]
+        buckets = OrderedDict((k, []) for k in order)
+        for p in all_props:
+            buckets.setdefault(p.status, []).append(p)
+        return [{"label": labels.get(k, k), "key": k, "properties": v, "count": len(v)}
+                for k, v in buckets.items() if v]
+
+    if group_by == "property_type":
+        buckets = OrderedDict()
+        for p in all_props:
+            key = p.property_type or "Unspecified"
+            buckets.setdefault(key, []).append(p)
+        return [{"label": k, "key": k, "properties": v, "count": len(v)}
+                for k, v in sorted(buckets.items(), key=lambda x: x[0])]
+
+    if group_by == "jurisdiction":
+        buckets = OrderedDict()
+        for p in all_props:
+            key = p.jurisdiction or "Unspecified"
+            buckets.setdefault(key, []).append(p)
+        return [{"label": k, "key": k, "properties": v, "count": len(v)}
+                for k, v in sorted(buckets.items(), key=lambda x: x[0])]
+
+    if group_by == "tenant":
+        buckets = OrderedDict()
+        for p in all_props:
+            key = p.tenant or "No Tenant"
+            buckets.setdefault(key, []).append(p)
+        return [{"label": k, "key": k, "properties": v, "count": len(v)}
+                for k, v in sorted(buckets.items(), key=lambda x: (x[0] == "No Tenant", x[0]))]
+
+    return []
 
 
 # --- Asset Tab Config ---
@@ -105,10 +158,18 @@ def asset_list(request):
             loan_count=Count("loans"), loan_balance=Sum("loans__current_balance"),
         )
         if q:
-            qs = qs.filter(name__icontains=q)
+            qs = qs.filter(Q(name__icontains=q) | Q(tenant__icontains=q) | Q(address__icontains=q))
         statuses = [s for s in request.GET.getlist("status") if s]
         if statuses:
             qs = qs.filter(status__in=statuses)
+        # Property type filter
+        prop_types = [t for t in request.GET.getlist("property_type") if t]
+        if prop_types:
+            qs = qs.filter(property_type__in=prop_types)
+        # Tenant filter
+        tenant_filter = request.GET.get("tenant_filter", "")
+        if tenant_filter:
+            qs = qs.filter(tenant=tenant_filter)
         date_from = request.GET.get("date_from")
         if date_from:
             qs = qs.filter(acquisition_date__gte=date_from)
@@ -116,11 +177,45 @@ def asset_list(request):
         if date_to:
             qs = qs.filter(acquisition_date__lte=date_to)
         if len(current_asset_types) == 1:
-            ALLOWED_SORTS = {"name", "status", "estimated_value", "acquisition_date"}
+            ALLOWED_SORTS = {"name", "status", "estimated_value", "acquisition_date", "tenant"}
             if sort in ALLOWED_SORTS:
                 qs = qs.order_by(f"{direction}{sort}")
-        ctx["properties"] = qs
+
+        # Grouping (properties-only, single-type tab)
+        group_by = request.GET.get("group", "")
+        if len(current_asset_types) == 1 and group_by in ("tenant", "property_type", "jurisdiction", "status"):
+            ctx["grouped_properties"] = _build_grouped_properties(qs, group_by)
+            ctx["property_group_by"] = group_by
+        else:
+            # Pagination for flat view (25 per page)
+            if len(current_asset_types) == 1:
+                if not sort:
+                    qs = qs.order_by("name")
+                paginator = Paginator(qs, 25)
+                page_num = request.GET.get("page", 1)
+                page_obj = paginator.get_page(page_num)
+                ctx["properties"] = page_obj
+                ctx["page_obj"] = page_obj
+                ctx["paginator"] = paginator
+            else:
+                ctx["properties"] = qs
+            ctx["property_group_by"] = ""
+
         ctx["property_status_choices"] = RealEstate.STATUS_CHOICES
+        ctx["property_group_choices"] = PROPERTY_GROUP_CHOICES
+        ctx["current_group"] = group_by if len(current_asset_types) == 1 else ""
+        # Distinct tenant list for filter dropdown
+        ctx["tenant_list"] = list(
+            RealEstate.objects.exclude(tenant="").values_list("tenant", flat=True)
+            .distinct().order_by("tenant")
+        )
+        ctx["selected_tenant"] = tenant_filter
+        # Distinct property types for filter pills
+        ctx["property_type_list"] = list(
+            RealEstate.objects.exclude(property_type="").values_list("property_type", flat=True)
+            .distinct().order_by("property_type")
+        )
+        ctx["selected_property_types"] = prop_types
 
     if "investments" in current_asset_types:
         qs = Investment.objects.annotate(
@@ -255,6 +350,18 @@ def asset_list(request):
             ctx["date_from"] = request.GET.get("date_from", "")
             ctx["date_to"] = request.GET.get("date_to", "")
 
+            # Compute active filter count for badge
+            filter_count = len(ctx["selected_statuses"])
+            if ctx.get("selected_property_types"):
+                filter_count += len(ctx["selected_property_types"])
+            if ctx.get("selected_tenant"):
+                filter_count += 1
+            if ctx["date_from"]:
+                filter_count += 1
+            if ctx["date_to"]:
+                filter_count += 1
+            ctx["filter_count"] = filter_count
+
     is_htmx = request.headers.get("HX-Request")
     if is_htmx:
         return render(request, "assets/partials/_asset_tab_content.html", ctx)
@@ -336,11 +443,22 @@ def export_realestate_csv(request):
     qs = RealEstate.objects.all()
     fields = [
         ("name", "Name"),
+        ("tenant", "Tenant"),
         ("address", "Address"),
         ("property_type", "Type"),
         ("estimated_value", "Estimated Value"),
         ("status", "Status"),
         ("acquisition_date", "Acquisition Date"),
+        ("sold_date", "Sold Date"),
+        ("equity", "Equity"),
+        ("monthly_income", "Monthly Income"),
+        ("loan_balance_snapshot", "Loan Balance"),
+        ("monthly_accrued_income", "Accrued Income"),
+        ("unreturned_capital", "Unreturned Capital"),
+        ("total_unreturned_capital", "Total Unreturned Capital"),
+        ("total_accrued_pref_return", "Accrued Pref Return"),
+        ("deferred_gain", "Deferred Gain"),
+        ("income_source", "Income Source"),
     ]
     return do_export(qs, fields, "real_estate")
 
@@ -376,15 +494,44 @@ def export_loan_csv(request):
 def export_pdf_realestate_detail(request, pk):
     from config.pdf_export import render_pdf
     p = get_object_or_404(RealEstate, pk=pk)
-    sections = [
-        {"heading": "Property Information", "type": "info", "rows": [
-            ("Address", p.address),
-            ("Type", p.property_type or "N/A"),
-            ("Estimated Value", f"${p.estimated_value:,.0f}" if p.estimated_value else "N/A"),
-            ("Acquisition Date", p.acquisition_date.strftime("%b %d, %Y") if p.acquisition_date else "N/A"),
-            ("Jurisdiction", p.jurisdiction or "N/A"),
-        ]},
+    info_rows = [
+        ("Address", p.address),
     ]
+    if p.tenant:
+        info_rows.append(("Tenant", p.tenant))
+    info_rows.extend([
+        ("Type", p.property_type or "N/A"),
+        ("Estimated Value", f"${p.estimated_value:,.0f}" if p.estimated_value else "N/A"),
+        ("Acquisition Date", p.acquisition_date.strftime("%b %d, %Y") if p.acquisition_date else "N/A"),
+        ("Jurisdiction", p.jurisdiction or "N/A"),
+    ])
+    if p.sold_date:
+        info_rows.append(("Sold Date", p.sold_date.strftime("%b %d, %Y")))
+    sections = [
+        {"heading": "Property Information", "type": "info", "rows": info_rows},
+    ]
+    # Financial data
+    fin_rows = []
+    if p.equity:
+        fin_rows.append(("Equity", f"${p.equity:,.2f}"))
+    if p.monthly_income:
+        fin_rows.append(("Monthly Income", f"${p.monthly_income:,.2f}"))
+    if p.loan_balance_snapshot:
+        fin_rows.append(("Loan Balance", f"${p.loan_balance_snapshot:,.2f}"))
+    if p.monthly_accrued_income:
+        fin_rows.append(("Accrued Income", f"${p.monthly_accrued_income:,.2f}"))
+    if p.unreturned_capital:
+        fin_rows.append(("Unreturned Capital", f"${p.unreturned_capital:,.2f}"))
+    if p.total_unreturned_capital:
+        fin_rows.append(("Total Unreturned Capital", f"${p.total_unreturned_capital:,.2f}"))
+    if p.total_accrued_pref_return:
+        fin_rows.append(("Accrued Pref Return", f"${p.total_accrued_pref_return:,.2f}"))
+    if p.deferred_gain:
+        fin_rows.append(("Deferred Gain", f"${p.deferred_gain:,.2f}"))
+    if p.income_source:
+        fin_rows.append(("Income Source", p.income_source))
+    if fin_rows:
+        sections.append({"heading": "Financials", "type": "info", "rows": fin_rows})
     owners = p.ownerships.select_related("stakeholder").all()
     if owners:
         owner_str = ", ".join(f"{o.stakeholder.name} ({o.role} {o.ownership_percentage}%)" if o.ownership_percentage else f"{o.stakeholder.name} ({o.role})" for o in owners)

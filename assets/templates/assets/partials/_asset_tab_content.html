@@ -3,7 +3,98 @@
 {% if current_asset_types|length > 1 %}
 <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide mb-2 mt-4">Properties ({{ properties|length }})</h3>
 {% endif %}
+
 {% if current_asset_types|length == 1 %}
+{# Group + Filter controls #}
+<div class="flex flex-col sm:flex-row gap-2 mb-3">
+    <select name="group" id="group-select"
+            hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+            class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 w-full sm:w-auto">
+        {% for val, label in property_group_choices %}
+        <option value="{{ val }}" {% if current_group == val %}selected{% endif %}>{% if val %}Group: {{ label }}{% else %}{{ label }}{% endif %}</option>
+        {% endfor %}
+    </select>
+    {% if current_group %}
+    <button type="button" id="collapse-all-btn" onclick="toggleAllGroups()"
+            class="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600"
+            title="Collapse / Expand all groups">
+        <svg id="collapse-all-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
+        <span class="hidden sm:inline" id="collapse-all-text">Collapse All</span>
+    </button>
+    {% endif %}
+    <button type="button" id="prop-filter-toggle-btn" onclick="togglePropFilters()"
+            class="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors {% if filter_count %}bg-blue-600/20 border border-blue-500 text-blue-300{% else %}bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600{% endif %}">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+        <span class="hidden sm:inline">Filters</span>
+        {% if filter_count %}<span class="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-500 text-white rounded-full" id="prop-filter-count">{{ filter_count }}</span>{% endif %}
+    </button>
+</div>
+
+{# Collapsible filter panel #}
+<div id="prop-filter-panel" class="{% if not filter_count %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+    <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
+        {# Status pill toggles #}
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-400 font-medium">Status:</span>
+            {% for val, label in property_status_choices %}
+            <label class="cursor-pointer">
+                <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
+                       hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                       class="hidden peer">
+                <span class="text-xs px-2.5 py-1 rounded-full border transition-colors peer-checked:border-transparent
+                    {% if val == 'owned' %}peer-checked:bg-green-900/50 peer-checked:text-green-300 border-gray-600 text-gray-400
+                    {% elif val == 'under_contract' %}peer-checked:bg-blue-900/50 peer-checked:text-blue-300 border-gray-600 text-gray-400
+                    {% elif val == 'sold' %}peer-checked:bg-gray-600 peer-checked:text-gray-200 border-gray-600 text-gray-400
+                    {% elif val == 'in_dispute' %}peer-checked:bg-red-900/50 peer-checked:text-red-300 border-gray-600 text-gray-400
+                    {% endif %}">{{ label }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {# Property type pills #}
+        {% if property_type_list %}
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-400 font-medium">Type:</span>
+            {% for pt in property_type_list %}
+            <label class="cursor-pointer">
+                <input type="checkbox" name="property_type" value="{{ pt }}" {% if pt in selected_property_types %}checked{% endif %}
+                       hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                       class="hidden peer">
+                <span class="text-xs px-2.5 py-1 rounded-full border transition-colors peer-checked:bg-purple-900/50 peer-checked:text-purple-300 peer-checked:border-transparent border-gray-600 text-gray-400">{{ pt }}</span>
+            </label>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {# Tenant dropdown #}
+        {% if tenant_list %}
+        <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400 font-medium">Tenant:</span>
+            <select name="tenant_filter"
+                    hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                    class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1">
+                <option value="">All Tenants</option>
+                {% for t in tenant_list %}
+                <option value="{{ t }}" {% if selected_tenant == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        {# Date range #}
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-gray-400 font-medium">Acquired:</span>
+            <input type="date" name="date_from" value="{{ date_from }}"
+                   hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1.5">
+            <span class="text-xs text-gray-500">to</span>
+            <input type="date" name="date_to" value="{{ date_to }}"
+                   hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1.5">
+        </div>
+        <button type="button" onclick="clearPropFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2 self-start sm:self-center">Clear</button>
+    </div>
+</div>
+
+{# Bulk action bar #}
+{% if not grouped_properties %}
 <div id="bulk-bar" class="hidden bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mb-3 flex flex-wrap items-center gap-3">
     <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
     <form method="post" action="{% url 'assets:realestate_bulk_delete' %}" class="inline">
@@ -15,6 +106,13 @@
             class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
 </div>
 {% endif %}
+{% endif %}
+
+{# Grouped view #}
+{% if grouped_properties %}
+{% include "assets/partials/_property_grouped_view.html" %}
+{% else %}
+{# Flat table view #}
 <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden {% if current_asset_types|length > 1 %}mb-6{% endif %}">
     <div class="overflow-x-auto">
         <table class="w-full">
@@ -79,6 +177,36 @@
         </table>
     </div>
 </div>
+{# Pagination #}
+{% if page_obj and page_obj.paginator.num_pages > 1 %}
+<nav class="flex items-center justify-between mt-4">
+    <p class="text-sm text-gray-400">
+        Showing {{ page_obj.start_index }}–{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+    </p>
+    <div class="flex gap-1">
+        {% if page_obj.has_previous %}
+        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&page={{ page_obj.previous_page_number }}"
+           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+           class="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors">&laquo; Prev</a>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <span class="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md">{{ num }}</span>
+            {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
+            <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&page={{ num }}"
+               hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+               class="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <a href="#" hx-get="{% url 'assets:asset_list' %}?tab={{ current_tab }}&page={{ page_obj.next_page_number }}"
+           hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+           class="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors">Next &raquo;</a>
+        {% endif %}
+    </div>
+</nav>
+{% endif %}
+{% endif %}
 {% endif %}
 
 {% if "investments" in current_asset_types %}

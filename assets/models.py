@@ -51,6 +51,7 @@ class RealEstate(models.Model):
     ]
 
     name = models.CharField(max_length=255)
+    tenant = models.CharField(max_length=255, blank=True, help_text="Brand or tenant name (e.g. 7-Eleven, CVS)")
     address = models.TextField()
     jurisdiction = models.CharField(max_length=255, blank=True)
     property_type = models.CharField(max_length=100, blank=True)
@@ -63,15 +64,74 @@ class RealEstate(models.Model):
         related_name="properties",
         blank=True,
     )
+    sold_date = models.DateField(null=True, blank=True)
+    unreturned_capital = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="314SG unreturned capital",
+    )
+    total_unreturned_capital = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="All-investors unreturned capital",
+    )
+    loan_balance_snapshot = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="Outstanding loan balance at time of import",
+    )
+    equity = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="314SG equity position",
+    )
+    deferred_gain = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="Deferred gain / future tax liability",
+    )
+    monthly_income = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Monthly income from property",
+    )
+    monthly_accrued_income = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Monthly accrued (undistributed) income",
+    )
+    total_accrued_pref_return = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text="Total accrued preferred return",
+    )
+    income_source = models.CharField(
+        max_length=100, blank=True,
+        help_text='Distribution type (e.g. "D", "Above Pref", "Vacant")',
+    )
     notes_text = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    FINANCIAL_FIELDS = [
+        ("equity", "Equity"),
+        ("monthly_income", "Monthly Income"),
+        ("loan_balance_snapshot", "Loan Balance"),
+        ("monthly_accrued_income", "Accrued Income"),
+        ("unreturned_capital", "Unreturned Capital"),
+        ("total_accrued_pref_return", "Accrued Pref Return"),
+        ("total_unreturned_capital", "Total Unreturned Capital"),
+        ("income_source", "Income Source"),
+        ("deferred_gain", "Deferred Gain"),
+        ("sold_date", "Sold Date"),
+    ]
 
     def __str__(self):
         return self.name
 
     def get_absolute_url(self):
         return reverse("assets:realestate_detail", kwargs={"pk": self.pk})
+
+    @property
+    def has_financial_data(self):
+        """True if any financial field has a non-empty, non-zero value."""
+        for field_name, _ in self.FINANCIAL_FIELDS:
+            val = getattr(self, field_name)
+            if val is not None and val != "" and val != 0:
+                return True
+        return False
 
     class Meta:
         verbose_name_plural = "Real estate"

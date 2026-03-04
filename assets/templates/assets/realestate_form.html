@@ -14,12 +14,12 @@
     </div>
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
-        {% for field in form %}
-            {% if field.name == "initial_stakeholder" %}
-            <div class="border-t border-gray-700 pt-4 mt-4">
-                <p class="text-xs text-gray-400 uppercase tracking-wide mb-3">Initial Owner <span class="text-gray-500 normal-case">(optional)</span></p>
-            </div>
-            {% endif %}
+        {% with f=form %}
+        {% for field in f %}
+            {% if field.name == "sold_date" %}{% comment %}Start financial details{% endcomment %}
+            {% elif field.name == "initial_stakeholder" or field.name == "initial_role" or field.name == "initial_percentage" %}{% comment %}Skip initial owner fields{% endcomment %}
+            {% elif field.name in f.FINANCIAL_FIELDS %}{% comment %}Skip financial fields in main loop{% endcomment %}
+            {% else %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
@@ -27,7 +27,46 @@
             {{ field }}
             {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
         </div>
+            {% endif %}
         {% endfor %}
+        {% endwith %}
+
+        <details class="border-t border-gray-700 pt-4 mt-4">
+            <summary class="cursor-pointer select-none text-xs text-gray-400 uppercase tracking-wide hover:text-gray-300 flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 transition-transform [details[open]>summary>&]:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                Financial Details
+            </summary>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
+                {% for field in form %}
+                    {% if field.name in form.FINANCIAL_FIELDS %}
+                <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ field.label }}</label>
+                    {{ field }}
+                    {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}
+                </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </details>
+
+        {% if form.initial_stakeholder %}
+        <div class="border-t border-gray-700 pt-4 mt-4">
+            <p class="text-xs text-gray-400 uppercase tracking-wide mb-3">Initial Owner <span class="text-gray-500 normal-case">(optional)</span></p>
+        </div>
+        <div>
+            <label for="{{ form.initial_stakeholder.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.initial_stakeholder.label }}</label>
+            {{ form.initial_stakeholder }}
+        </div>
+        <div>
+            <label for="{{ form.initial_role.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.initial_role.label }}</label>
+            {{ form.initial_role }}
+        </div>
+        <div>
+            <label for="{{ form.initial_percentage.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.initial_percentage.label }}</label>
+            {{ form.initial_percentage }}
+        </div>
+        {% endif %}
+
         <div class="flex gap-3 pt-4">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">{% if object %}Update{% else %}Create{% endif %} Property</button>
             <a href="{% url 'assets:realestate_list' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>

@@ -12,6 +12,7 @@
             <span class="text-gray-200">{{ property.name }}</span>
         </nav>
         <h1 class="text-2xl font-bold text-white mt-2">{{ property.name }}</h1>
+        {% if property.tenant %}<p class="text-sm text-blue-400 mt-0.5">{{ property.tenant }}</p>{% endif %}
         <p class="text-sm text-gray-400 mt-1">{{ property.address }}</p>
     </div>
     <div class="flex flex-wrap gap-2 mt-3">
@@ -39,6 +40,77 @@
         <p class="text-sm font-medium text-gray-200 mt-1">{{ property.acquisition_date|date:"M j, Y"|default:"N/A" }}</p>
     </div>
 </div>
+
+{% if property.has_financial_data %}
+<details open class="bg-gray-800 rounded-lg border border-gray-700 mb-6 group">
+    <summary class="px-4 py-3 cursor-pointer select-none flex items-center gap-2 text-xs text-gray-400 uppercase tracking-wide hover:text-gray-300">
+        <svg class="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        Financials
+    </summary>
+    <div class="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+        {% if property.equity %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Equity</span>
+            <span class="text-sm font-medium text-green-400">${{ property.equity|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.monthly_income %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Monthly Income</span>
+            <span class="text-sm font-medium text-green-400">${{ property.monthly_income|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.loan_balance_snapshot %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Loan Balance</span>
+            <span class="text-sm font-medium text-gray-200">${{ property.loan_balance_snapshot|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.monthly_accrued_income %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Accrued Income</span>
+            <span class="text-sm font-medium text-yellow-400">${{ property.monthly_accrued_income|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.unreturned_capital %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Unreturned Capital</span>
+            <span class="text-sm font-medium text-gray-200">${{ property.unreturned_capital|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.total_accrued_pref_return %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Accrued Pref Return</span>
+            <span class="text-sm font-medium text-yellow-400">${{ property.total_accrued_pref_return|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.total_unreturned_capital %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Total Unreturned Capital</span>
+            <span class="text-sm font-medium text-gray-200">${{ property.total_unreturned_capital|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.income_source %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Income Source</span>
+            <span class="text-sm font-medium text-gray-200">{{ property.income_source }}</span>
+        </div>
+        {% endif %}
+        {% if property.deferred_gain %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Deferred Gain</span>
+            <span class="text-sm font-medium text-orange-400">${{ property.deferred_gain|floatformat:0|intcomma }}</span>
+        </div>
+        {% endif %}
+        {% if property.sold_date %}
+        <div class="flex justify-between items-baseline">
+            <span class="text-xs text-gray-400">Sold Date</span>
+            <span class="text-sm font-medium text-gray-200">{{ property.sold_date|date:"M j, Y" }}</span>
+        </div>
+        {% endif %}
+    </div>
+</details>
+{% endif %}
 
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
