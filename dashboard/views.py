@@ -601,6 +601,16 @@ def calendar_feed(request):
     window_start = today - timedelta(days=30)
     window_end = today + timedelta(days=90)
     types = settings.get_event_types()
+    base_url = request.build_absolute_uri("/").rstrip("/")
+
+    def _add_alarm(ev, minutes=15):
+        """Add a VALARM reminder to a timed event."""
+        from icalendar import Alarm
+        alarm = Alarm()
+        alarm.add("action", "DISPLAY")
+        alarm.add("description", "Reminder")
+        alarm.add("trigger", timedelta(minutes=-minutes))
+        ev.add_component(alarm)
 
     # Tasks & meetings (separate toggles)
     include_tasks = types.get("tasks", True)
@@ -620,8 +630,12 @@ def calendar_feed(request):
             ev.add("summary", f"{prefix}{task.title}")
             if task.is_meeting and task.due_time:
                 ev.add("dtstart", datetime.combine(task.due_date, task.due_time))
+                _add_alarm(ev, 15)
             else:
                 ev.add("dtstart", task.due_date)
+            if task.description:
+                ev.add("description", task.description)
+            ev.add("url", f"{base_url}{task.get_absolute_url()}")
             ev.add("uid", f"task-{task.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -636,6 +650,7 @@ def calendar_feed(request):
             title = f"${loan.monthly_payment:,.0f} — {loan.name}" if loan.monthly_payment else f"Payment: {loan.name}"
             ev.add("summary", title)
             ev.add("dtstart", loan.next_payment_date)
+            ev.add("url", f"{base_url}{loan.get_absolute_url()}")
             ev.add("uid", f"loan-{loan.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -651,6 +666,9 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"Follow-up: {fu.stakeholder.name if fu.stakeholder else 'Unknown'}")
             ev.add("dtstart", fu_date)
+            if fu.notes_text:
+                ev.add("description", fu.notes_text)
+            ev.add("url", f"{base_url}{fu.get_absolute_url()}")
             ev.add("uid", f"followup-{fu.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -662,12 +680,18 @@ def calendar_feed(request):
                 ev = Event()
                 ev.add("summary", f"Legal: {matter.title}")
                 ev.add("dtstart", matter.filing_date)
+                if matter.description:
+                    ev.add("description", matter.description)
+                ev.add("url", f"{base_url}{matter.get_absolute_url()}")
                 ev.add("uid", f"legal-{matter.pk}@controlcenter")
                 cal.add_component(ev)
             if matter.next_hearing_date and window_start <= matter.next_hearing_date <= window_end:
                 ev = Event()
                 ev.add("summary", f"Hearing: {matter.title}")
                 ev.add("dtstart", matter.next_hearing_date)
+                if matter.description:
+                    ev.add("description", matter.description)
+                ev.add("url", f"{base_url}{matter.get_absolute_url()}")
                 ev.add("uid", f"hearing-{matter.pk}@controlcenter")
                 cal.add_component(ev)
 
@@ -681,6 +705,9 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"Contact: {log.stakeholder.name if log.stakeholder else 'Unknown'}")
             ev.add("dtstart", log.follow_up_date)
+            if log.summary:
+                ev.add("description", log.summary)
+            ev.add("url", f"{base_url}{log.get_absolute_url()}")
             ev.add("uid", f"contact-{log.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -697,8 +724,21 @@ def calendar_feed(request):
             ev.add("summary", appt.title)
             if appt.time:
                 ev.add("dtstart", datetime.combine(appt.date, appt.time))
+                _add_alarm(ev, 60)
             else:
                 ev.add("dtstart", appt.date)
+            desc_parts = []
+            if appt.purpose:
+                desc_parts.append(appt.purpose)
+            if appt.provider:
+                desc_parts.append(f"Provider: {appt.provider.name}")
+            if appt.facility:
+                desc_parts.append(f"Location: {appt.facility}")
+            if desc_parts:
+                ev.add("description", "\n".join(desc_parts))
+            if appt.facility:
+                ev.add("location", appt.facility)
+            ev.add("url", f"{base_url}{appt.get_absolute_url()}")
             ev.add("uid", f"appt-{appt.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -713,6 +753,13 @@ def calendar_feed(request):
             ev = Event()
             ev.add("summary", f"Refill: {rx.medication_name}")
             ev.add("dtstart", rx.next_refill_date)
+            desc_parts = [f"Medication: {rx.medication_name}"]
+            if rx.dosage:
+                desc_parts.append(f"Dosage: {rx.dosage}")
+            if rx.pharmacy:
+                desc_parts.append(f"Pharmacy: {rx.pharmacy}")
+            ev.add("description", "\n".join(desc_parts))
+            ev.add("url", f"{base_url}{rx.get_absolute_url()}")
             ev.add("uid", f"refill-{rx.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -729,6 +776,7 @@ def calendar_feed(request):
             title = f"${lease.monthly_rent:,.0f}/mo — {lease.name}" if lease.monthly_rent else f"Lease expires: {lease.name}"
             ev.add("summary", title)
             ev.add("dtstart", lease.end_date)
+            ev.add("url", f"{base_url}{lease.get_absolute_url()}")
             ev.add("uid", f"lease-{lease.pk}@controlcenter")
             cal.add_component(ev)
 
