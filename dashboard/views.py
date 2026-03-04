@@ -749,6 +749,9 @@ def calendar_feed(request):
                 desc_parts.append(f"Location: {appt.facility}")
             if appt.address:
                 desc_parts.append(f"Address: {appt.address}")
+                from urllib.parse import quote
+                maps_url = f"https://maps.apple.com/?address={quote(appt.address)}"
+                desc_parts.append(f"Map: {maps_url}")
             # Always include Control Center link in description
             desc_parts.append(f"Details: {base_url}{appt.get_absolute_url()}")
             ev.add("description", "\n".join(desc_parts))
