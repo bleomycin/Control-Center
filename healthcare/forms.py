@@ -166,12 +166,14 @@ class AppointmentForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Appointment
         fields = ["title", "date", "time", "duration_minutes", "provider",
-                  "facility", "visit_type", "purpose", "preparation",
-                  "status", "related_condition", "health_insurance", "notes_text"]
+                  "facility", "address", "url", "visit_type", "purpose",
+                  "preparation", "status", "related_condition",
+                  "health_insurance", "notes_text"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
             "time": forms.TimeInput(attrs={"type": "time"}),
             "duration_minutes": forms.Select(choices=DURATION_CHOICES),
+            "address": forms.Textarea(attrs={"rows": 2}),
             "purpose": forms.Textarea(attrs={"rows": 2}),
             "preparation": forms.Textarea(attrs={"rows": 2}),
             "notes_text": forms.Textarea(attrs={"rows": 3}),

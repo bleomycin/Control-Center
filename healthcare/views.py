@@ -507,6 +507,8 @@ def export_pdf_appointment_detail(request, pk):
             ("Duration", f"{appt.duration_minutes} min" if appt.duration_minutes else "N/A"),
             ("Provider", str(appt.provider) if appt.provider else "N/A"),
             ("Facility", appt.facility or "N/A"),
+            ("Address", appt.address or "N/A"),
+            ("URL", appt.url or "N/A"),
             ("Type", appt.get_visit_type_display()),
         ]},
     ]

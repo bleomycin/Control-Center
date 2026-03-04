@@ -747,11 +747,25 @@ def calendar_feed(request):
                 desc_parts.append(f"Provider: {appt.provider.name}")
             if appt.facility:
                 desc_parts.append(f"Location: {appt.facility}")
+            if appt.address:
+                desc_parts.append(f"Address: {appt.address}")
+            if appt.url:
+                desc_parts.append(f"Link: {appt.url}")
             if desc_parts:
                 ev.add("description", "\n".join(desc_parts))
+            # LOCATION: combine facility + address
+            location_parts = []
             if appt.facility:
-                ev.add("location", appt.facility)
-            ev.add("url", f"{base_url}{appt.get_absolute_url()}")
+                location_parts.append(appt.facility)
+            if appt.address:
+                location_parts.append(appt.address)
+            if location_parts:
+                ev.add("location", ", ".join(location_parts))
+            # URL: prefer user-provided URL, fall back to detail page
+            if appt.url:
+                ev.add("url", appt.url)
+            else:
+                ev.add("url", f"{base_url}{appt.get_absolute_url()}")
             ev.add("uid", f"appt-{appt.pk}@controlcenter")
             cal.add_component(ev)
 

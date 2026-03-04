@@ -1168,27 +1168,37 @@ class Command(BaseCommand):
         # Appointments
         appt_data = [
             ("Annual Physical Exam", today + timedelta(days=60), "09:30", 60,
-             "Pacific Primary Care", "routine",
+             "Pacific Primary Care",
+             "1234 Market St, Suite 200, San Francisco, CA 94102",
+             "https://www.pacificprimarycare.com/patient-portal",
+             "routine",
              "Annual comprehensive physical exam",
              "Fast for 12 hours before appointment for lab work.",
              "scheduled", "Dr. Sarah Mitchell", "Essential Hypertension"),
             ("Dental Cleaning", today + timedelta(days=14), "10:00", 60,
-             "Sunset Dental", "routine",
+             "Sunset Dental",
+             "5678 Sunset Blvd, San Francisco, CA 94122",
+             "",
+             "routine",
              "Biannual dental cleaning and exam", "",
              "confirmed", "Dr. Emily Chen", None),
             ("Dermatology Annual Skin Check", today + timedelta(days=45), "14:00", 30,
-             "Pham Dermatology", "specialist",
+             "Pham Dermatology",
+             "900 Hyde St, Floor 3, San Francisco, CA 94109",
+             "https://www.phamdermatology.com",
+             "specialist",
              "Annual full-body skin exam",
              "Avoid applying any lotions on the day of the appointment.",
              "scheduled", "Dr. Lisa Pham", None),
         ]
-        for (title, dt, time_str, duration, facility, vtype, purpose,
-             prep, status, prov_name, cond_name) in appt_data:
+        for (title, dt, time_str, duration, facility, address, url,
+             vtype, purpose, prep, status, prov_name, cond_name) in appt_data:
             from datetime import time as time_type
             h, m = map(int, time_str.split(":"))
             appt = Appointment.objects.create(
                 title=title, date=dt, time=time_type(h, m),
                 duration_minutes=duration, facility=facility,
+                address=address, url=url,
                 visit_type=vtype, purpose=purpose,
                 preparation=prep, status=status,
                 provider=providers.get(prov_name),

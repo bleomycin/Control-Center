@@ -40,12 +40,14 @@
     </div>
 </div>
 
-{% if appointment.provider or appointment.facility or appointment.visit_type %}
+{% if appointment.provider or appointment.facility or appointment.address or appointment.url or appointment.visit_type %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
     <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Details</p>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         {% if appointment.provider %}<div><span class="text-gray-400">Provider:</span> <a href="{{ appointment.provider.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ appointment.provider.name }}</a></div>{% endif %}
         {% if appointment.facility %}<div><span class="text-gray-400">Facility:</span> <span class="text-gray-200">{{ appointment.facility }}</span></div>{% endif %}
+        {% if appointment.address %}<div class="sm:col-span-2"><span class="text-gray-400">Address:</span> <span class="text-gray-200 whitespace-pre-wrap">{{ appointment.address }}</span></div>{% endif %}
+        {% if appointment.url %}<div class="sm:col-span-2"><span class="text-gray-400">URL:</span> <a href="{{ appointment.url }}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 break-all">{{ appointment.url }}</a></div>{% endif %}
         {% if appointment.visit_type %}<div><span class="text-gray-400">Type:</span> <span class="text-gray-200">{{ appointment.get_visit_type_display }}</span></div>{% endif %}
     </div>
 </div>

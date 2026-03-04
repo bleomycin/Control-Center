@@ -393,6 +393,8 @@ class Appointment(models.Model):
         null=True, blank=True, related_name="appointments",
     )
     facility = models.CharField(max_length=255, blank=True)
+    address = models.TextField(blank=True)
+    url = models.URLField(max_length=2000, blank=True)
     visit_type = models.CharField(max_length=20, choices=Visit.VISIT_TYPE_CHOICES, default="routine")
     purpose = models.TextField(blank=True)
     preparation = models.TextField(blank=True, help_text="Fasting, bring records, etc.")
