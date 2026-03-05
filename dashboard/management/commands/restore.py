@@ -27,7 +27,7 @@ class Command(BaseCommand):
             raise CommandError(f'Not a valid tar archive: {archive_path}')
 
         # Validate archive contents
-        with tarfile.open(archive_path, 'r:gz') as tar:
+        with tarfile.open(archive_path, 'r:*') as tar:
             members = tar.getnames()
             if 'db.sqlite3' not in members:
                 raise CommandError('Archive missing db.sqlite3')
@@ -43,7 +43,7 @@ class Command(BaseCommand):
             tmp_path = Path(tmp)
 
             # Extract archive
-            with tarfile.open(archive_path, 'r:gz') as tar:
+            with tarfile.open(archive_path, 'r:*') as tar:
                 tar.extractall(path=tmp_path)
 
             # Replace database

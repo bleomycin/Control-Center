@@ -1531,7 +1531,7 @@ def backup_restore(request, filename=None):
     try:
         if not tarfile.is_tarfile(str(archive_path)):
             raise ValueError("Not a valid tar.gz archive")
-        with tarfile.open(archive_path, 'r:gz') as tar:
+        with tarfile.open(archive_path, 'r:*') as tar:
             members = tar.getnames()
             if 'db.sqlite3' not in members:
                 raise ValueError("Archive missing db.sqlite3")
@@ -1552,7 +1552,7 @@ def backup_restore(request, filename=None):
 
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            with tarfile.open(archive_path, 'r:gz') as tar:
+            with tarfile.open(archive_path, 'r:*') as tar:
                 tar.extractall(path=tmp_path)
 
             # Replace database
