@@ -11,6 +11,16 @@
         </form>
         <button onclick="const pks = Array.from(document.querySelectorAll('input[name=selected]:checked')).map(cb => cb.value); window.location.href='{% url 'stakeholders:bulk_export_csv' %}?' + pks.map(pk => 'selected=' + pk).join('&');"
                 class="px-3 py-1 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-xs font-medium rounded-md transition-colors">Export Selected</button>
+        <form method="post" action="{% url 'stakeholders:bulk_change_type' %}" class="inline flex items-center gap-1">
+            {% csrf_token %}
+            <select name="new_type" class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-xs py-1 pl-2 pr-7 focus:border-blue-500 focus:ring-blue-500">
+                {% for val, label in entity_type_choices %}
+                <option value="{{ val }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" onclick="document.querySelectorAll('input[name=selected]:checked').forEach(cb => {const h = document.createElement('input'); h.type='hidden'; h.name='selected'; h.value=cb.value; this.form.appendChild(h);})"
+                    class="px-3 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-xs font-medium rounded-md transition-colors">Change Type</button>
+        </form>
     </div>
 
     <!-- Table -->
@@ -85,4 +95,16 @@
     </div>
 
     {% include "partials/_pagination.html" %}
+
+    <script>
+    function toggleChildren(parentId) {
+        const rows = document.querySelectorAll('[data-parent-id="' + parentId + '"]');
+        const btn = document.getElementById('toggle-' + parentId);
+        if (!btn) return;
+        const expanded = btn.dataset.expanded === 'true';
+        rows.forEach(function(r) { r.classList.toggle('hidden'); });
+        btn.dataset.expanded = expanded ? 'false' : 'true';
+        btn.querySelector('svg').style.transform = expanded ? '' : 'rotate(90deg)';
+    }
+    </script>
 {% endif %}

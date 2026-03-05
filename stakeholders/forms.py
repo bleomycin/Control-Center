@@ -17,13 +17,16 @@ class StakeholderForm(TailwindFormMixin, forms.ModelForm):
             "entity_type": forms.Select(),
         }
         labels = {
-            "parent_organization": "Firm",
+            "parent_organization": "Parent Organization",
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["entity_type"].widget.choices = get_choices("entity_type")
-        self.fields["parent_organization"].queryset = Stakeholder.objects.filter(entity_type="firm")
+        qs = Stakeholder.objects.all()
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        self.fields["parent_organization"].queryset = qs
 
 
 class ContactLogForm(TailwindFormMixin, forms.ModelForm):
@@ -83,9 +86,9 @@ class EmployeeAssignForm(TailwindFormMixin, forms.Form):
 
     def __init__(self, *args, firm=None, **kwargs):
         super().__init__(*args, **kwargs)
-        qs = Stakeholder.objects.exclude(entity_type="firm")
+        qs = Stakeholder.objects.all()
         if firm:
-            qs = qs.exclude(parent_organization=firm)
+            qs = qs.exclude(pk=firm.pk).exclude(parent_organization=firm)
         self.fields["stakeholder"].queryset = qs
 
 

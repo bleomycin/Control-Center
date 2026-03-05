@@ -1,11 +1,21 @@
 {% load choice_labels %}
-<tr id="stakeholder-row-{{ s.pk }}" class="hover:bg-gray-700/50 transition-colors">
+<tr id="stakeholder-row-{{ s.pk }}" class="hover:bg-gray-700/50 transition-colors{% if parent_id %} hidden{% endif %}"{% if parent_id %} data-parent-id="{{ parent_id }}"{% endif %}>
     <td class="px-4 py-3 w-8">
         <input type="checkbox" name="selected" value="{{ s.pk }}" class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0">
     </td>
     <td class="px-4 py-3">
-        <a href="{{ s.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ s.name }}</a>
-        <p class="text-xs text-gray-400 sm:hidden">{{ s.entity_type|choice_label:"entity_type" }}</p>
+        <div class="flex items-center gap-1">
+            {% if s.child_count %}
+            <button type="button" id="toggle-{{ s.pk }}" data-expanded="false" onclick="toggleChildren({{ s.pk }})"
+                    class="p-0.5 -ml-1 text-gray-400 hover:text-gray-200 transition-transform">
+                <svg class="w-3.5 h-3.5 transition-transform duration-150" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/></svg>
+            </button>
+            {% endif %}
+            {% if parent_id %}<span class="text-gray-600 text-xs mr-1">&nbsp;&nbsp;&#x2514;</span>{% endif %}
+            <a href="{{ s.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ s.name }}</a>
+            {% if s.child_count %}<span class="text-xs text-gray-500 ml-1">({{ s.child_count }})</span>{% endif %}
+        </div>
+        <p class="text-xs text-gray-400 sm:hidden{% if parent_id %} pl-6{% endif %}">{{ s.entity_type|choice_label:"entity_type" }}</p>
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">
         <select onchange="htmx.ajax('POST','{% url 'stakeholders:inline_update_type' s.pk %}',{target:'#stakeholder-row-{{ s.pk }}',swap:'outerHTML',values:{'entity_type':this.value,'csrfmiddlewaretoken':'{{ csrf_token }}'}})"

@@ -40,4 +40,5 @@ urlpatterns = [
     path("lease-party/<int:pk>/delete/", views.lease_party_delete, name="lease_party_delete"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
+    path("bulk/change-type/", views.bulk_change_type, name="bulk_change_type"),
 ]

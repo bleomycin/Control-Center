@@ -11,7 +11,11 @@ from decimal import Decimal, InvalidOperation
 
 from django.core.management.base import BaseCommand
 
-from assets.models import RealEstate
+from assets.models import PropertyOwnership, RealEstate
+from stakeholders.models import Stakeholder
+
+OWNER_NAME = "314SG, LLC"
+MANAGER_NAME = "CAP 2, LLC / Equitas Investments, LLC"
 
 FINANCIAL_FIELDS = [
     "sold_date", "unreturned_capital", "total_unreturned_capital",
@@ -72,9 +76,17 @@ class Command(BaseCommand):
             f"\n=== {mode} — {len(properties)} properties found ===\n"
         ))
 
+        # Ensure all stakeholders exist before processing properties
+        self.stdout.write(self.style.WARNING("--- Stakeholders ---"))
+        stakeholder_map, stakeholders_created = self._ensure_stakeholders(
+            properties, dry_run=dry_run
+        )
+        self.stdout.write("")
+
         created_count = 0
         updated_count = 0
         skipped_count = 0
+        ownership_count = 0
 
         for prop in properties:
             existing = RealEstate.objects.filter(address=prop["address"]).first()
@@ -83,6 +95,9 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING(
                     f"  SKIP (exists): {prop['name']}"
                 ))
+                ownership_count += self._create_ownership_records(
+                    existing, prop, stakeholder_map, dry_run=dry_run
+                )
                 skipped_count += 1
                 continue
 
@@ -103,6 +118,9 @@ class Command(BaseCommand):
 
                 if not changed_fields:
                     self.stdout.write(f"  NO CHANGE: {existing.name}")
+                    ownership_count += self._create_ownership_records(
+                        existing, prop, stakeholder_map, dry_run=dry_run
+                    )
                     skipped_count += 1
                     continue
 
@@ -116,6 +134,9 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.SUCCESS(
                         f"  UPDATED: {existing.name} (pk={existing.pk}) — {', '.join(changed_fields)}"
                     ))
+                ownership_count += self._create_ownership_records(
+                    existing, prop, stakeholder_map, dry_run=dry_run
+                )
                 updated_count += 1
                 continue
 
@@ -136,6 +157,10 @@ class Command(BaseCommand):
                             self.stdout.write(f"    {field_label}: ${val:,.2f}")
                         else:
                             self.stdout.write(f"    {field_label}: {val}")
+                self.stdout.write(f"    Ownership links:")
+                ownership_count += self._create_ownership_records(
+                    None, prop, stakeholder_map, dry_run=True
+                )
                 self.stdout.write("")
             else:
                 re = RealEstate.objects.create(
@@ -160,16 +185,23 @@ class Command(BaseCommand):
                     income_source=prop.get("income_source", ""),
                 )
                 self.stdout.write(self.style.SUCCESS(f"  CREATED: {re.name} (pk={re.pk})"))
+                ownership_count += self._create_ownership_records(
+                    re, prop, stakeholder_map, dry_run=False
+                )
             created_count += 1
 
         self.stdout.write("")
         parts = []
         if created_count:
-            parts.append(f"{created_count} {'would be created' if dry_run else 'created'}")
+            parts.append(f"{created_count} properties {'would be created' if dry_run else 'created'}")
         if updated_count:
-            parts.append(f"{updated_count} {'would be updated' if dry_run else 'updated'}")
+            parts.append(f"{updated_count} properties {'would be updated' if dry_run else 'updated'}")
         if skipped_count:
-            parts.append(f"{skipped_count} skipped")
+            parts.append(f"{skipped_count} properties skipped")
+        if stakeholders_created:
+            parts.append(f"{stakeholders_created} stakeholders {'would be created' if dry_run else 'created'}")
+        if ownership_count:
+            parts.append(f"{ownership_count} ownership links {'would be created' if dry_run else 'created'}")
         self.stdout.write(self.style.SUCCESS(f"Done: {', '.join(parts)}"))
 
     def _parse_spreadsheet(self, ws):
@@ -305,6 +337,15 @@ class Command(BaseCommand):
             # Extract jurisdiction (state) from address
             jurisdiction = self._extract_state(address_full)
 
+            # Compute ownership percentage as a Decimal (0-100 scale)
+            if own_pct is not None:
+                if own_pct <= 1:
+                    ownership_pct = Decimal(str(own_pct * 100)).quantize(Decimal("0.01"))
+                else:
+                    ownership_pct = Decimal(str(own_pct)).quantize(Decimal("0.01"))
+            else:
+                ownership_pct = None
+
             properties.append({
                 "name": name,
                 "tenant": tenant,
@@ -325,9 +366,109 @@ class Command(BaseCommand):
                 "monthly_accrued_income": monthly_accrued_income,
                 "total_accrued_pref_return": total_accrued_pref_return,
                 "income_source": income_source,
+                "entity_llc": current_entity,
+                "ownership_pct": ownership_pct,
             })
 
         return properties
+
+    def _ensure_stakeholders(self, properties, dry_run=False):
+        """Create or look up all stakeholders needed for ownership records.
+
+        Returns a dict mapping name → Stakeholder instance (empty in dry-run).
+        """
+        # Collect unique entity LLC names from parsed properties
+        entity_names = {p["entity_llc"] for p in properties if p.get("entity_llc")}
+        all_names = [OWNER_NAME, MANAGER_NAME] + sorted(entity_names)
+
+        stakeholder_map = {}
+        created_count = 0
+
+        for name in all_names:
+            if dry_run:
+                exists = Stakeholder.objects.filter(name=name).exists()
+                if exists:
+                    self.stdout.write(f"  Stakeholder exists: {name}")
+                else:
+                    self.stdout.write(self.style.NOTICE(
+                        f"  WOULD CREATE stakeholder: {name}"
+                    ))
+                    created_count += 1
+            else:
+                stakeholder, created = Stakeholder.objects.get_or_create(
+                    name=name,
+                    defaults={"entity_type": "business_partner"},
+                )
+                stakeholder_map[name] = stakeholder
+                if created:
+                    self.stdout.write(self.style.SUCCESS(
+                        f"  Created stakeholder: {name} (pk={stakeholder.pk})"
+                    ))
+                    created_count += 1
+                else:
+                    self.stdout.write(f"  Stakeholder exists: {name} (pk={stakeholder.pk})")
+
+        # Set parent_organization on entity LLCs → 314SG, LLC
+        owner = stakeholder_map.get(OWNER_NAME)
+        if owner and not dry_run:
+            for name, s in stakeholder_map.items():
+                if name != OWNER_NAME and not s.parent_organization:
+                    s.parent_organization = owner
+                    s.save(update_fields=["parent_organization"])
+
+        return stakeholder_map, created_count
+
+    def _create_ownership_records(self, real_estate, prop, stakeholder_map, dry_run=False):
+        """Create PropertyOwnership records linking a property to its stakeholders.
+
+        Returns the number of ownership records created (or would-be-created).
+        """
+        records_to_create = []
+
+        # 1. 314SG, LLC as Owner with ownership percentage
+        records_to_create.append({
+            "stakeholder_name": OWNER_NAME,
+            "role": "Owner",
+            "percentage": prop.get("ownership_pct"),
+        })
+
+        # 2. Manager
+        records_to_create.append({
+            "stakeholder_name": MANAGER_NAME,
+            "role": "Manager",
+            "percentage": None,
+        })
+
+        # 3. Entity LLC as Holding Entity (if present)
+        if prop.get("entity_llc"):
+            records_to_create.append({
+                "stakeholder_name": prop["entity_llc"],
+                "role": "Holding Entity",
+                "percentage": None,
+            })
+
+        created_count = 0
+        for rec in records_to_create:
+            if dry_run:
+                pct_str = f" ({rec['percentage']}%)" if rec["percentage"] else ""
+                self.stdout.write(
+                    f"      -> {rec['stakeholder_name']} as {rec['role']}{pct_str}"
+                )
+                created_count += 1
+            else:
+                stakeholder = stakeholder_map[rec["stakeholder_name"]]
+                _, created = PropertyOwnership.objects.get_or_create(
+                    property=real_estate,
+                    stakeholder=stakeholder,
+                    defaults={
+                        "ownership_percentage": rec["percentage"],
+                        "role": rec["role"],
+                    },
+                )
+                if created:
+                    created_count += 1
+
+        return created_count
 
     def _parse_decimal(self, value):
         """Parse a cell value into a Decimal, returning None on failure."""

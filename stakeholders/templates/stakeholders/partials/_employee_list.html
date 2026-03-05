@@ -11,7 +11,7 @@
             <button hx-post="{% url 'stakeholders:employee_remove' emp.pk %}"
                     hx-target="#employee-list-{{ stakeholder.pk }}"
                     hx-swap="innerHTML"
-                    hx-confirm="Remove this employee from the firm?"
+                    hx-confirm="Remove this child entity?"
                     class="text-gray-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm">
                 &times;
             </button>

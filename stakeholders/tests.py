@@ -708,20 +708,42 @@ class EmployeeInlineTests(TestCase):
         # Stakeholder still exists
         self.assertTrue(Stakeholder.objects.filter(pk=self.person.pk).exists())
 
-    def test_form_excludes_firms_and_current_employees(self):
+    def test_form_excludes_self_and_current_children(self):
         self.person.parent_organization = self.firm
         self.person.save()
         from stakeholders.forms import EmployeeAssignForm
         form = EmployeeAssignForm(firm=self.firm)
         qs = form.fields["stakeholder"].queryset
-        self.assertNotIn(self.other_firm, qs)
-        self.assertNotIn(self.person, qs)
+        self.assertNotIn(self.firm, qs)  # excludes self
+        self.assertNotIn(self.person, qs)  # excludes already-assigned children
+        self.assertIn(self.other_firm, qs)  # any stakeholder can be a child
 
     def test_detail_shows_team_members_section_for_firm(self):
         resp = self.client.get(reverse("stakeholders:detail", args=[self.firm.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Team Members")
         self.assertContains(resp, "Add Existing")
+
+    def test_detail_shows_child_entities_section_for_non_firm_parent(self):
+        """Non-firm stakeholders with children show Child Entities section."""
+        parent = Stakeholder.objects.create(name="Parent LLC", entity_type="business_partner")
+        child = Stakeholder.objects.create(name="Child LLC", entity_type="business_partner",
+                                           parent_organization=parent)
+        resp = self.client.get(reverse("stakeholders:detail", args=[parent.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Child Entities")
+        self.assertContains(resp, child.name)
+
+    def test_employee_add_works_for_non_firm(self):
+        """Can add children to any stakeholder, not just firms."""
+        parent = Stakeholder.objects.create(name="Parent LLC", entity_type="business_partner")
+        resp = self.client.post(
+            reverse("stakeholders:employee_add", args=[parent.pk]),
+            {"stakeholder": self.person.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.person.refresh_from_db()
+        self.assertEqual(self.person.parent_organization, parent)
 
     def test_firm_cards_show_add_existing_button(self):
         resp = self.client.get(reverse("stakeholders:list"), {"tab": "firms"})

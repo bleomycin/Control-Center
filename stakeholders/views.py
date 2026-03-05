@@ -127,6 +127,34 @@ class StakeholderListView(ListView):
             return ["stakeholders/partials/_tab_content.html"]
         return [self.template_name]
 
+    def _group_stakeholders(self, stakeholders):
+        """Build parent-child grouping from visible stakeholders.
+
+        Returns a list of top-level stakeholders. Each parent has
+        ._grouped_children (list) and ._child_count (int) attached.
+        Children whose parent is in the visible set are removed from
+        the top-level list and nested under their parent.
+        """
+        by_pk = {s.pk: s for s in stakeholders}
+
+        # Initialize all stakeholders
+        for s in stakeholders:
+            s.grouped_children = []
+            s.child_count = 0
+            s.is_grouped_child = False
+
+        # Attach children to parents
+        for s in stakeholders:
+            parent_id = s.parent_organization_id
+            if parent_id and parent_id in by_pk:
+                parent = by_pk[parent_id]
+                parent.grouped_children.append(s)
+                parent.child_count += 1
+                s.is_grouped_child = True
+
+        # Return top-level only (children rendered under parent)
+        return [s for s in stakeholders if not s.is_grouped_child]
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         tab = self.get_current_tab()
@@ -164,6 +192,10 @@ class StakeholderListView(ListView):
         # Firms data for firms tab
         if tab == "firms":
             ctx["firms"] = self.get_firms_queryset()
+
+        # Group stakeholders by parent-child hierarchy
+        if tab != "firms" and ctx.get("stakeholders"):
+            ctx["grouped_stakeholders"] = self._group_stakeholders(list(ctx["stakeholders"]))
 
         return ctx
 
@@ -235,15 +267,15 @@ class StakeholderDetailView(DetailView):
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:stakeholder_cashflow_delete"
 
-        # Firm/employee hierarchy
-        ctx["employees"] = obj.employees.all() if obj.entity_type == "firm" else None
+        # Parent/child hierarchy (employees for firms, child entities for any parent)
+        ctx["employees"] = obj.employees.all()
 
         # Relationships
         ctx["relationships_from"] = obj.relationships_from.select_related("to_stakeholder").all()
         ctx["relationships_to"] = obj.relationships_to.select_related("from_stakeholder").all()
 
         # Counts for tab badges
-        employee_count = ctx["employees"].count() if ctx["employees"] is not None else 0
+        employee_count = ctx["employees"].count()
         policy_count = (ctx["policyholder_roles"].count()
                         + ctx["policies_as_carrier"].count()
                         + ctx["policies_as_agent"].count())
@@ -574,6 +606,19 @@ def bulk_delete(request):
     return redirect("stakeholders:list")
 
 
+@require_POST
+def bulk_change_type(request):
+    pks = request.POST.getlist("selected")
+    new_type = request.POST.get("new_type", "")
+    valid_values = {v for v, _l in get_choices("entity_type")}
+    if new_type not in valid_values or not pks:
+        return redirect("stakeholders:list")
+    count = Stakeholder.objects.filter(pk__in=pks).update(entity_type=new_type)
+    type_label = get_choice_label("entity_type", new_type)
+    messages.success(request, f"{count} stakeholder(s) changed to {type_label}.")
+    return redirect("stakeholders:list")
+
+
 def bulk_export_csv(request):
     from config.export import export_csv as do_export
     pks = request.GET.getlist("selected")
@@ -870,19 +915,19 @@ def _employee_list_context(firm):
 
 
 def employee_add(request, pk):
-    firm = get_object_or_404(Stakeholder, pk=pk, entity_type="firm")
+    parent = get_object_or_404(Stakeholder, pk=pk)
     if request.method == "POST":
-        form = EmployeeAssignForm(request.POST, firm=firm)
+        form = EmployeeAssignForm(request.POST, firm=parent)
         if form.is_valid():
             emp = form.cleaned_data["stakeholder"]
-            emp.parent_organization = firm
+            emp.parent_organization = parent
             emp.save()
             return render(request, "stakeholders/partials/_employee_list.html",
-                          _employee_list_context(firm))
+                          _employee_list_context(parent))
     else:
-        form = EmployeeAssignForm(firm=firm)
+        form = EmployeeAssignForm(firm=parent)
     return render(request, "stakeholders/partials/_employee_form.html",
-                  {"form": form, "stakeholder": firm})
+                  {"form": form, "stakeholder": parent})
 
 
 @require_POST
