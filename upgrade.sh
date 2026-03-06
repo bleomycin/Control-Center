@@ -339,7 +339,7 @@ _restic_snapshot() {
     }
 
     # Extract snapshot ID from output
-    RESTIC_SNAPSHOT_ID=$(echo "$snapshot_output" | grep -oP 'snapshot [a-f0-9]+' | tail -1 | awk '{print $2}' || true)
+    RESTIC_SNAPSHOT_ID=$(echo "$snapshot_output" | sed -n 's/.*snapshot \([a-f0-9]\{1,\}\).*/\1/p' | tail -1 || true)
 
     success "Restic snapshot created${RESTIC_SNAPSHOT_ID:+ ($RESTIC_SNAPSHOT_ID)}"
     log "Snapshot output: $(echo "$snapshot_output" | tail -3)"
@@ -370,7 +370,7 @@ _django_backup() {
     }
 
     # Extract backup path from output (format: "Backup created: /app/backups/controlcenter-backup-*.tar.gz")
-    BACKUP_PATH=$(echo "$backup_output" | grep -oP '/app/backups/controlcenter-backup-[^\s]+\.tar\.gz' || true)
+    BACKUP_PATH=$(echo "$backup_output" | sed -n 's|.*\(/app/backups/controlcenter-backup-[^ ]*\.tar\.gz\).*|\1|p' | tail -1 || true)
     if [[ -z "$BACKUP_PATH" ]]; then
         # Try alternate: the backup file is in persist/backups on the host
         local latest_backup
