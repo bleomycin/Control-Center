@@ -60,9 +60,24 @@
     </div>
 </div>
 
-<!-- Tab bar -->
-<div class="border-b border-gray-700 mb-4">
-    <nav id="asset-tabs" class="flex gap-0 -mb-px overflow-x-auto">
+<!-- Tab bar: Mobile dropdown -->
+<div class="sm:hidden flex items-center gap-2 border-b border-gray-700 mb-4 pb-3">
+    <select onchange="window.location.href='{% url 'assets:asset_list' %}?tab=' + this.value"
+            class="flex-1 rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-3 py-2">
+        {% for tab in tabs %}
+        <option value="{{ tab.key }}" {% if current_tab == tab.key %}selected{% endif %}>{{ tab.label }} ({{ tab.count }})</option>
+        {% endfor %}
+    </select>
+    <a href="{% url 'assets:asset_tab_settings' %}" class="px-2 py-2 text-gray-500 hover:text-gray-300 transition-colors" title="Manage tabs">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+    </a>
+</div>
+<!-- Tab bar: Desktop -->
+<div class="hidden sm:block border-b border-gray-700 mb-4">
+    <nav id="asset-tabs" class="flex gap-0 -mb-px">
         {% for tab in tabs %}
         <a href="{% url 'assets:asset_list' %}?tab={{ tab.key }}"
            hx-get="{% url 'assets:asset_list' %}?tab={{ tab.key }}"
@@ -177,8 +192,11 @@ function clearPropFilters() {
         btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
     }
     // Trigger HTMX refresh
-    var searchInput = document.querySelector('#filter-form input[name=q]');
-    if (searchInput) htmx.trigger(searchInput, 'keyup');
+    htmx.ajax('GET', '{% url "assets:asset_list" %}', {
+        target: '#asset-content',
+        swap: 'innerHTML',
+        source: document.getElementById('filter-form'),
+    });
 }
 function toggleAllGroups() {
     var details = document.querySelectorAll('#asset-content details');

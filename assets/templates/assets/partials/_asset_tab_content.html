@@ -8,7 +8,7 @@
 {# Group + Filter controls #}
 <div class="flex flex-col sm:flex-row gap-2 mb-3">
     <select name="group" id="group-select"
-            hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+            hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form, #prop-filter-panel" hx-indicator="#loading-spinner"
             class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 w-full sm:w-auto">
         {% for val, label in property_group_choices %}
         <option value="{{ val }}" {% if current_group == val %}selected{% endif %}>{% if val %}Group: {{ label }}{% else %}{{ label }}{% endif %}</option>
@@ -39,7 +39,7 @@
             {% for val, label in property_status_choices %}
             <label class="cursor-pointer">
                 <input type="checkbox" name="status" value="{{ val }}" {% if val in selected_statuses %}checked{% endif %}
-                       hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                       hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form, #prop-filter-panel" hx-indicator="#loading-spinner"
                        class="hidden peer">
                 <span class="text-xs px-2.5 py-1 rounded-full border transition-colors peer-checked:border-transparent
                     {% if val == 'owned' %}peer-checked:bg-green-900/50 peer-checked:text-green-300 border-gray-600 text-gray-400
@@ -57,7 +57,7 @@
             {% for pt in property_type_list %}
             <label class="cursor-pointer">
                 <input type="checkbox" name="property_type" value="{{ pt }}" {% if pt in selected_property_types %}checked{% endif %}
-                       hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                       hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form, #prop-filter-panel" hx-indicator="#loading-spinner"
                        class="hidden peer">
                 <span class="text-xs px-2.5 py-1 rounded-full border transition-colors peer-checked:bg-purple-900/50 peer-checked:text-purple-300 peer-checked:border-transparent border-gray-600 text-gray-400">{{ pt }}</span>
             </label>
@@ -69,7 +69,7 @@
         <div class="flex items-center gap-2">
             <span class="text-xs text-gray-400 font-medium">Tenant:</span>
             <select name="tenant_filter"
-                    hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                    hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form, #prop-filter-panel" hx-indicator="#loading-spinner"
                     class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1">
                 <option value="">All Tenants</option>
                 {% for t in tenant_list %}
@@ -82,11 +82,11 @@
         <div class="flex flex-wrap items-center gap-2">
             <span class="text-xs text-gray-400 font-medium">Acquired:</span>
             <input type="date" name="date_from" value="{{ date_from }}"
-                   hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form, #prop-filter-panel" hx-indicator="#loading-spinner"
                    class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1.5">
             <span class="text-xs text-gray-500">to</span>
             <input type="date" name="date_to" value="{{ date_to }}"
-                   hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                   hx-get="{% url 'assets:asset_list' %}" hx-trigger="change" hx-target="#asset-content" hx-include="#filter-form, #prop-filter-panel" hx-indicator="#loading-spinner"
                    class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1.5">
         </div>
         <button type="button" onclick="clearPropFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2 self-start sm:self-center">Clear</button>
