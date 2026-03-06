@@ -626,8 +626,11 @@ python manage.py backup --keep 7 --dir /mnt/external/backups
 # Local development
 python manage.py restore backups/controlcenter-backup-20260209-120000.tar.gz
 
-# Docker
-docker compose exec web python manage.py restore /app/backups/controlcenter-backup-20260209-120000.tar.gz
+# Docker — use "run --rm", not "exec", so the restore runs directly
+# without Gunicorn interfering
+docker compose down
+docker compose run --rm web python manage.py restore /app/backups/controlcenter-backup-20260209-120000.tar.gz
+docker compose up -d
 ```
 
 **Output:**
@@ -642,9 +645,13 @@ Restore complete.
 
 The restore command:
 1. Validates the archive contains `db.sqlite3` and `media/`
-2. Replaces the current database file
-3. Replaces the `media/` directory
-4. Runs `migrate` to apply any schema differences
+2. Closes all database connections and checkpoints WAL
+3. Removes stale `-wal` and `-shm` journal files (prevents corruption)
+4. Replaces the database file
+5. Replaces the `media/` directory
+6. Runs `migrate` to apply any schema differences
+
+> **Note:** The entrypoint supports command pass-through — when arguments are passed via `docker compose run`, they execute directly, bypassing the normal startup sequence (migrations, Gunicorn, etc.).
 
 ### Automated Backups
 
@@ -684,11 +691,11 @@ docker compose exec web ls -la /app/backups/
 # 1. Stop the running container
 docker compose down
 
-# 2. Start fresh container (persist/ directory still intact)
-docker compose up --build -d
+# 2. Restore from backup (runs directly, bypasses entrypoint startup)
+docker compose run --rm web python manage.py restore /app/backups/controlcenter-backup-20260209-120000.tar.gz
 
-# 3. Restore from backup
-docker compose exec web python manage.py restore /app/backups/controlcenter-backup-20260209-120000.tar.gz
+# 3. Start the container normally
+docker compose up -d
 
 # 4. Verify
 docker compose exec web python manage.py shell -c "
