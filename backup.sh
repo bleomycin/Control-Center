@@ -89,7 +89,7 @@ Options:
   --help            Show help
 
 Environment Variables:
-  RESTIC_REPOSITORY     Repository path (default: /opt/backups/control-center)
+  RESTIC_REPOSITORY     Repository path (default: /opt/docker-backups/control-center)
   RESTIC_PASSWORD       Repository password (required)
   RESTIC_PASSWORD_FILE  Alternative: path to file containing password
   RESTIC_KEEP_LAST      Default retention count (default: 10)
@@ -522,7 +522,7 @@ if [[ -f "${APP_DIR}/.env" ]]; then
 fi
 
 # Apply defaults after .env load
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/opt/backups/control-center}"
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/opt/docker-backups/control-center}"
 export RESTIC_REPOSITORY
 KEEP_LAST="${RESTIC_KEEP_LAST:-10}"
 

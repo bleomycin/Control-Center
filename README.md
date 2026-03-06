@@ -111,7 +111,7 @@ Configure via `.env` file (copy from `.env.example`):
 | `EMAIL_BACKEND` | `console` | Django email backend class |
 | `ENABLE_SSL` | `false` | Enable HTTPS redirect, HSTS, secure cookies |
 | `BACKUP_DIR` | `BASE_DIR/backups` | Backup archive storage directory |
-| `RESTIC_REPOSITORY` | `/opt/backups/control-center` | Path to restic backup repository |
+| `RESTIC_REPOSITORY` | `/opt/docker-backups/control-center` | Path to restic backup repository |
 | `RESTIC_PASSWORD` | — | Encryption password for restic repository (**required** for restic) |
 | `RESTIC_PASSWORD_FILE` | — | Alternative: path to file containing restic password |
 | `RESTIC_KEEP_LAST` | `10` | Number of restic snapshots to retain during pruning |
@@ -740,7 +740,7 @@ Excluded (via .restic-exclude):
 ./backup.sh install
 
 # 2. Add restic config to .env (on production server)
-echo 'RESTIC_REPOSITORY=/opt/backups/control-center' >> .env
+echo 'RESTIC_REPOSITORY=/opt/docker-backups/control-center' >> .env
 echo "RESTIC_PASSWORD=$(openssl rand -base64 32)" >> .env
 # IMPORTANT: Save this password somewhere safe — without it, snapshots are unrecoverable
 

@@ -160,7 +160,7 @@ load_restic_env() {
         done < <(grep -E '^RESTIC_' .env 2>/dev/null || true)
     fi
     # Apply defaults
-    RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/opt/backups/control-center}"
+    RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/opt/docker-backups/control-center}"
     export RESTIC_REPOSITORY
 }
 
