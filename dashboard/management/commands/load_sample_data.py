@@ -86,7 +86,7 @@ class Command(BaseCommand):
         # Firm: Armanino LLP
         self.stdout.write("Creating firm and employees...")
         armanino = Stakeholder.objects.create(
-            name="Armanino LLP", entity_type="firm",
+            name="Armanino LLP", entity_type="firm", firm_type="accounting",
             email="info@armanino.com", phone="555-700-1000",
             website="https://www.armanino.com",
             organization="", trust_rating=5, risk_rating=1,

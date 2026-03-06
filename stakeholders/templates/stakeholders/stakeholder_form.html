@@ -16,7 +16,7 @@
     <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-4">
         {% csrf_token %}
         {% for field in form %}
-        <div>
+        <div{% if field.name == "firm_type" %} id="firm-type-wrapper" style="display:none;"{% endif %}>
             <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                 {{ field.label }}{% if field.field.required %} <span class="text-red-400">*</span>{% endif %}
             </label>
@@ -36,5 +36,16 @@
             <a href="{% url 'stakeholders:list' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
         </div>
     </form>
+<script>
+(function() {
+    const typeSelect = document.getElementById('id_entity_type');
+    const firmWrapper = document.getElementById('firm-type-wrapper');
+    function toggle() {
+        firmWrapper.style.display = typeSelect.value === 'firm' ? '' : 'none';
+    }
+    toggle();
+    typeSelect.addEventListener('change', toggle);
+})();
+</script>
 </div>
 {% endblock %}

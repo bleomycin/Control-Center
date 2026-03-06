@@ -43,6 +43,7 @@ class Stakeholder(models.Model):
 
     name = models.CharField(max_length=255, db_index=True)
     entity_type = models.CharField(max_length=30, default="contact", db_index=True)
+    firm_type = models.CharField(max_length=30, blank=True, db_index=True)
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=30, blank=True)
     website = models.URLField(max_length=255, blank=True)

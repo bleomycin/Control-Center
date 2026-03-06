@@ -10,7 +10,7 @@ from .models import Relationship, Stakeholder, StakeholderTab, ContactLog
 class StakeholderForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Stakeholder
-        fields = ["name", "entity_type", "email", "phone", "website", "organization",
+        fields = ["name", "entity_type", "firm_type", "email", "phone", "website", "organization",
                   "parent_organization", "trust_rating", "risk_rating", "notes_text"]
         widgets = {
             "notes_text": forms.Textarea(attrs={"rows": 3}),
@@ -23,6 +23,10 @@ class StakeholderForm(TailwindFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["entity_type"].widget.choices = get_choices("entity_type")
+        self.fields["firm_type"].widget = forms.Select(
+            attrs=self.fields["firm_type"].widget.attrs
+        )
+        self.fields["firm_type"].widget.choices = [("", "— Select firm type —")] + list(get_choices("firm_type"))
         qs = Stakeholder.objects.all()
         if self.instance and self.instance.pk:
             qs = qs.exclude(pk=self.instance.pk)

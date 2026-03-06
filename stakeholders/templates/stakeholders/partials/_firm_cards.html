@@ -6,6 +6,7 @@
         <div>
             <a href="{{ firm.get_absolute_url }}" class="text-lg font-semibold text-blue-400 hover:text-blue-300">{{ firm.name }}</a>
             <div class="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-400">
+                {% if firm.firm_type %}<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300 border border-indigo-700/50">{{ firm.firm_type|choice_label:"firm_type" }}</span>{% endif %}
                 {% if firm.email %}<span>{{ firm.email }}</span>{% endif %}
                 {% if firm.phone %}<span>{{ firm.phone }}</span>{% endif %}
             </div>

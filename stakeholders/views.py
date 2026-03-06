@@ -115,11 +115,14 @@ class StakeholderListView(ListView):
         return qs
 
     def get_firms_queryset(self):
-        """Get firms with prefetched employees, optionally filtered by search."""
+        """Get firms with prefetched employees, optionally filtered by search and firm_type."""
         qs = Stakeholder.objects.filter(entity_type="firm").prefetch_related("employees")
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(Q(name__icontains=q) | Q(employees__name__icontains=q)).distinct()
+        firm_type = self.request.GET.get("firm_type", "").strip()
+        if firm_type:
+            qs = qs.filter(firm_type=firm_type)
         return qs
 
     def get_template_names(self):
@@ -192,6 +195,8 @@ class StakeholderListView(ListView):
         # Firms data for firms tab
         if tab == "firms":
             ctx["firms"] = self.get_firms_queryset()
+            ctx["firm_type_choices"] = get_choices("firm_type")
+            ctx["selected_firm_type"] = self.request.GET.get("firm_type", "")
 
         # Group stakeholders by parent-child hierarchy
         if tab != "firms" and ctx.get("stakeholders"):

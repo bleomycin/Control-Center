@@ -13,7 +13,7 @@
         </nav>
         <h1 class="text-xl sm:text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
         <p class="text-sm text-gray-400 mt-1">
-            {{ stakeholder.entity_type|choice_label:"entity_type" }}{% if stakeholder.parent_organization %} &middot; <a href="{{ stakeholder.parent_organization.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholder.parent_organization.name }}</a>{% elif stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}
+            {{ stakeholder.entity_type|choice_label:"entity_type" }}{% if stakeholder.entity_type == "firm" and stakeholder.firm_type %} <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 ml-1">{{ stakeholder.firm_type|choice_label:"firm_type" }}</span>{% endif %}{% if stakeholder.parent_organization %} &middot; <a href="{{ stakeholder.parent_organization.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholder.parent_organization.name }}</a>{% elif stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}
         </p>
     </div>
     <div class="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">

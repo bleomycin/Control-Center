@@ -13,6 +13,16 @@ SEED_DATA = [
     ("entity_type", "attorney", "Attorney", 5),
     ("entity_type", "firm", "Firm", 6),
     ("entity_type", "other", "Other", 7),
+    # Firm types
+    ("firm_type", "law_firm", "Law Firm", 0),
+    ("firm_type", "accounting", "Accounting Firm", 1),
+    ("firm_type", "property_management", "Property Management", 2),
+    ("firm_type", "financial_services", "Financial Services", 3),
+    ("firm_type", "insurance", "Insurance", 4),
+    ("firm_type", "title_company", "Title Company", 5),
+    ("firm_type", "construction", "Construction", 6),
+    ("firm_type", "consulting", "Consulting", 7),
+    ("firm_type", "other", "Other", 8),
     # Contact methods
     ("contact_method", "call", "Call", 0),
     ("contact_method", "email", "Email", 1),

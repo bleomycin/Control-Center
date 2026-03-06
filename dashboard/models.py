@@ -4,6 +4,7 @@ from django.utils import timezone
 
 CATEGORY_CHOICES = [
     ("entity_type", "Stakeholder Type"),
+    ("firm_type", "Firm Type"),
     ("contact_method", "Contact Method"),
     ("matter_type", "Legal Matter Type"),
     ("note_type", "Note Type"),

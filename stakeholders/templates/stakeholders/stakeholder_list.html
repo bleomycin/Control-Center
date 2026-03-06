@@ -72,6 +72,20 @@
         {% endfor %}
     </select>
     {% endif %}
+    {% if current_tab == "firms" %}
+    <select name="firm_type"
+            hx-get="{% url 'stakeholders:list' %}"
+            hx-trigger="change"
+            hx-target="#stakeholder-content"
+            hx-include="#filter-form"
+            hx-indicator="#loading-spinner"
+            class="rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
+        <option value="">All Firm Types</option>
+        {% for val, label in firm_type_choices %}
+        <option value="{{ val }}" {% if selected_firm_type == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    {% endif %}
 </form>
 
 <div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>
