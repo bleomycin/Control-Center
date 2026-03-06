@@ -2,29 +2,53 @@
 {% load humanize choice_labels static %}
 {% block title %}{{ stakeholder.name }} - Control Center{% endblock %}
 {% block content %}
-<div class="mb-6">
+<div class="mb-3 sm:mb-6">
     <div>
-        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-1 sm:mb-2">
             <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
             <span class="text-gray-600">/</span>
             <a href="{% url 'stakeholders:list' %}" class="hover:text-gray-300">Stakeholders</a>
             <span class="text-gray-600">/</span>
             <span class="text-gray-200">{{ stakeholder.name }}</span>
         </nav>
-        <h1 class="text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
+        <h1 class="text-xl sm:text-2xl font-bold text-white mt-1">{{ stakeholder.name }}</h1>
         <p class="text-sm text-gray-400 mt-1">
             {{ stakeholder.entity_type|choice_label:"entity_type" }}{% if stakeholder.parent_organization %} &middot; <a href="{{ stakeholder.parent_organization.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholder.parent_organization.name }}</a>{% elif stakeholder.organization %} &middot; {{ stakeholder.organization }}{% endif %}
         </p>
     </div>
-    <div class="flex flex-wrap gap-2 mt-3">
-        <a href="{% url 'stakeholders:export_pdf' stakeholder.pk %}" class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
-        <a href="{% url 'stakeholders:edit' stakeholder.pk %}" class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
-        <a href="{% url 'stakeholders:delete' stakeholder.pk %}" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+    <div class="flex flex-wrap gap-1.5 sm:gap-2 mt-2 sm:mt-3">
+        <a href="{% url 'stakeholders:export_pdf' stakeholder.pk %}" class="px-2 py-1 sm:px-3 sm:py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+        <a href="{% url 'stakeholders:edit' stakeholder.pk %}" class="px-2 py-1 sm:px-3 sm:py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+        <a href="{% url 'stakeholders:delete' stakeholder.pk %}" class="px-2 py-1 sm:px-3 sm:py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
     </div>
 </div>
 
-<!-- Info Cards -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<!-- Info Cards: Mobile compact (contact full-width, trust/risk inline) -->
+<div class="sm:hidden bg-gray-800 rounded-lg border border-gray-700 p-3 mb-4">
+    <div class="flex items-center justify-between">
+        <div class="flex-1 min-w-0">
+            {% if stakeholder.email %}<p class="text-sm text-gray-200 break-all">{{ stakeholder.email }}</p>{% endif %}
+            {% if stakeholder.phone %}<p class="text-sm text-gray-200">{{ stakeholder.phone }}</p>{% endif %}
+            {% if not stakeholder.email and not stakeholder.phone %}<p class="text-sm text-gray-500">No contact info</p>{% endif %}
+        </div>
+        <div class="flex gap-4 ml-3 shrink-0">
+            <div class="text-center">
+                <p class="text-xs text-gray-400 uppercase tracking-wide">Trust</p>
+                <p class="text-lg font-bold {% if stakeholder.trust_rating %}{% if stakeholder.trust_rating >= 4 %}text-green-400{% elif stakeholder.trust_rating >= 3 %}text-yellow-400{% else %}text-red-400{% endif %}{% else %}text-gray-500{% endif %}">
+                    {{ stakeholder.trust_rating|default:"—" }}{% if stakeholder.trust_rating %}/5{% endif %}
+                </p>
+            </div>
+            <div class="text-center">
+                <p class="text-xs text-gray-400 uppercase tracking-wide">Risk</p>
+                <p class="text-lg font-bold {% if stakeholder.risk_rating %}{% if stakeholder.risk_rating >= 4 %}text-red-400{% elif stakeholder.risk_rating >= 3 %}text-yellow-400{% else %}text-green-400{% endif %}{% else %}text-gray-500{% endif %}">
+                    {{ stakeholder.risk_rating|default:"—" }}{% if stakeholder.risk_rating %}/5{% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Info Cards: Desktop (3 separate cards) -->
+<div class="hidden sm:grid grid-cols-3 gap-4 mb-6">
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Contact</p>
         {% if stakeholder.email %}<p class="text-sm text-gray-200">{{ stakeholder.email }}</p>{% endif %}
@@ -46,7 +70,7 @@
 </div>
 
 {% if stakeholder.notes_text %}
-<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
+<div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-4 sm:mb-6">
     <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Notes</p>
     <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ stakeholder.notes_text }}</p>
 </div>
@@ -54,8 +78,8 @@
 
 {% if employees.count or stakeholder.entity_type == "firm" %}
 <!-- Child Entities / Team Members -->
-<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4 sm:mb-6">
+    <div class="px-4 py-2 sm:py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">{% if stakeholder.entity_type == "firm" %}Team Members{% else %}Child Entities{% endif %} <span class="text-xs text-gray-400 font-normal">({{ counts.employees }})</span></h2>
         <div class="flex gap-3">
             <button hx-get="{% url 'stakeholders:employee_add' stakeholder.pk %}"
@@ -74,8 +98,8 @@
 {% endif %}
 
 <!-- Contact Logs -->
-<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4 sm:mb-6">
+    <div class="px-4 py-2 sm:py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Contact Log</h2>
         <button hx-get="{% url 'stakeholders:contact_log_add' stakeholder.pk %}"
                 hx-target="#contact-log-form-container"
@@ -89,62 +113,86 @@
 </div>
 
 <!-- Enhanced Relationship Network -->
-<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700">
-        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Relationship Network</h2>
-        <p class="text-xs text-gray-400 mt-1">All connected entities - click any node to navigate</p>
-    </div>
-    <div id="cy" style="height: 500px; width: 100%;"></div>
-    <div class="px-4 py-3 border-t border-gray-700">
-        <div class="flex flex-wrap gap-3 text-xs text-gray-400">
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 rounded-full bg-blue-500"></div>
-                <span>Stakeholders</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-green-500" style="clip-path: inset(0 0 0 0 round 2px);"></div>
-                <span>Properties</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-purple-500" style="transform: rotate(45deg);"></div>
-                <span>Investments</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-orange-500" style="clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>
-                <span>Loans</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-red-500" style="clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);"></div>
-                <span>Legal Matters</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-yellow-500" style="clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></div>
-                <span>High-Priority Tasks</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-teal-500" style="clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);"></div>
-                <span>Vehicles</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-sky-500" style="clip-path: polygon(50% 0%, 100% 50%, 50% 30%, 0% 50%);"></div>
-                <span>Aircraft</span>
-            </div>
-            <div class="flex items-center gap-1.5">
-                <div class="w-3 h-3 bg-pink-500" style="clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);"></div>
-                <span>Insurance</span>
+<details id="graph-details" class="bg-gray-800 rounded-lg border border-gray-700 mb-4 sm:mb-6">
+    <summary class="px-4 py-2 sm:py-3 cursor-pointer select-none flex items-center justify-between list-none [&::-webkit-details-marker]:hidden">
+        <div>
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide inline">Relationship Network</h2>
+            <p class="text-xs text-gray-400 mt-0.5">All connected entities - click any node to navigate</p>
+        </div>
+        <svg class="w-4 h-4 text-gray-400 transition-transform [[open]>&]:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </summary>
+    <div class="border-t border-gray-700">
+        <div id="cy" class="h-[300px] sm:h-[500px] w-full"></div>
+        <div class="px-4 py-2 sm:py-3 border-t border-gray-700">
+            <div class="flex flex-wrap gap-3 text-xs text-gray-400">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 rounded-full bg-blue-500"></div>
+                    <span>Stakeholders</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-green-500" style="clip-path: inset(0 0 0 0 round 2px);"></div>
+                    <span>Properties</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-purple-500" style="transform: rotate(45deg);"></div>
+                    <span>Investments</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-orange-500" style="clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>
+                    <span>Loans</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-red-500" style="clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);"></div>
+                    <span>Legal Matters</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-yellow-500" style="clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></div>
+                    <span>High-Priority Tasks</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-teal-500" style="clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);"></div>
+                    <span>Vehicles</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-sky-500" style="clip-path: polygon(50% 0%, 100% 50%, 50% 30%, 0% 50%);"></div>
+                    <span>Aircraft</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="w-3 h-3 bg-pink-500" style="clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);"></div>
+                    <span>Insurance</span>
+                </div>
             </div>
         </div>
     </div>
-</div>
+</details>
 
 <!-- All Connections Tabs -->
-<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700">
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4 sm:mb-6">
+    <div class="px-4 py-2 sm:py-3 border-b border-gray-700">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">All Connections</h2>
     </div>
 
-    <!-- Tab Navigation -->
-    <div class="flex flex-wrap border-b border-gray-700 px-4 gap-1">
+    <!-- Tab Navigation: Mobile dropdown -->
+    <div class="sm:hidden border-b border-gray-700 px-4 py-2">
+        <select id="mobile-tab-select" onchange="switchConnectionTab(this.value)"
+                class="w-full bg-gray-700 border border-gray-600 text-gray-200 text-sm rounded-md px-3 py-1.5 focus:ring-blue-500 focus:border-blue-500">
+            <option value="stakeholders" selected>Stakeholders ({{ counts.stakeholders }})</option>
+            <option value="properties">Properties ({{ counts.properties }})</option>
+            <option value="investments">Investments ({{ counts.investments }})</option>
+            <option value="loans">Loans ({{ counts.loans }})</option>
+            <option value="vehicles">Vehicles ({{ counts.vehicles }})</option>
+            <option value="aircraft">Aircraft ({{ counts.aircraft }})</option>
+            <option value="leases">Leases ({{ counts.leases }})</option>
+            <option value="policies">Insurance ({{ counts.policies }})</option>
+            <option value="legal">Legal ({{ counts.legal_matters }})</option>
+            <option value="tasks">Tasks ({{ counts.tasks }})</option>
+            <option value="notes">Notes ({{ counts.notes }})</option>
+            <option value="cashflow">Cash Flow ({{ counts.cashflow }})</option>
+            <option value="healthcare">Healthcare ({{ counts.healthcare }})</option>
+        </select>
+    </div>
+    <!-- Tab Navigation: Desktop buttons -->
+    <div class="hidden sm:flex flex-wrap border-b border-gray-700 px-4 gap-1">
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-blue-500 text-blue-400" data-tab="stakeholders">
             Stakeholders <span class="text-xs opacity-70">({{ counts.stakeholders }})</span>
         </button>
@@ -203,7 +251,7 @@
 
     <div class="tab-content hidden" id="tab-properties">
         <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
-            <span class="text-xs text-gray-400">Properties owned by this stakeholder</span>
+            <span class="text-xs text-gray-400">Properties associated with this stakeholder</span>
             <button hx-get="{% url 'stakeholders:property_ownership_add' stakeholder.pk %}"
                     hx-target="#sh-ownership-form-container"
                     hx-swap="innerHTML"
@@ -217,7 +265,7 @@
 
     <div class="tab-content hidden" id="tab-investments">
         <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
-            <span class="text-xs text-gray-400">Investments held by this stakeholder</span>
+            <span class="text-xs text-gray-400">Investments associated with this stakeholder</span>
             <button hx-get="{% url 'stakeholders:investment_participant_add' stakeholder.pk %}"
                     hx-target="#sh-participant-form-container"
                     hx-swap="innerHTML"
@@ -245,7 +293,7 @@
 
     <div class="tab-content hidden" id="tab-vehicles">
         <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
-            <span class="text-xs text-gray-400">Vehicles owned by this stakeholder</span>
+            <span class="text-xs text-gray-400">Vehicles associated with this stakeholder</span>
             <button hx-get="{% url 'stakeholders:vehicle_ownership_add' stakeholder.pk %}"
                     hx-target="#sh-vehicle-form-container"
                     hx-swap="innerHTML"
@@ -259,7 +307,7 @@
 
     <div class="tab-content hidden" id="tab-aircraft">
         <div class="px-4 py-2 border-b border-gray-700 flex items-center justify-between">
-            <span class="text-xs text-gray-400">Aircraft owned by this stakeholder</span>
+            <span class="text-xs text-gray-400">Aircraft associated with this stakeholder</span>
             <button hx-get="{% url 'stakeholders:aircraft_ownership_add' stakeholder.pk %}"
                     hx-target="#sh-aircraft-form-container"
                     hx-swap="innerHTML"
@@ -423,203 +471,197 @@
 
 <!-- Tab Switching Script -->
 <script>
-document.querySelectorAll('.tab-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        const targetTab = btn.dataset.tab;
-
-        // Update button styles
-        document.querySelectorAll('.tab-btn').forEach(b => {
-            b.classList.remove('border-blue-500', 'text-blue-400');
-            b.classList.add('border-transparent', 'text-gray-400');
-        });
-        btn.classList.remove('border-transparent', 'text-gray-400');
-        btn.classList.add('border-blue-500', 'text-blue-400');
-
-        // Show/hide content
-        document.querySelectorAll('.tab-content').forEach(content => {
-            content.classList.add('hidden');
-        });
-        document.getElementById(`tab-${targetTab}`).classList.remove('hidden');
+function switchConnectionTab(targetTab) {
+    // Update desktop button styles
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('border-blue-500', 'text-blue-400');
+        b.classList.add('border-transparent', 'text-gray-400');
     });
+    const activeBtn = document.querySelector(`.tab-btn[data-tab="${targetTab}"]`);
+    if (activeBtn) {
+        activeBtn.classList.remove('border-transparent', 'text-gray-400');
+        activeBtn.classList.add('border-blue-500', 'text-blue-400');
+    }
+
+    // Sync mobile select
+    const mobileSelect = document.getElementById('mobile-tab-select');
+    if (mobileSelect) mobileSelect.value = targetTab;
+
+    // Show/hide content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    document.getElementById(`tab-${targetTab}`).classList.remove('hidden');
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchConnectionTab(btn.dataset.tab));
 });
 </script>
 
-<!-- Enhanced Cytoscape Graph -->
+<!-- Enhanced Cytoscape Graph (lazy-loaded) -->
 <script src="{% static 'vendor/cytoscape.min.js' %}"></script>
 <script>
 (function() {
-    fetch("{% url 'stakeholders:graph_data' stakeholder.pk %}")
-        .then(r => r.json())
-        .then(data => {
-            const elements = [];
+    const detailsEl = document.getElementById('graph-details');
+    let graphInitialized = false;
 
-            // Add nodes
-            data.nodes.forEach(n => {
-                elements.push({
-                    data: {
-                        id: n.id,
-                        label: n.name,
-                        type: n.entity_type,
-                        url: n.url,
-                        is_center: n.is_center,
-                        shape: n.shape
+    // Auto-open on desktop
+    if (window.innerWidth >= 640) {
+        detailsEl.open = true;
+    }
+
+    function initGraph() {
+        if (graphInitialized) return;
+        graphInitialized = true;
+
+        fetch("{% url 'stakeholders:graph_data' stakeholder.pk %}")
+            .then(r => r.json())
+            .then(data => {
+                const elements = [];
+
+                data.nodes.forEach(n => {
+                    elements.push({
+                        data: {
+                            id: n.id,
+                            label: n.name,
+                            type: n.entity_type,
+                            url: n.url,
+                            is_center: n.is_center,
+                            shape: n.shape
+                        }
+                    });
+                });
+
+                data.edges.forEach(e => {
+                    elements.push({
+                        data: {
+                            source: e.source,
+                            target: e.target,
+                            label: e.label
+                        }
+                    });
+                });
+
+                const cy = cytoscape({
+                    container: document.getElementById('cy'),
+                    elements: elements,
+                    style: [
+                        {
+                            selector: 'node',
+                            style: {
+                                'label': 'data(label)',
+                                'text-valign': 'bottom',
+                                'text-halign': 'center',
+                                'color': '#d1d5db',
+                                'font-size': '10px',
+                                'text-margin-y': 8,
+                                'width': 35,
+                                'height': 35,
+                                'shape': 'data(shape)',
+                            }
+                        },
+                        {
+                            selector: 'node[?is_center]',
+                            style: {
+                                'background-color': '#3b82f6',
+                                'width': 50,
+                                'height': 50,
+                                'border-width': 3,
+                                'border-color': '#60a5fa',
+                                'font-size': '12px',
+                                'font-weight': 'bold',
+                            }
+                        },
+                        {
+                            selector: 'node[shape = "ellipse"][!is_center]',
+                            style: { 'background-color': '#6366f1' }
+                        },
+                        {
+                            selector: 'node[shape = "roundrectangle"]',
+                            style: { 'background-color': '#10b981' }
+                        },
+                        {
+                            selector: 'node[shape = "diamond"]',
+                            style: { 'background-color': '#a855f7' }
+                        },
+                        {
+                            selector: 'node[shape = "triangle"]',
+                            style: { 'background-color': '#f97316' }
+                        },
+                        {
+                            selector: 'node[shape = "hexagon"]',
+                            style: { 'background-color': '#ef4444' }
+                        },
+                        {
+                            selector: 'node[shape = "star"]',
+                            style: { 'background-color': '#eab308' }
+                        },
+                        {
+                            selector: 'node[shape = "pentagon"]',
+                            style: { 'background-color': '#14b8a6' }
+                        },
+                        {
+                            selector: 'node[shape = "vee"]',
+                            style: { 'background-color': '#0ea5e9' }
+                        },
+                        {
+                            selector: 'node[shape = "octagon"]',
+                            style: { 'background-color': '#ec4899' }
+                        },
+                        {
+                            selector: 'edge',
+                            style: {
+                                'label': 'data(label)',
+                                'color': '#6b7280',
+                                'font-size': '8px',
+                                'line-color': '#4b5563',
+                                'target-arrow-color': '#4b5563',
+                                'target-arrow-shape': 'triangle',
+                                'curve-style': 'bezier',
+                                'width': 1.5,
+                                'text-rotation': 'autorotate',
+                                'text-margin-y': -8,
+                            }
+                        },
+                    ],
+                    layout: {
+                        name: 'cose',
+                        animate: false,
+                        padding: 40,
+                        nodeRepulsion: 8000,
+                        idealEdgeLength: 100,
+                    },
+                    userZoomingEnabled: true,
+                    userPanningEnabled: true,
+                    minZoom: 0.3,
+                    maxZoom: 2,
+                });
+
+                cy.on('tap', 'node', function(evt) {
+                    const url = evt.target.data('url');
+                    if (url) window.location.href = url;
+                });
+
+                cy.on('mouseover', 'node', function(evt) {
+                    evt.target.style('border-width', 3);
+                    evt.target.style('border-color', '#60a5fa');
+                });
+                cy.on('mouseout', 'node', function(evt) {
+                    if (!evt.target.data('is_center')) {
+                        evt.target.style('border-width', 0);
                     }
                 });
             });
+    }
 
-            // Add edges
-            data.edges.forEach(e => {
-                elements.push({
-                    data: {
-                        source: e.source,
-                        target: e.target,
-                        label: e.label
-                    }
-                });
-            });
-
-            const cy = cytoscape({
-                container: document.getElementById('cy'),
-                elements: elements,
-                style: [
-                    // Base node style
-                    {
-                        selector: 'node',
-                        style: {
-                            'label': 'data(label)',
-                            'text-valign': 'bottom',
-                            'text-halign': 'center',
-                            'color': '#d1d5db',
-                            'font-size': '10px',
-                            'text-margin-y': 8,
-                            'width': 35,
-                            'height': 35,
-                            'shape': 'data(shape)',
-                        }
-                    },
-                    // Center node (larger, highlighted)
-                    {
-                        selector: 'node[?is_center]',
-                        style: {
-                            'background-color': '#3b82f6',
-                            'width': 50,
-                            'height': 50,
-                            'border-width': 3,
-                            'border-color': '#60a5fa',
-                            'font-size': '12px',
-                            'font-weight': 'bold',
-                        }
-                    },
-                    // Stakeholder nodes (blue circles)
-                    {
-                        selector: 'node[shape = "ellipse"][!is_center]',
-                        style: {
-                            'background-color': '#6366f1',
-                        }
-                    },
-                    // Property nodes (green rounded rectangles)
-                    {
-                        selector: 'node[shape = "roundrectangle"]',
-                        style: {
-                            'background-color': '#10b981',
-                        }
-                    },
-                    // Investment nodes (purple diamonds)
-                    {
-                        selector: 'node[shape = "diamond"]',
-                        style: {
-                            'background-color': '#a855f7',
-                        }
-                    },
-                    // Loan nodes (orange triangles)
-                    {
-                        selector: 'node[shape = "triangle"]',
-                        style: {
-                            'background-color': '#f97316',
-                        }
-                    },
-                    // Legal matter nodes (red hexagons)
-                    {
-                        selector: 'node[shape = "hexagon"]',
-                        style: {
-                            'background-color': '#ef4444',
-                        }
-                    },
-                    // Task nodes (yellow stars)
-                    {
-                        selector: 'node[shape = "star"]',
-                        style: {
-                            'background-color': '#eab308',
-                        }
-                    },
-                    // Vehicle nodes (teal pentagons)
-                    {
-                        selector: 'node[shape = "pentagon"]',
-                        style: {
-                            'background-color': '#14b8a6',
-                        }
-                    },
-                    // Aircraft nodes (sky vees)
-                    {
-                        selector: 'node[shape = "vee"]',
-                        style: {
-                            'background-color': '#0ea5e9',
-                        }
-                    },
-                    // Insurance policy nodes (pink octagons)
-                    {
-                        selector: 'node[shape = "octagon"]',
-                        style: {
-                            'background-color': '#ec4899',
-                        }
-                    },
-                    // Edge styles
-                    {
-                        selector: 'edge',
-                        style: {
-                            'label': 'data(label)',
-                            'color': '#6b7280',
-                            'font-size': '8px',
-                            'line-color': '#4b5563',
-                            'target-arrow-color': '#4b5563',
-                            'target-arrow-shape': 'triangle',
-                            'curve-style': 'bezier',
-                            'width': 1.5,
-                            'text-rotation': 'autorotate',
-                            'text-margin-y': -8,
-                        }
-                    },
-                ],
-                layout: {
-                    name: 'cose',
-                    animate: false,
-                    padding: 40,
-                    nodeRepulsion: 8000,
-                    idealEdgeLength: 100,
-                },
-                userZoomingEnabled: true,
-                userPanningEnabled: true,
-                minZoom: 0.3,
-                maxZoom: 2,
-            });
-
-            // Click handler to navigate to entities
-            cy.on('tap', 'node', function(evt) {
-                const url = evt.target.data('url');
-                if (url) window.location.href = url;
-            });
-
-            // Hover effect
-            cy.on('mouseover', 'node', function(evt) {
-                evt.target.style('border-width', 3);
-                evt.target.style('border-color', '#60a5fa');
-            });
-            cy.on('mouseout', 'node', function(evt) {
-                if (!evt.target.data('is_center')) {
-                    evt.target.style('border-width', 0);
-                }
-            });
-        });
+    // Lazy-init: if already open (desktop), init immediately; otherwise on toggle
+    if (detailsEl.open) {
+        initGraph();
+    }
+    detailsEl.addEventListener('toggle', () => {
+        if (detailsEl.open) initGraph();
+    });
 })();
 </script>
 {% endblock %}
