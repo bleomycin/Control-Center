@@ -34,7 +34,6 @@ class Command(BaseCommand):
             if not any(m.startswith('media') for m in members):
                 raise CommandError('Archive missing media/ directory')
 
-        db_path = Path(settings.DATABASES['default']['NAME'])
         media_root = Path(settings.MEDIA_ROOT)
 
         self.stdout.write(f'Restoring from: {archive_path}')
@@ -46,11 +45,10 @@ class Command(BaseCommand):
             with tarfile.open(archive_path, 'r:*') as tar:
                 tar.extractall(path=tmp_path)
 
-            # Replace database
+            # Replace database (WAL-safe)
+            from dashboard.management.commands.backup import safe_restore_db
             src_db = tmp_path / 'db.sqlite3'
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(str(src_db), str(db_path))
-            self.stdout.write(f'  Database restored ({db_path.stat().st_size:,} bytes)')
+            safe_restore_db(src_db, stdout=self.stdout)
 
             # Replace media directory contents (clear then copy)
             src_media = tmp_path / 'media'

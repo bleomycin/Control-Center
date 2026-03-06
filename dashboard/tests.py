@@ -848,6 +848,183 @@ class RestoreCommandTests(TestCase):
         conn.close()
 
 
+class SafeRestoreDbTests(TestCase):
+    """Tests for safe_restore_db() WAL-safe database replacement."""
+
+    def setUp(self):
+        import tempfile
+        self.tmp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp_dir, ignore_errors=True)
+
+    def test_safe_restore_replaces_db(self):
+        """safe_restore_db copies source DB to the configured DB path."""
+        import sqlite3
+        from unittest.mock import patch
+        from dashboard.management.commands.backup import safe_restore_db
+        # Create source backup DB
+        src_db = Path(self.tmp_dir) / 'backup.sqlite3'
+        conn = sqlite3.connect(str(src_db))
+        conn.execute('CREATE TABLE test_restore (id INTEGER PRIMARY KEY, val TEXT)')
+        conn.execute("INSERT INTO test_restore VALUES (1, 'from_backup')")
+        conn.commit()
+        conn.close()
+        # Create target DB
+        target_db = Path(self.tmp_dir) / 'target.sqlite3'
+        conn = sqlite3.connect(str(target_db))
+        conn.execute('CREATE TABLE old_table (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        # Restore
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(target_db)}},
+        ):
+            safe_restore_db(src_db)
+        # Verify target now has backup contents
+        conn = sqlite3.connect(str(target_db))
+        cursor = conn.cursor()
+        cursor.execute("SELECT val FROM test_restore WHERE id=1")
+        self.assertEqual(cursor.fetchone()[0], 'from_backup')
+        # Old table should be gone
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='old_table'")
+        self.assertIsNone(cursor.fetchone())
+        conn.close()
+
+    def test_safe_restore_removes_wal_shm_files(self):
+        """safe_restore_db removes stale -wal and -shm files."""
+        import sqlite3
+        from unittest.mock import patch
+        from dashboard.management.commands.backup import safe_restore_db
+        # Create source and target DBs
+        src_db = Path(self.tmp_dir) / 'backup.sqlite3'
+        conn = sqlite3.connect(str(src_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        target_db = Path(self.tmp_dir) / 'target.sqlite3'
+        conn = sqlite3.connect(str(target_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        # Create fake stale WAL/SHM files
+        wal_path = Path(str(target_db) + '-wal')
+        shm_path = Path(str(target_db) + '-shm')
+        wal_path.write_text('stale wal data')
+        shm_path.write_text('stale shm data')
+        self.assertTrue(wal_path.exists())
+        self.assertTrue(shm_path.exists())
+        # Restore
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(target_db)}},
+        ):
+            safe_restore_db(src_db)
+        # WAL/SHM must be gone
+        self.assertFalse(wal_path.exists())
+        self.assertFalse(shm_path.exists())
+
+    def test_safe_restore_handles_missing_target_dir(self):
+        """safe_restore_db creates parent directory if needed."""
+        import sqlite3
+        from unittest.mock import patch
+        from dashboard.management.commands.backup import safe_restore_db
+        src_db = Path(self.tmp_dir) / 'backup.sqlite3'
+        conn = sqlite3.connect(str(src_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        target_db = Path(self.tmp_dir) / 'nested' / 'deep' / 'target.sqlite3'
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(target_db)}},
+        ):
+            safe_restore_db(src_db)
+        self.assertTrue(target_db.exists())
+
+    def test_safe_restore_handles_corrupted_existing_db(self):
+        """safe_restore_db succeeds even if current DB is corrupted."""
+        import sqlite3
+        from unittest.mock import patch
+        from dashboard.management.commands.backup import safe_restore_db
+        src_db = Path(self.tmp_dir) / 'backup.sqlite3'
+        conn = sqlite3.connect(str(src_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        # Create a corrupted target DB
+        target_db = Path(self.tmp_dir) / 'corrupted.sqlite3'
+        target_db.write_bytes(b'this is not a valid sqlite database at all')
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(target_db)}},
+        ):
+            safe_restore_db(src_db)
+        # Should be valid now
+        conn = sqlite3.connect(str(target_db))
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = [row[0] for row in cursor.fetchall()]
+        self.assertIn('t', tables)
+        conn.close()
+
+    def test_safe_restore_idempotent(self):
+        """Restoring the same backup twice works without errors."""
+        import sqlite3
+        from unittest.mock import patch
+        from dashboard.management.commands.backup import safe_restore_db
+        src_db = Path(self.tmp_dir) / 'backup.sqlite3'
+        conn = sqlite3.connect(str(src_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.execute("INSERT INTO t VALUES (42)")
+        conn.commit()
+        conn.close()
+        target_db = Path(self.tmp_dir) / 'target.sqlite3'
+        conn = sqlite3.connect(str(target_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(target_db)}},
+        ):
+            safe_restore_db(src_db)
+            safe_restore_db(src_db)  # Second restore
+        conn = sqlite3.connect(str(target_db))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM t")
+        self.assertEqual(cursor.fetchone()[0], 42)
+        conn.close()
+
+    def test_safe_restore_stdout_output(self):
+        """safe_restore_db writes size info when stdout provided."""
+        import sqlite3
+        from io import StringIO
+        from unittest.mock import patch
+        from dashboard.management.commands.backup import safe_restore_db
+        src_db = Path(self.tmp_dir) / 'backup.sqlite3'
+        conn = sqlite3.connect(str(src_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        target_db = Path(self.tmp_dir) / 'target.sqlite3'
+        conn = sqlite3.connect(str(target_db))
+        conn.execute('CREATE TABLE t (id INTEGER PRIMARY KEY)')
+        conn.commit()
+        conn.close()
+        stdout = StringIO()
+        with patch.dict(
+            'django.conf.settings.DATABASES',
+            {'default': {**settings.DATABASES['default'], 'NAME': str(target_db)}},
+        ):
+            safe_restore_db(src_db, stdout=stdout)
+        output = stdout.getvalue()
+        self.assertIn('Database restored', output)
+        self.assertIn('bytes', output)
+
+
 class SampleDataStatusModelTests(TestCase):
     def test_singleton_load(self):
         status = SampleDataStatus.load()

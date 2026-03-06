@@ -1547,7 +1547,6 @@ def backup_restore(request, filename=None):
 
     # Restore
     try:
-        db_path = Path(django_settings.DATABASES['default']['NAME'])
         media_root = Path(django_settings.MEDIA_ROOT)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1555,10 +1554,10 @@ def backup_restore(request, filename=None):
             with tarfile.open(archive_path, 'r:*') as tar:
                 tar.extractall(path=tmp_path)
 
-            # Replace database
+            # Replace database (WAL-safe)
+            from dashboard.management.commands.backup import safe_restore_db
             src_db = tmp_path / 'db.sqlite3'
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(str(src_db), str(db_path))
+            safe_restore_db(src_db)
 
             # Replace media directory contents (clear then copy;
             # can't rmtree a Docker bind mount)

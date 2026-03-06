@@ -11,11 +11,11 @@ echo "Creating superuser (if not exists)..."
 python manage.py createsuperuser --noinput || true
 
 echo "Setting up notification schedules..."
-python manage.py setup_schedules
+python manage.py setup_schedules || echo "WARNING: setup_schedules failed (non-fatal)"
 
 # Load sample data if requested (command has built-in idempotency guard)
 if [ "$LOAD_SAMPLE_DATA" = "true" ]; then
-    python manage.py load_sample_data
+    python manage.py load_sample_data || echo "WARNING: load_sample_data failed (non-fatal)"
 fi
 
 echo "Starting qcluster in background..."

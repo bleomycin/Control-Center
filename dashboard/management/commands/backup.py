@@ -75,6 +75,47 @@ def prune_backups(backup_dir, keep):
     return to_delete
 
 
+def safe_restore_db(src_db_path, stdout=None):
+    """Safely replace the live SQLite database with a backup copy.
+
+    Handles WAL mode: closes all connections, checkpoints WAL,
+    removes stale WAL/SHM files, then copies the new DB.
+    """
+    from django import db
+
+    db_path = Path(settings.DATABASES['default']['NAME'])
+    wal_path = Path(str(db_path) + '-wal')
+    shm_path = Path(str(db_path) + '-shm')
+
+    # 1. Close all Django DB connections (releases WAL/SHM locks)
+    db.connections.close_all()
+
+    # 2. Checkpoint existing WAL into main DB (best-effort — may fail if
+    #    DB is already corrupted, which is fine since we're replacing it)
+    try:
+        conn = sqlite3.connect(str(db_path))
+        conn.execute('PRAGMA wal_checkpoint(TRUNCATE);')
+        conn.close()
+    except Exception:
+        pass  # DB might be corrupted already — we're replacing it anyway
+
+    # 3. Remove stale WAL/SHM files
+    wal_path.unlink(missing_ok=True)
+    shm_path.unlink(missing_ok=True)
+
+    # 4. Replace the database file
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(str(src_db_path), str(db_path))
+
+    # 5. Clean up any WAL/SHM files from the source that might
+    #    have been extracted alongside it
+    wal_path.unlink(missing_ok=True)
+    shm_path.unlink(missing_ok=True)
+
+    if stdout:
+        stdout.write(f'  Database restored ({db_path.stat().st_size:,} bytes)')
+
+
 class Command(BaseCommand):
     help = 'Create a backup of the database and media files'
 
