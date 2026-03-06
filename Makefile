@@ -21,7 +21,7 @@ endif
 
 TAILWIND_URL := https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_PLATFORM)
 
-.PHONY: tailwind-install tailwind-build tailwind-watch
+.PHONY: tailwind-install tailwind-build tailwind-watch restic-install
 
 tailwind-install:
 	mkdir -p bin
@@ -34,3 +34,6 @@ tailwind-build:
 
 tailwind-watch:
 	$(TAILWIND_BIN) -i static/css/input.css -o static/css/tailwind.css --watch
+
+restic-install:
+	./backup.sh install

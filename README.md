@@ -18,6 +18,7 @@ A self-hosted personal management system built with Django. Designed as a single
 - [Cash Flow Tracking](#cash-flow-tracking)
 - [Notes & Attachments](#notes--attachments)
 - [Backup & Restore](#backup--restore)
+  - [Restic Snapshots (Filesystem-Level)](#restic-snapshots-filesystem-level-backups)
 - [Background Jobs & Notifications](#background-jobs--notifications)
 - [Email Configuration](#email-configuration)
 - [Editable Choice Fields](#editable-choice-fields)
@@ -110,6 +111,10 @@ Configure via `.env` file (copy from `.env.example`):
 | `EMAIL_BACKEND` | `console` | Django email backend class |
 | `ENABLE_SSL` | `false` | Enable HTTPS redirect, HSTS, secure cookies |
 | `BACKUP_DIR` | `BASE_DIR/backups` | Backup archive storage directory |
+| `RESTIC_REPOSITORY` | `/opt/backups/control-center` | Path to restic backup repository |
+| `RESTIC_PASSWORD` | — | Encryption password for restic repository (**required** for restic) |
+| `RESTIC_PASSWORD_FILE` | — | Alternative: path to file containing restic password |
+| `RESTIC_KEEP_LAST` | `10` | Number of restic snapshots to retain during pruning |
 
 Production security headers (SSL redirect, HSTS, secure cookies) activate when `DEBUG=False` and `ENABLE_SSL=true`.
 
@@ -704,6 +709,125 @@ print(f'Stakeholders: {Stakeholder.objects.count()}')
 "
 ```
 
+### Restic Snapshots (Filesystem-Level Backups)
+
+For production deployments, Control Center supports **restic** for full filesystem-level snapshots. Unlike Django backups (which capture only the database and media), restic snapshots capture the **entire application directory** — code, config (`.env`), database, media, Docker files, and everything else. This makes rollback after a failed upgrade trivial: one command restores everything to exactly how it was.
+
+#### What Gets Snapshotted
+
+```
+/opt/docker-services/control-center/
+├── persist/data/db.sqlite3 (+WAL/SHM)    ← database
+├── persist/media/                         ← uploads
+├── persist/backups/                       ← Django backups
+├── .env                                   ← secrets/config
+├── docker-compose.yml                     ← deployment config
+├── Dockerfile, entrypoint.sh, etc.        ← build files
+└── all application code                   ← Python/templates/static
+
+Excluded (via .restic-exclude):
+  .git/          ← large, redundant (code is on GitHub)
+  __pycache__/   ← regenerated on startup
+  *.pyc          ← regenerated
+  venv/          ← regenerated
+  persist/logs/  ← non-critical
+```
+
+#### First-Time Setup
+
+```bash
+# 1. Install the restic binary (downloads to ./bin/restic)
+./backup.sh install
+
+# 2. Add restic config to .env (on production server)
+echo 'RESTIC_REPOSITORY=/opt/backups/control-center' >> .env
+echo "RESTIC_PASSWORD=$(openssl rand -base64 32)" >> .env
+# IMPORTANT: Save this password somewhere safe — without it, snapshots are unrecoverable
+
+# 3. Initialize the restic repository
+./backup.sh init
+
+# 4. Take first snapshot
+./backup.sh snapshot
+
+# 5. Verify
+./backup.sh list
+```
+
+The restic binary is self-contained at `./bin/restic` (same pattern as the Tailwind CSS standalone CLI). No system packages required.
+
+#### backup.sh Command Reference
+
+```bash
+./backup.sh [command] [options]
+```
+
+| Command | Description |
+|---------|-------------|
+| `install` | Download latest restic binary to `./bin/restic` |
+| `init` | Initialize restic repository (first-time setup) |
+| `snapshot` | Create a snapshot (default if no command given) |
+| `list` | List all snapshots with tags and timestamps |
+| `restore <id>` | Restore a specific snapshot (stops Docker, restores, restarts) |
+| `restore latest` | Restore the most recent snapshot |
+| `prune` | Remove old snapshots per retention policy |
+| `diff <id1> <id2>` | Show file differences between two snapshots |
+| `check` | Verify repository integrity |
+| `stats` | Show repository disk usage |
+
+| Option | Description |
+|--------|-------------|
+| `--tag <name>` | Add custom tag to snapshot (default: `manual`) |
+| `--keep <n>` | Override retention count for pruning (default: 10) |
+| `--dry-run` | Preview without executing |
+| `--help` | Show help |
+
+#### Manual Snapshot (Production)
+
+```bash
+# Take a snapshot before making manual changes
+./backup.sh snapshot --tag "before-config-change"
+
+# List all snapshots
+./backup.sh list
+
+# Check repository health
+./backup.sh check
+```
+
+> **Note:** Snapshots stop the Docker container briefly (~5-10 seconds) to ensure SQLite consistency, then restart it automatically.
+
+#### Emergency Restore
+
+```bash
+# List available snapshots
+./backup.sh list
+
+# Restore a specific snapshot
+./backup.sh restore abc123
+
+# Or restore the most recent snapshot
+./backup.sh restore latest
+```
+
+The restore process:
+1. Stops the Docker container
+2. Restores all files from the snapshot (code, database, config, media)
+3. Starts the Docker container (entrypoint handles migrations and collectstatic automatically)
+
+#### Restic vs Django Backups
+
+| Feature | Django Backup (`manage.py backup`) | Restic Snapshot (`backup.sh`) |
+|---------|-----------------------------------|-------------------------------|
+| **Captures** | Database + media only | Entire application directory |
+| **Rollback** | Extract tar + rebuild Docker | Single `restore` command |
+| **Deduplication** | No (full copy each time) | Yes (only changed blocks stored) |
+| **Encryption** | No | Yes (AES-256) |
+| **Config/code** | Not included | Included (`.env`, Dockerfile, etc.) |
+| **Use case** | Quick data-only backup | Full disaster recovery |
+
+Both systems are complementary. Django backups are lightweight and useful for data-only operations. Restic snapshots are comprehensive and ideal for production upgrade safety.
+
 ---
 
 ## Background Jobs & Notifications
@@ -1101,7 +1225,59 @@ All production data lives outside the Docker image in bind-mounted host director
 
 Rebuilding the container replaces the application code but **never touches these directories**. Your data survives every upgrade.
 
-### Standard Upgrade (Docker)
+### Automated Upgrade (Production — Recommended)
+
+The `upgrade.sh` script automates safe production upgrades with pre-upgrade snapshots and automatic rollback on failure:
+
+```bash
+./upgrade.sh
+```
+
+**What it does:**
+
+```
+Preflight checks (git, Docker, restic)
+  → Confirm upgrade
+  → Stop Docker container
+  → Restic snapshot (tagged "upgrade" + git SHA)
+  → Git pull
+  → Docker build
+  → Start container
+  → Health check
+    ├─ Pass → Prune old snapshots → Done
+    └─ Fail → Docker down → Restic restore → Docker up → Verify
+```
+
+If restic is set up (see [Restic Snapshots](#restic-snapshots-filesystem-level-backups)), `upgrade.sh` takes a full filesystem snapshot before every upgrade. If anything goes wrong (bad migration, broken build, corrupted static files), the automatic rollback restores everything to exactly how it was — code, database, config, and media — in about 30 seconds.
+
+#### upgrade.sh Options
+
+```bash
+./upgrade.sh [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Show what would happen without executing |
+| `--force` | Skip confirmation prompt |
+| `--no-restic` | Use Django backup instead of restic snapshot |
+| `--help` | Show help |
+
+#### Upgrade Without Restic
+
+If restic isn't set up, `upgrade.sh` automatically falls back to Django-level backups (database + media only). You can also force this behavior:
+
+```bash
+./upgrade.sh --no-restic
+```
+
+#### Upgrade Logs
+
+All upgrade output is saved to `persist/logs/upgrade-YYYYMMDD-HHMMSS.log`.
+
+### Standard Upgrade (Manual — Docker)
+
+If you prefer to upgrade manually without the script:
 
 ```bash
 # 1. Create a backup before upgrading (recommended)
@@ -1114,7 +1290,7 @@ git pull
 docker compose up --build -d
 ```
 
-That's it. The entrypoint automatically handles:
+The entrypoint automatically handles:
 - `migrate` — applies any new database schema changes
 - `collectstatic` — updates CSS, JavaScript, and vendor assets
 - `setup_schedules` — syncs background job schedules
@@ -1146,13 +1322,26 @@ docker compose exec web python manage.py test
 
 ### Rolling Back a Bad Upgrade
 
-If an upgrade causes problems, restore from the backup you created in step 1:
+**With restic** (recommended — restores everything):
+
+```bash
+# List available snapshots
+./backup.sh list
+
+# Restore the pre-upgrade snapshot
+./backup.sh restore latest
+
+# Or restore a specific snapshot
+./backup.sh restore abc123
+```
+
+**Without restic** (Django backup — data only):
 
 ```bash
 # Restore the pre-upgrade backup
 docker compose exec web python manage.py restore /app/backups/controlcenter-backup-YYYYMMDD-HHMMSS.tar.gz
 
-# Or check out the previous code version and rebuild
+# Check out the previous code version and rebuild
 git log --oneline -5                  # find the previous commit
 git checkout <previous-commit-hash>
 docker compose up --build -d
@@ -1275,6 +1464,22 @@ python manage.py qcluster
 | `python manage.py makemigrations` | Generate new migrations after model changes |
 | `python manage.py collectstatic` | Gather static files for production |
 | `python manage.py shell` | Open Django interactive shell |
+
+**Shell Scripts** (production):
+
+| Command | Description |
+|---------|-------------|
+| `./upgrade.sh` | Automated upgrade with restic snapshot + rollback on failure |
+| `./upgrade.sh --dry-run` | Preview upgrade steps without executing |
+| `./upgrade.sh --no-restic` | Upgrade using Django backup instead of restic |
+| `./backup.sh install` | Download restic binary to `./bin/restic` |
+| `./backup.sh init` | Initialize restic repository |
+| `./backup.sh snapshot` | Take a filesystem-level snapshot |
+| `./backup.sh list` | List all restic snapshots |
+| `./backup.sh restore <id>` | Restore a snapshot (stops Docker, restores, restarts) |
+| `./backup.sh prune` | Remove old snapshots per retention policy |
+| `./backup.sh check` | Verify repository integrity |
+| `./backup.sh stats` | Show repository disk usage |
 
 ---
 
