@@ -307,6 +307,7 @@ All registered via `python manage.py setup_schedules`; executed by `python manag
 - **Bundle deployment into feature completion**: A feature is not "done" until all tests pass, changes are committed and pushed to GitHub, Docker is rebuilt and verified running, and a new alpha release tag is created. Don't stop at code — complete the full deploy pipeline. Use `/deploy` skill when ready.
 - **Test-driven iteration**: After each major component, write tests and run them before moving on. For any HTMX endpoint, write a test that verifies: 1) the partial renders correctly, 2) elements outside the swap target are preserved, 3) the feature works with and without sample data loaded.
 - **Always work in parallel**: Maximize use of parallel tool calls and background agents. Run independent operations concurrently (e.g., tests + Docker rebuild, multiple file reads, research agents). Never do sequentially what can be done in parallel.
+- **Optimize worker count**: Before starting any task, contemplate and spin up the optimum number of parallel workers (Task agents, background commands, concurrent tool calls) to maximize throughput. For research, launch multiple Explore agents covering different areas simultaneously. For implementation, run file reads in parallel, edits in parallel where independent, and tests + builds concurrently. Always think: "How many workers can I usefully run right now?"
 
 ## Next Steps
 - User authentication (currently no login required — fine for single-user VPN access)

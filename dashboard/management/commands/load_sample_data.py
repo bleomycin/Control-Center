@@ -228,6 +228,14 @@ class Command(BaseCommand):
                     ownership_percentage=percentage, role=role
                 )
 
+        # Multi-role example: Tom Driscoll is also the contractor on 450 Elm Street
+        PropertyOwnership.objects.create(
+            property=properties["450 Elm Street"],
+            stakeholder=stakeholders["Tom Driscoll"],
+            role="Contractor",
+            notes="Handling renovation project on Unit B",
+        )
+
         self.stdout.write("Creating investments...")
         from assets.models import InvestmentParticipant
         investments = {}

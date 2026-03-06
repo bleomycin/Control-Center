@@ -146,13 +146,13 @@ class PropertyOwnership(models.Model):
         max_digits=5, decimal_places=2, null=True, blank=True,
         help_text="Ownership percentage (e.g., 50.00 for 50%)"
     )
-    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner, Partner")
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner, Partner, Contractor, Builder, Developer, Agent, Manager")
     notes = models.TextField(blank=True)
 
     class Meta:
         verbose_name_plural = "Property ownerships"
         ordering = ["-ownership_percentage", "stakeholder__name"]
-        unique_together = [("property", "stakeholder")]
+        unique_together = [("property", "stakeholder", "role")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -199,13 +199,13 @@ class InvestmentParticipant(models.Model):
         max_digits=5, decimal_places=2, null=True, blank=True,
         help_text="Ownership percentage (e.g., 50.00 for 50%)"
     )
-    role = models.CharField(max_length=100, blank=True, help_text="e.g., Investor, Co-investor, Fund Manager")
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Investor, Co-investor, Fund Manager, Advisor, Broker, Consultant")
     notes = models.TextField(blank=True)
 
     class Meta:
         verbose_name_plural = "Investment participants"
         ordering = ["-ownership_percentage", "stakeholder__name"]
-        unique_together = [("investment", "stakeholder")]
+        unique_together = [("investment", "stakeholder", "role")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -293,7 +293,7 @@ class LoanParty(models.Model):
     class Meta:
         verbose_name_plural = "Loan parties"
         ordering = ["role", "-ownership_percentage", "stakeholder__name"]
-        unique_together = [("loan", "stakeholder")]
+        unique_together = [("loan", "stakeholder", "role")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -387,7 +387,7 @@ class PolicyHolder(models.Model):
     class Meta:
         verbose_name_plural = "Policy holders"
         ordering = ["role", "stakeholder__name"]
-        unique_together = [("policy", "stakeholder")]
+        unique_together = [("policy", "stakeholder", "role")]
 
     def __str__(self):
         role = f" - {self.role}" if self.role else ""
@@ -449,13 +449,13 @@ class VehicleOwner(models.Model):
         max_digits=5, decimal_places=2, null=True, blank=True,
         help_text="Ownership percentage (e.g., 50.00 for 50%)"
     )
-    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner")
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner, Driver, Mechanic, Dealer")
     notes = models.TextField(blank=True)
 
     class Meta:
         verbose_name_plural = "Vehicle owners"
         ordering = ["-ownership_percentage", "stakeholder__name"]
-        unique_together = [("vehicle", "stakeholder")]
+        unique_together = [("vehicle", "stakeholder", "role")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -521,13 +521,13 @@ class AircraftOwner(models.Model):
         max_digits=5, decimal_places=2, null=True, blank=True,
         help_text="Ownership percentage (e.g., 50.00 for 50%)"
     )
-    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner, Operator")
+    role = models.CharField(max_length=100, blank=True, help_text="e.g., Owner, Co-owner, Operator, Pilot, Mechanic")
     notes = models.TextField(blank=True)
 
     class Meta:
         verbose_name_plural = "Aircraft owners"
         ordering = ["-ownership_percentage", "stakeholder__name"]
-        unique_together = [("aircraft", "stakeholder")]
+        unique_together = [("aircraft", "stakeholder", "role")]
 
     def __str__(self):
         percentage = f" ({self.ownership_percentage}%)" if self.ownership_percentage else ""
@@ -618,7 +618,7 @@ class LeaseParty(models.Model):
     class Meta:
         verbose_name_plural = "Lease parties"
         ordering = ["role", "stakeholder__name"]
-        unique_together = [("lease", "stakeholder")]
+        unique_together = [("lease", "stakeholder", "role")]
 
     def __str__(self):
         role = f" - {self.role}" if self.role else ""

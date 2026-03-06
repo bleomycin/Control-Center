@@ -1834,7 +1834,7 @@ class LeaseModelTests(TestCase):
         from django.db import IntegrityError
         with self.assertRaises(IntegrityError):
             LeaseParty.objects.create(
-                lease=self.lease, stakeholder=self.stakeholder, role="Landlord",
+                lease=self.lease, stakeholder=self.stakeholder, role="Tenant",
             )
 
     def test_lease_party_notes_url_and_id(self):
@@ -2136,3 +2136,131 @@ class LeaseGlobalSearchTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Searchable Lease")
+
+
+class MultiRolePerAssetTests(TestCase):
+    """Test that a stakeholder can have multiple roles on the same asset."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.stakeholder = Stakeholder.objects.create(name="Multi-Role Person")
+        cls.prop = RealEstate.objects.create(name="Test Property", address="123 Test St")
+        cls.inv = Investment.objects.create(name="Test Investment")
+        cls.loan = Loan.objects.create(name="Test Loan")
+        cls.vehicle = Vehicle.objects.create(name="Test Vehicle")
+        cls.aircraft = Aircraft.objects.create(name="Test Aircraft")
+        cls.policy = InsurancePolicy.objects.create(name="Test Policy")
+        cls.lease_prop = RealEstate.objects.create(name="Lease Prop", address="x")
+        cls.lease = Lease.objects.create(name="Test Lease", related_property=cls.lease_prop)
+
+    def test_property_multiple_roles(self):
+        PropertyOwnership.objects.create(
+            property=self.prop, stakeholder=self.stakeholder, role="Owner",
+            ownership_percentage=Decimal("50.00"),
+        )
+        PropertyOwnership.objects.create(
+            property=self.prop, stakeholder=self.stakeholder, role="Contractor",
+        )
+        self.assertEqual(
+            PropertyOwnership.objects.filter(
+                property=self.prop, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
+
+    def test_property_duplicate_role_rejected(self):
+        PropertyOwnership.objects.create(
+            property=self.prop, stakeholder=self.stakeholder, role="Partner",
+        )
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            PropertyOwnership.objects.create(
+                property=self.prop, stakeholder=self.stakeholder, role="Partner",
+            )
+
+    def test_property_blank_role_prevents_duplicates(self):
+        PropertyOwnership.objects.create(
+            property=self.prop, stakeholder=self.stakeholder, role="",
+        )
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            PropertyOwnership.objects.create(
+                property=self.prop, stakeholder=self.stakeholder, role="",
+            )
+
+    def test_investment_multiple_roles(self):
+        InvestmentParticipant.objects.create(
+            investment=self.inv, stakeholder=self.stakeholder, role="Investor",
+        )
+        InvestmentParticipant.objects.create(
+            investment=self.inv, stakeholder=self.stakeholder, role="Advisor",
+        )
+        self.assertEqual(
+            InvestmentParticipant.objects.filter(
+                investment=self.inv, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
+
+    def test_loan_multiple_roles(self):
+        LoanParty.objects.create(
+            loan=self.loan, stakeholder=self.stakeholder, role="Borrower",
+        )
+        LoanParty.objects.create(
+            loan=self.loan, stakeholder=self.stakeholder, role="Guarantor",
+        )
+        self.assertEqual(
+            LoanParty.objects.filter(
+                loan=self.loan, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
+
+    def test_vehicle_multiple_roles(self):
+        VehicleOwner.objects.create(
+            vehicle=self.vehicle, stakeholder=self.stakeholder, role="Owner",
+        )
+        VehicleOwner.objects.create(
+            vehicle=self.vehicle, stakeholder=self.stakeholder, role="Driver",
+        )
+        self.assertEqual(
+            VehicleOwner.objects.filter(
+                vehicle=self.vehicle, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
+
+    def test_aircraft_multiple_roles(self):
+        AircraftOwner.objects.create(
+            aircraft=self.aircraft, stakeholder=self.stakeholder, role="Owner",
+        )
+        AircraftOwner.objects.create(
+            aircraft=self.aircraft, stakeholder=self.stakeholder, role="Pilot",
+        )
+        self.assertEqual(
+            AircraftOwner.objects.filter(
+                aircraft=self.aircraft, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
+
+    def test_policy_multiple_roles(self):
+        PolicyHolder.objects.create(
+            policy=self.policy, stakeholder=self.stakeholder, role="Named Insured",
+        )
+        PolicyHolder.objects.create(
+            policy=self.policy, stakeholder=self.stakeholder, role="Beneficiary",
+        )
+        self.assertEqual(
+            PolicyHolder.objects.filter(
+                policy=self.policy, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
+
+    def test_lease_multiple_roles(self):
+        LeaseParty.objects.create(
+            lease=self.lease, stakeholder=self.stakeholder, role="Tenant",
+        )
+        LeaseParty.objects.create(
+            lease=self.lease, stakeholder=self.stakeholder, role="Guarantor",
+        )
+        self.assertEqual(
+            LeaseParty.objects.filter(
+                lease=self.lease, stakeholder=self.stakeholder
+            ).count(), 2,
+        )
