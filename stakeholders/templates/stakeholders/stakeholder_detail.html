@@ -29,7 +29,8 @@
         <div class="flex-1 min-w-0">
             {% if stakeholder.email %}<p class="text-sm text-gray-200 break-all">{{ stakeholder.email }}</p>{% endif %}
             {% if stakeholder.phone %}<p class="text-sm text-gray-200">{{ stakeholder.phone }}</p>{% endif %}
-            {% if not stakeholder.email and not stakeholder.phone %}<p class="text-sm text-gray-500">No contact info</p>{% endif %}
+            {% if stakeholder.website %}<p class="text-sm break-all"><a href="{{ stakeholder.website }}" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300">{{ stakeholder.website }}</a></p>{% endif %}
+            {% if not stakeholder.email and not stakeholder.phone and not stakeholder.website %}<p class="text-sm text-gray-500">No contact info</p>{% endif %}
         </div>
         <div class="flex gap-4 ml-3 shrink-0">
             <div class="text-center">
@@ -53,7 +54,8 @@
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Contact</p>
         {% if stakeholder.email %}<p class="text-sm text-gray-200">{{ stakeholder.email }}</p>{% endif %}
         {% if stakeholder.phone %}<p class="text-sm text-gray-200">{{ stakeholder.phone }}</p>{% endif %}
-        {% if not stakeholder.email and not stakeholder.phone %}<p class="text-sm text-gray-500">No contact info</p>{% endif %}
+        {% if stakeholder.website %}<p class="text-sm break-all"><a href="{{ stakeholder.website }}" target="_blank" rel="noopener" class="text-blue-400 hover:text-blue-300">{{ stakeholder.website }}</a></p>{% endif %}
+        {% if not stakeholder.email and not stakeholder.phone and not stakeholder.website %}<p class="text-sm text-gray-500">No contact info</p>{% endif %}
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Trust Rating</p>

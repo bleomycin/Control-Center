@@ -88,6 +88,7 @@ class Command(BaseCommand):
         armanino = Stakeholder.objects.create(
             name="Armanino LLP", entity_type="firm",
             email="info@armanino.com", phone="555-700-1000",
+            website="https://www.armanino.com",
             organization="", trust_rating=5, risk_rating=1,
             notes_text="Full-service accounting and consulting firm. Handles family office services, "
                        "forensic accounting, tax preparation, and advisory.",

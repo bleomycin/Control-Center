@@ -10,7 +10,7 @@ from .models import Relationship, Stakeholder, StakeholderTab, ContactLog
 class StakeholderForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Stakeholder
-        fields = ["name", "entity_type", "email", "phone", "organization",
+        fields = ["name", "entity_type", "email", "phone", "website", "organization",
                   "parent_organization", "trust_rating", "risk_rating", "notes_text"]
         widgets = {
             "notes_text": forms.Textarea(attrs={"rows": 3}),
