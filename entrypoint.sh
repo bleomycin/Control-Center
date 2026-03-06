@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e
 
+# If arguments are passed (e.g. "docker compose run web python manage.py restore ..."),
+# skip the full startup and run the command directly.
+if [ $# -gt 0 ]; then
+    exec "$@"
+fi
+
 echo "Running migrations..."
 python manage.py migrate --noinput
 
