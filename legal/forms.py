@@ -1,7 +1,8 @@
 from django import forms
 from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
-from .models import LegalMatter, Evidence
+from stakeholders.models import Stakeholder
+from .models import LegalMatter, Evidence, LegalCommunication
 
 
 class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
@@ -45,3 +46,21 @@ class EvidenceForm(TailwindFormMixin, forms.ModelForm):
             "description": forms.Textarea(attrs={"rows": 2}),
             "file": forms.FileInput(),
         }
+
+
+class LegalCommunicationForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = LegalCommunication
+        fields = ["stakeholder", "date", "direction", "method", "summary",
+                  "follow_up_needed", "follow_up_date"]
+        widgets = {
+            "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
+            "follow_up_date": forms.DateInput(attrs={"type": "date"}),
+            "summary": forms.Textarea(attrs={"rows": 3}),
+            "method": forms.Select(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["method"].widget.choices = get_choices("contact_method")
+        self.fields["stakeholder"].queryset = Stakeholder.objects.order_by("name")

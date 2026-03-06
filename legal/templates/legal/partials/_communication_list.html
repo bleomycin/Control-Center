@@ -1,0 +1,41 @@
+{% load choice_labels %}
+<div class="divide-y divide-gray-700">
+    {% for comm in communication_list %}
+    <div class="px-4 py-3 flex items-start justify-between group">
+        <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2 flex-wrap">
+                {% if comm.direction == "outbound" %}
+                <span class="text-cyan-400 text-sm" title="Outbound">↗</span>
+                {% else %}
+                <span class="text-amber-400 text-sm" title="Inbound">↙</span>
+                {% endif %}
+                <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ comm.method|choice_label:"contact_method" }}</span>
+                {% if comm.stakeholder %}
+                <a href="{{ comm.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ comm.stakeholder.name }}</a>
+                {% endif %}
+                <span class="text-xs text-gray-500">{{ comm.date|date:"M j, Y g:i A" }}</span>
+            </div>
+            <p class="text-sm text-gray-300 mt-1">{{ comm.summary }}</p>
+            {% if comm.follow_up_needed %}
+            <div class="flex items-center gap-1 mt-1">
+                <span class="text-xs text-yellow-400">⚡ Follow-up needed</span>
+                {% if comm.follow_up_date %}
+                <span class="text-xs text-yellow-500/70">by {{ comm.follow_up_date|date:"M j, Y" }}</span>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+            <button hx-get="{% url 'legal:communication_edit' comm.pk %}"
+                    hx-target="#communication-form-container"
+                    hx-swap="innerHTML"
+                    class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+            <button hx-post="{% url 'legal:communication_delete' comm.pk %}" hx-target="#communication-list" hx-swap="innerHTML"
+                    hx-confirm="Delete this communication?"
+                    class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No communications logged</p>
+    {% endfor %}
+</div>

@@ -1015,6 +1015,25 @@ def calendar_events(request):
             "extendedProps": {"type": "hearing"},
         })
 
+    # Legal communication follow-ups (indigo)
+    from legal.models import LegalCommunication
+    legal_followups = LegalCommunication.objects.filter(
+        follow_up_needed=True, follow_up_date__isnull=False
+    ).select_related("stakeholder", "legal_matter")
+    if start:
+        legal_followups = legal_followups.filter(follow_up_date__gte=start)
+    if end:
+        legal_followups = legal_followups.filter(follow_up_date__lte=end)
+    for lc in legal_followups:
+        label = lc.stakeholder.name if lc.stakeholder else lc.legal_matter.title
+        events.append({
+            "title": f"Legal Follow-up: {label}",
+            "start": str(lc.follow_up_date),
+            "url": lc.legal_matter.get_absolute_url(),
+            "color": "#6366f1",
+            "extendedProps": {"type": "legal_followup"},
+        })
+
     # Contact follow-up dates (blue)
     contacts = ContactLog.objects.filter(
         follow_up_needed=True, follow_up_date__isnull=False
@@ -1304,6 +1323,7 @@ def sample_data_remove(request):
         "cashflow.cashflowentry",
         "tasks.followup",
         "tasks.task",
+        "legal.legalcommunication",
         "legal.evidence",
         "legal.legalmatter",
         "assets.leaseparty",

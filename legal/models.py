@@ -97,3 +97,31 @@ class Evidence(models.Model):
     class Meta:
         verbose_name_plural = "Evidence"
         ordering = ["-date_obtained"]
+
+
+class LegalCommunication(models.Model):
+    DIRECTION_CHOICES = [
+        ("outbound", "Outbound"),
+        ("inbound", "Inbound"),
+    ]
+    legal_matter = models.ForeignKey(LegalMatter, on_delete=models.CASCADE, related_name="communications")
+    stakeholder = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="legal_communications",
+    )
+    date = models.DateTimeField()
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="outbound")
+    method = models.CharField(max_length=30)
+    summary = models.TextField()
+    follow_up_needed = models.BooleanField(default=False)
+    follow_up_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.get_direction_display()} {self.method} — {self.date:%Y-%m-%d}"
+
+    def get_absolute_url(self):
+        return reverse("legal:detail", kwargs={"pk": self.legal_matter.pk})
+
+    class Meta:
+        ordering = ["-date"]

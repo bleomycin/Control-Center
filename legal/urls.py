@@ -14,6 +14,9 @@ urlpatterns = [
     path("<int:pk>/evidence/add/", views.evidence_add, name="evidence_add"),
     path("evidence/<int:pk>/edit/", views.evidence_edit, name="evidence_edit"),
     path("evidence/<int:pk>/delete/", views.evidence_delete, name="evidence_delete"),
+    path("<int:pk>/communications/add/", views.communication_add, name="communication_add"),
+    path("communications/<int:pk>/edit/", views.communication_edit, name="communication_edit"),
+    path("communications/<int:pk>/delete/", views.communication_delete, name="communication_delete"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
 ]

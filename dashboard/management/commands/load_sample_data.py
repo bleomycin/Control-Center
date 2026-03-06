@@ -13,7 +13,7 @@ from assets.models import (
     Aircraft, AircraftOwner, InsurancePolicy, Investment, Lease, LeaseParty,
     Loan, PolicyHolder, RealEstate, Vehicle, VehicleOwner,
 )
-from legal.models import LegalMatter, Evidence
+from legal.models import LegalCommunication, LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
 from notes.models import Folder, Note, Tag
@@ -548,6 +548,43 @@ class Command(BaseCommand):
                     legal_matter=legal_matters[lm_title],
                     title=title, description=desc, evidence_type=etype, date_obtained=dt,
                 )
+
+        self.stdout.write("Creating legal communications...")
+        comm_pks = []
+        # Format: (legal_matter_title, stakeholder_name, days_ago, direction, method, summary, followup, fu_days)
+        comm_data = [
+            ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -14, "outbound", "email",
+             "Sent initial case summary and evidence of missed payments to Marcus for review.",
+             False, None),
+            ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -10, "inbound", "call",
+             "Marcus confirmed filing timeline. Expects hearing in 3-4 weeks. Discussed strategy — "
+             "going for default judgment if Holston doesn't respond.",
+             True, 7),
+            ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -5, "outbound", "email",
+             "Forwarded bank statements showing bounced checks and 3 months of non-payment. "
+             "Also sent photos of property condition from last inspection.",
+             False, None),
+            ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", -12, "outbound", "call",
+             "Discussed title search results with Sandra. One old mechanics lien found — "
+             "she says it should clear before closing.",
+             True, 5),
+            ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", -7, "inbound", "email",
+             "Sandra sent Phase I environmental report summary. Property is clean — "
+             "no remediation needed. Recommends proceeding to closing.",
+             False, None),
+        ]
+        for lm_title, sh_name, days_ago, direction, method, summary, followup, fu_days in comm_data:
+            comm = LegalCommunication.objects.create(
+                legal_matter=legal_matters[lm_title],
+                stakeholder=stakeholders[sh_name],
+                date=now + timedelta(days=days_ago),
+                direction=direction,
+                method=method,
+                summary=summary,
+                follow_up_needed=followup,
+                follow_up_date=today + timedelta(days=fu_days) if fu_days else None,
+            )
+            comm_pks.append(comm.pk)
 
         self.stdout.write("Creating tasks...")
         tasks = {}
@@ -1308,6 +1345,7 @@ class Command(BaseCommand):
                     legal_matter__in=legal_matters.values()
                 ).values_list("pk", flat=True)
             ),
+            "legal.legalcommunication": comm_pks,
             "tasks.task": [t.pk for t in tasks.values()],
             "tasks.followup": list(
                 FollowUp.objects.filter(
@@ -1349,6 +1387,7 @@ class Command(BaseCommand):
             f"  Leases:         {len(manifest['assets.lease'])}\n"
             f"  Legal Matters:  {len(manifest['legal.legalmatter'])}\n"
             f"  Evidence:       {len(manifest['legal.evidence'])}\n"
+            f"  Communications: {len(manifest['legal.legalcommunication'])}\n"
             f"  Tasks:          {len(manifest['tasks.task'])}\n"
             f"  Follow-ups:     {len(manifest['tasks.followup'])}\n"
             f"  Cash Flow:      {len(manifest['cashflow.cashflowentry'])}\n"

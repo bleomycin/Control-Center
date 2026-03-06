@@ -4,8 +4,8 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from dashboard.choices import get_choice_label, get_choices
-from .forms import EvidenceForm, LegalMatterForm
-from .models import Evidence, LegalMatter
+from .forms import EvidenceForm, LegalCommunicationForm, LegalMatterForm
+from .models import Evidence, LegalCommunication, LegalMatter
 
 
 class LegalMatterListView(ListView):
@@ -102,6 +102,8 @@ class LegalMatterDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         obj = self.object
+        ctx["communication_list"] = obj.communications.select_related("stakeholder").all()
+        ctx["communication_form"] = LegalCommunicationForm()
         ctx["evidence_list"] = obj.evidence.all()
         ctx["evidence_form"] = EvidenceForm()
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
@@ -175,6 +177,17 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Related Stakeholders", "type": "table",
                          "headers": ["Name", "Type", "Organization"],
                          "rows": [[s.name, get_choice_label("entity_type", s.entity_type), s.organization or "-"] for s in stakeholders]})
+    comms = m.communications.select_related("stakeholder").all()
+    if comms:
+        sections.append({"heading": "Communications", "type": "table",
+                         "headers": ["Date", "Direction", "Method", "Contact", "Summary", "Follow-up"],
+                         "rows": [[c.date.strftime("%b %d, %Y %I:%M %p"),
+                                   c.get_direction_display(),
+                                   get_choice_label("contact_method", c.method),
+                                   c.stakeholder.name if c.stakeholder else "-",
+                                   c.summary,
+                                   c.follow_up_date.strftime("%b %d, %Y") if c.follow_up_date else "-"]
+                                  for c in comms]})
     evidence = m.evidence.all()
     if evidence:
         sections.append({"heading": "Evidence", "type": "table",
@@ -233,6 +246,46 @@ def evidence_delete(request, pk):
         ev.delete()
     return render(request, "legal/partials/_evidence_list.html",
                   {"evidence_list": matter.evidence.all(), "matter": matter})
+
+
+def communication_add(request, pk):
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    if request.method == "POST":
+        form = LegalCommunicationForm(request.POST)
+        if form.is_valid():
+            comm = form.save(commit=False)
+            comm.legal_matter = matter
+            comm.save()
+            return render(request, "legal/partials/_communication_list.html",
+                          {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
+    else:
+        form = LegalCommunicationForm()
+    return render(request, "legal/partials/_communication_form.html",
+                  {"form": form, "matter": matter})
+
+
+def communication_edit(request, pk):
+    comm = get_object_or_404(LegalCommunication, pk=pk)
+    matter = comm.legal_matter
+    if request.method == "POST":
+        form = LegalCommunicationForm(request.POST, instance=comm)
+        if form.is_valid():
+            form.save()
+            return render(request, "legal/partials/_communication_list.html",
+                          {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
+    else:
+        form = LegalCommunicationForm(instance=comm)
+    return render(request, "legal/partials/_communication_form.html",
+                  {"form": form, "matter": matter, "editing": comm})
+
+
+def communication_delete(request, pk):
+    comm = get_object_or_404(LegalCommunication, pk=pk)
+    matter = comm.legal_matter
+    if request.method == "POST":
+        comm.delete()
+    return render(request, "legal/partials/_communication_list.html",
+                  {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
 
 
 def bulk_delete(request):

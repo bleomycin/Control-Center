@@ -4,11 +4,12 @@ from decimal import Decimal
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from assets.models import RealEstate
 from stakeholders.models import Stakeholder
 
-from .models import Evidence, LegalMatter
+from .models import Evidence, LegalCommunication, LegalMatter
 
 
 class LegalMatterModelTests(TestCase):
@@ -268,3 +269,127 @@ class LegalViewTests(TestCase):
         )
         resp = self.client.get(reverse("legal:list"))
         self.assertContains(resp, "Hearing")
+
+    def test_detail_has_communication_context(self):
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertIn("communication_list", resp.context)
+        self.assertIn("communication_form", resp.context)
+
+    def test_communication_add_get(self):
+        resp = self.client.get(reverse("legal:communication_add", args=[self.matter.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Add Communication")
+
+    def test_communication_add_post(self):
+        s = Stakeholder.objects.create(name="Test Attorney")
+        resp = self.client.post(reverse("legal:communication_add", args=[self.matter.pk]), {
+            "stakeholder": s.pk,
+            "date": "2025-03-01T10:00",
+            "direction": "outbound",
+            "method": "call",
+            "summary": "Discussed case strategy.",
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(LegalCommunication.objects.filter(summary="Discussed case strategy.").exists())
+
+    def test_communication_edit_get(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            direction="outbound",
+            method="email",
+            summary="Original summary",
+        )
+        resp = self.client.get(reverse("legal:communication_edit", args=[comm.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Save Changes")
+
+    def test_communication_edit_post(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            direction="outbound",
+            method="email",
+            summary="Old summary",
+        )
+        resp = self.client.post(reverse("legal:communication_edit", args=[comm.pk]), {
+            "date": "2025-03-01T14:00",
+            "direction": "inbound",
+            "method": "call",
+            "summary": "Updated summary",
+        })
+        self.assertEqual(resp.status_code, 200)
+        comm.refresh_from_db()
+        self.assertEqual(comm.summary, "Updated summary")
+        self.assertEqual(comm.direction, "inbound")
+
+    def test_communication_delete(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            direction="inbound",
+            method="call",
+            summary="Will be deleted",
+        )
+        resp = self.client.post(reverse("legal:communication_delete", args=[comm.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LegalCommunication.objects.filter(pk=comm.pk).exists())
+
+    def test_communication_cascade_on_matter_delete(self):
+        matter = LegalMatter.objects.create(title="Cascade Test")
+        LegalCommunication.objects.create(
+            legal_matter=matter,
+            date=timezone.now(),
+            method="email",
+            summary="Test",
+        )
+        matter.delete()
+        self.assertEqual(LegalCommunication.objects.count(), 0)
+
+    def test_communication_stakeholder_set_null(self):
+        s = Stakeholder.objects.create(name="Deletable Attorney")
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            stakeholder=s,
+            date=timezone.now(),
+            method="call",
+            summary="Will survive stakeholder deletion",
+        )
+        s.delete()
+        comm.refresh_from_db()
+        self.assertIsNone(comm.stakeholder)
+
+    def test_communication_follow_up_fields(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            method="call",
+            summary="Follow up test",
+            follow_up_needed=True,
+            follow_up_date=date.today() + timedelta(days=7),
+        )
+        self.assertTrue(comm.follow_up_needed)
+        self.assertIsNotNone(comm.follow_up_date)
+
+    def test_communication_in_detail_page(self):
+        LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            direction="outbound",
+            method="email",
+            summary="Visible in detail page",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "Visible in detail page")
+        self.assertContains(resp, "Communications")
+
+    def test_pdf_includes_communications(self):
+        LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            direction="outbound",
+            method="email",
+            summary="PDF comm test",
+        )
+        resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")

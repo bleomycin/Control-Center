@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import LegalMatter, Evidence
+from .models import LegalMatter, Evidence, LegalCommunication
 
 
 class EvidenceInline(admin.TabularInline):
@@ -22,3 +22,16 @@ class EvidenceAdmin(admin.ModelAdmin):
     list_display = ["title", "legal_matter", "evidence_type", "date_obtained", "url"]
     list_filter = ["evidence_type"]
     search_fields = ["title", "description"]
+
+
+class LegalCommunicationInline(admin.TabularInline):
+    model = LegalCommunication
+    extra = 0
+    fields = ["date", "direction", "method", "stakeholder", "summary", "follow_up_needed", "follow_up_date"]
+
+
+@admin.register(LegalCommunication)
+class LegalCommunicationAdmin(admin.ModelAdmin):
+    list_display = ["legal_matter", "date", "direction", "method", "stakeholder", "follow_up_needed"]
+    list_filter = ["direction", "method", "follow_up_needed"]
+    search_fields = ["summary"]

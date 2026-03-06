@@ -204,6 +204,22 @@
 </div>
 {% endif %}
 
+<!-- Communications -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">
+            Communications
+            <span class="text-xs text-gray-500 font-normal ml-1">({{ communication_list|length }})</span>
+        </h2>
+        <button hx-get="{% url 'legal:communication_add' matter.pk %}" hx-target="#communication-form-container" hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
+    </div>
+    <div id="communication-form-container"></div>
+    <div id="communication-list">
+        {% include "legal/partials/_communication_list.html" %}
+    </div>
+</div>
+
 <!-- Evidence -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
