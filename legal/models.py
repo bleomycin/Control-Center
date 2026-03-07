@@ -115,6 +115,7 @@ class LegalCommunication(models.Model):
     summary = models.TextField()
     follow_up_needed = models.BooleanField(default=False)
     follow_up_date = models.DateField(null=True, blank=True)
+    file = models.FileField(upload_to="communications/", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

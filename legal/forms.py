@@ -52,12 +52,13 @@ class LegalCommunicationForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = LegalCommunication
         fields = ["stakeholder", "date", "direction", "method", "summary",
-                  "follow_up_needed", "follow_up_date"]
+                  "follow_up_needed", "follow_up_date", "file"]
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "follow_up_date": forms.DateInput(attrs={"type": "date"}),
             "summary": forms.Textarea(attrs={"rows": 3}),
             "method": forms.Select(),
+            "file": forms.FileInput(),
         }
 
     def __init__(self, *args, **kwargs):

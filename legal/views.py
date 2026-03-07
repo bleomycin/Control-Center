@@ -180,13 +180,14 @@ def export_pdf_detail(request, pk):
     comms = m.communications.select_related("stakeholder").all()
     if comms:
         sections.append({"heading": "Communications", "type": "table",
-                         "headers": ["Date", "Direction", "Method", "Contact", "Summary", "Follow-up"],
+                         "headers": ["Date", "Direction", "Method", "Contact", "Summary", "Follow-up", "Attachment"],
                          "rows": [[c.date.strftime("%b %d, %Y %I:%M %p"),
                                    c.get_direction_display(),
                                    get_choice_label("contact_method", c.method),
                                    c.stakeholder.name if c.stakeholder else "-",
                                    c.summary,
-                                   c.follow_up_date.strftime("%b %d, %Y") if c.follow_up_date else "-"]
+                                   c.follow_up_date.strftime("%b %d, %Y") if c.follow_up_date else "-",
+                                   c.file.name.split("/")[-1] if c.file else "-"]
                                   for c in comms]})
     evidence = m.evidence.all()
     if evidence:
@@ -251,7 +252,7 @@ def evidence_delete(request, pk):
 def communication_add(request, pk):
     matter = get_object_or_404(LegalMatter, pk=pk)
     if request.method == "POST":
-        form = LegalCommunicationForm(request.POST)
+        form = LegalCommunicationForm(request.POST, request.FILES)
         if form.is_valid():
             comm = form.save(commit=False)
             comm.legal_matter = matter
@@ -268,9 +269,12 @@ def communication_edit(request, pk):
     comm = get_object_or_404(LegalCommunication, pk=pk)
     matter = comm.legal_matter
     if request.method == "POST":
-        form = LegalCommunicationForm(request.POST, instance=comm)
+        form = LegalCommunicationForm(request.POST, request.FILES, instance=comm)
         if form.is_valid():
-            form.save()
+            obj = form.save(commit=False)
+            if request.POST.get("clear_file"):
+                obj.file = ""
+            obj.save()
             return render(request, "legal/partials/_communication_list.html",
                           {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
     else:
