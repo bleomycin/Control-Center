@@ -115,14 +115,34 @@ class StakeholderListView(ListView):
         return qs
 
     def get_firms_queryset(self):
-        """Get firms with prefetched employees, optionally filtered by search and firm_type."""
+        """Get firms with prefetched employees, optionally filtered by search, firm_type, trust/risk."""
         qs = Stakeholder.objects.filter(entity_type="firm").prefetch_related("employees")
         q = self.request.GET.get("q", "").strip()
         if q:
             qs = qs.filter(Q(name__icontains=q) | Q(employees__name__icontains=q)).distinct()
-        firm_type = self.request.GET.get("firm_type", "").strip()
-        if firm_type:
-            qs = qs.filter(firm_type=firm_type)
+
+        # Multi-select firm_type filter
+        firm_types = [ft for ft in self.request.GET.getlist("firm_type") if ft]
+        if firm_types:
+            qs = qs.filter(firm_type__in=firm_types)
+
+        # Trust/risk rating filters
+        trust = self.request.GET.get("trust_rating", "").strip()
+        if trust and trust.isdigit():
+            qs = qs.filter(trust_rating=int(trust))
+        risk = self.request.GET.get("risk_rating", "").strip()
+        if risk and risk.isdigit():
+            qs = qs.filter(risk_rating=int(risk))
+
+        # Sorting
+        firm_sort = self.request.GET.get("firm_sort", "name_asc")
+        sort_map = {
+            "name_asc": "name",
+            "name_desc": "-name",
+            "trust_desc": "-trust_rating",
+            "risk_desc": "-risk_rating",
+        }
+        qs = qs.order_by(sort_map.get(firm_sort, "name"))
         return qs
 
     def get_template_names(self):
@@ -196,7 +216,18 @@ class StakeholderListView(ListView):
         if tab == "firms":
             ctx["firms"] = self.get_firms_queryset()
             ctx["firm_type_choices"] = get_choices("firm_type")
-            ctx["selected_firm_type"] = self.request.GET.get("firm_type", "")
+            selected_firm_types = [ft for ft in self.request.GET.getlist("firm_type") if ft]
+            ctx["selected_firm_types"] = selected_firm_types
+            ctx["selected_trust_rating"] = self.request.GET.get("trust_rating", "")
+            ctx["selected_risk_rating"] = self.request.GET.get("risk_rating", "")
+            ctx["firm_sort"] = self.request.GET.get("firm_sort", "name_asc")
+            # Count active filters
+            firm_filter_count = len(selected_firm_types)
+            if ctx["selected_trust_rating"]:
+                firm_filter_count += 1
+            if ctx["selected_risk_rating"]:
+                firm_filter_count += 1
+            ctx["firm_filter_count"] = firm_filter_count
 
         # Group stakeholders by parent-child hierarchy
         if tab != "firms" and ctx.get("stakeholders"):

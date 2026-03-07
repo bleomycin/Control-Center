@@ -72,20 +72,6 @@
         {% endfor %}
     </select>
     {% endif %}
-    {% if current_tab == "firms" %}
-    <select name="firm_type"
-            hx-get="{% url 'stakeholders:list' %}"
-            hx-trigger="change"
-            hx-target="#stakeholder-content"
-            hx-include="#filter-form"
-            hx-indicator="#loading-spinner"
-            class="rounded-md border-gray-600 bg-gray-800 text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2">
-        <option value="">All Firm Types</option>
-        {% for val, label in firm_type_choices %}
-        <option value="{{ val }}" {% if selected_firm_type == val %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-    </select>
-    {% endif %}
 </form>
 
 <div id="loading-spinner" class="htmx-indicator flex justify-center py-2"><div class="loading-spinner"></div></div>
@@ -112,6 +98,40 @@ function switchStakeholderTab(el, key) {
     // Show/hide type filter (only on All tab)
     const typeSelect = document.querySelector('select[name="type"]');
     if (typeSelect) { typeSelect.style.display = key === 'all' ? '' : 'none'; }
+}
+
+function toggleFirmFilters() {
+    var panel = document.getElementById('firm-filter-panel');
+    if (!panel) return;
+    var btn = document.getElementById('firm-filter-toggle-btn');
+    panel.classList.toggle('hidden');
+    if (!panel.classList.contains('hidden')) {
+        btn.classList.add('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.remove('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    } else if (!document.querySelector('#firm-filter-panel input:checked') && !Array.from(document.querySelectorAll('#firm-filter-panel select')).some(function(s) { return s.value; })) {
+        btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    }
+}
+
+function clearFirmFilters() {
+    var panel = document.getElementById('firm-filter-panel');
+    if (!panel) return;
+    panel.querySelectorAll('input[type=checkbox]').forEach(function(cb) { cb.checked = false; });
+    panel.querySelectorAll('select').forEach(function(s) { s.selectedIndex = 0; });
+    var badge = document.getElementById('firm-filter-count');
+    if (badge) badge.remove();
+    var btn = document.getElementById('firm-filter-toggle-btn');
+    if (btn) {
+        btn.classList.remove('bg-blue-600/20', 'border-blue-500', 'text-blue-300');
+        btn.classList.add('bg-gray-700', 'border-gray-600', 'text-gray-300', 'hover:bg-gray-600');
+    }
+    var sortSelect = document.getElementById('firm-sort');
+    htmx.ajax('GET', '{% url "stakeholders:list" %}', {
+        target: '#stakeholder-content',
+        swap: 'innerHTML',
+        values: {tab: 'firms', q: document.querySelector('input[name=q]').value || '', firm_sort: sortSelect ? sortSelect.value : 'name_asc'},
+    });
 }
 </script>
 {% endblock %}

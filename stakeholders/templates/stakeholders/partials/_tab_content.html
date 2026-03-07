@@ -1,4 +1,72 @@
 {% if current_tab == "firms" %}
+    <!-- Sort + Filter controls -->
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+        <select name="firm_sort" id="firm-sort"
+                hx-get="{% url 'stakeholders:list' %}" hx-trigger="change" hx-target="#stakeholder-content" hx-include="#filter-form, #firm-filter-panel" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-3 py-2">
+            <option value="name_asc" {% if firm_sort == "name_asc" %}selected{% endif %}>Name A-Z</option>
+            <option value="name_desc" {% if firm_sort == "name_desc" %}selected{% endif %}>Name Z-A</option>
+            <option value="trust_desc" {% if firm_sort == "trust_desc" %}selected{% endif %}>Trust High→Low</option>
+            <option value="risk_desc" {% if firm_sort == "risk_desc" %}selected{% endif %}>Risk High→Low</option>
+        </select>
+        <button type="button" id="firm-filter-toggle-btn" onclick="toggleFirmFilters()"
+                class="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors {% if firm_filter_count %}bg-blue-600/20 border border-blue-500 text-blue-300{% else %}bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600{% endif %}">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+            <span class="hidden sm:inline">Filters</span>
+            {% if firm_filter_count %}<span class="inline-flex items-center justify-center w-5 h-5 text-xs font-bold bg-blue-500 text-white rounded-full" id="firm-filter-count">{{ firm_filter_count }}</span>{% endif %}
+        </button>
+    </div>
+
+    {# Collapsible filter panel #}
+    <div id="firm-filter-panel" class="{% if not firm_filter_count %}hidden{% endif %} bg-gray-800 rounded-lg border border-gray-700 p-3 mb-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-6 sm:gap-y-3 sm:items-center">
+
+            {# Firm type pills #}
+            {% if firm_type_choices %}
+            <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs text-gray-400 font-medium">Type:</span>
+                {% for val, label in firm_type_choices %}
+                <label class="cursor-pointer">
+                    <input type="checkbox" name="firm_type" value="{{ val }}" {% if val in selected_firm_types %}checked{% endif %}
+                           hx-get="{% url 'stakeholders:list' %}" hx-trigger="change" hx-target="#stakeholder-content" hx-include="#filter-form, #firm-filter-panel, #firm-sort" hx-indicator="#loading-spinner"
+                           class="hidden peer">
+                    <span class="text-xs px-2.5 py-1 rounded-full border transition-colors peer-checked:bg-indigo-900/50 peer-checked:text-indigo-300 peer-checked:border-transparent border-gray-600 text-gray-400">{{ label }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {# Trust rating dropdown #}
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 font-medium">Trust:</span>
+                <select name="trust_rating"
+                        hx-get="{% url 'stakeholders:list' %}" hx-trigger="change" hx-target="#stakeholder-content" hx-include="#filter-form, #firm-filter-panel, #firm-sort" hx-indicator="#loading-spinner"
+                        class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1">
+                    <option value="">Any</option>
+                    {% for i in "12345" %}
+                    <option value="{{ i }}" {% if selected_trust_rating == i %}selected{% endif %}>{{ i }}/5</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Risk rating dropdown #}
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-400 font-medium">Risk:</span>
+                <select name="risk_rating"
+                        hx-get="{% url 'stakeholders:list' %}" hx-trigger="change" hx-target="#stakeholder-content" hx-include="#filter-form, #firm-filter-panel, #firm-sort" hx-indicator="#loading-spinner"
+                        class="rounded-md border-gray-600 bg-gray-700 text-gray-100 text-xs px-2 py-1">
+                    <option value="">Any</option>
+                    {% for i in "12345" %}
+                    <option value="{{ i }}" {% if selected_risk_rating == i %}selected{% endif %}>{{ i }}/5</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            {# Clear button #}
+            <button type="button" onclick="clearFirmFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2 self-start sm:self-center">Clear</button>
+        </div>
+    </div>
+
     {% include "stakeholders/partials/_firm_cards.html" %}
 {% else %}
     <!-- Bulk action bar -->
