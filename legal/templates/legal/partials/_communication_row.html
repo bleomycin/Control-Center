@@ -1,0 +1,74 @@
+{% load choice_labels %}
+<div id="comm-row-{{ comm.pk }}" class="px-4 py-3 flex items-start justify-between group">
+    <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+            {% if comm.direction == "outbound" %}
+            <span class="text-cyan-400 text-sm" title="Outbound">↗</span>
+            {% else %}
+            <span class="text-amber-400 text-sm" title="Inbound">↙</span>
+            {% endif %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-gray-700 text-gray-300">{{ comm.method|choice_label:"contact_method" }}</span>
+            {% if comm.stakeholder %}
+            <a href="{{ comm.stakeholder.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ comm.stakeholder.name }}</a>
+            {% endif %}
+            <span class="text-xs text-gray-500">{{ comm.date|date:"M j, Y g:i A" }}</span>
+        </div>
+        {% if comm.subject %}
+        <p class="text-sm font-medium text-gray-200 mt-1">{{ comm.subject }}</p>
+        {% endif %}
+        <p class="text-sm text-gray-300 mt-1">{{ comm.summary }}</p>
+        {% if comm.follow_up_needed %}
+        <div class="flex items-center gap-2 mt-1 flex-wrap">
+            {% if comm.follow_up_completed %}
+                <span class="text-xs text-green-400 inline-flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                    Follow-up done{% if comm.follow_up_completed_date %} {{ comm.follow_up_completed_date|date:"M j" }}{% endif %}
+                </span>
+                <button hx-post="{% url 'legal:communication_toggle_followup' comm.pk %}"
+                        hx-target="#comm-row-{{ comm.pk }}" hx-swap="outerHTML"
+                        class="text-xs text-gray-500 hover:text-gray-300">(undo)</button>
+            {% elif comm.follow_up_date and comm.follow_up_date < today %}
+                <span class="text-xs text-red-400 inline-flex items-center gap-1">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                    Overdue — by {{ comm.follow_up_date|date:"M j, Y" }}
+                </span>
+                <button hx-post="{% url 'legal:communication_toggle_followup' comm.pk %}"
+                        hx-target="#comm-row-{{ comm.pk }}" hx-swap="outerHTML"
+                        class="text-xs text-green-500 hover:text-green-300">(done)</button>
+            {% else %}
+                <span class="text-xs text-yellow-400 inline-flex items-center gap-1">⚡ Follow-up needed</span>
+                {% if comm.follow_up_date %}
+                <span class="text-xs text-yellow-500/70">by {{ comm.follow_up_date|date:"M j, Y" }}</span>
+                {% endif %}
+                <button hx-post="{% url 'legal:communication_toggle_followup' comm.pk %}"
+                        hx-target="#comm-row-{{ comm.pk }}" hx-swap="outerHTML"
+                        class="text-xs text-green-500 hover:text-green-300">(done)</button>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% if comm.file %}
+        <div class="mt-1">
+            <a href="{{ comm.file.url }}" target="_blank" class="text-xs text-blue-400 hover:text-blue-300 inline-flex items-center gap-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                {{ comm.file.name|cut:"communications/" }}
+            </a>
+        </div>
+        {% endif %}
+    </div>
+    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+        {% if comm.stakeholder %}
+        <a href="{% url 'tasks:create' %}?legal={{ matter.pk }}&stakeholder={{ comm.stakeholder.pk }}&direction={% if comm.direction == 'inbound' %}outbound{% else %}inbound{% endif %}{% if comm.subject %}&title={{ comm.subject|urlencode }}{% endif %}"
+           class="text-gray-500 hover:text-green-400 text-xs" title="Create task from this">task</a>
+        {% else %}
+        <a href="{% url 'tasks:create' %}?legal={{ matter.pk }}&direction={% if comm.direction == 'inbound' %}outbound{% else %}inbound{% endif %}{% if comm.subject %}&title={{ comm.subject|urlencode }}{% endif %}"
+           class="text-gray-500 hover:text-green-400 text-xs" title="Create task from this">task</a>
+        {% endif %}
+        <button hx-get="{% url 'legal:communication_edit' comm.pk %}"
+                hx-target="#communication-form-container"
+                hx-swap="innerHTML"
+                class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+        <button hx-post="{% url 'legal:communication_delete' comm.pk %}" hx-target="#communication-list" hx-swap="innerHTML"
+                hx-confirm="Delete this communication?"
+                class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+    </div>
+</div>

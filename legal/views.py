@@ -1,11 +1,81 @@
 from django.contrib import messages
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 from django.views.generic import CreateView, DeleteView, DetailView, ListView, UpdateView
 
 from dashboard.choices import get_choice_label, get_choices
+from stakeholders.models import Stakeholder
 from .forms import EvidenceForm, LegalCommunicationForm, LegalMatterForm
 from .models import Evidence, LegalCommunication, LegalMatter
+
+
+COMM_PAGE_SIZE = 20
+
+
+def _comm_list_context(matter, request=None, page=1):
+    """Build filtered, paginated communication list context for a legal matter."""
+    qs = matter.communications.select_related("stakeholder").all()
+
+    if request:
+        # Search subject + summary
+        q = request.GET.get("comm_q", "").strip()
+        if q:
+            qs = qs.filter(Q(subject__icontains=q) | Q(summary__icontains=q))
+
+        # Stakeholder filter
+        stakeholder_pk = request.GET.get("comm_stakeholder")
+        if stakeholder_pk:
+            qs = qs.filter(stakeholder_id=stakeholder_pk)
+
+        # Direction filter
+        direction = request.GET.get("comm_direction")
+        if direction in ("outbound", "inbound"):
+            qs = qs.filter(direction=direction)
+
+        # Method filter
+        method = request.GET.get("comm_method")
+        if method:
+            qs = qs.filter(method=method)
+
+        # Date range
+        date_from = request.GET.get("comm_date_from")
+        if date_from:
+            qs = qs.filter(date__date__gte=date_from)
+        date_to = request.GET.get("comm_date_to")
+        if date_to:
+            qs = qs.filter(date__date__lte=date_to)
+
+        # Has attachment
+        if request.GET.get("comm_has_file"):
+            qs = qs.exclude(file="")
+
+        # Follow-up needed
+        if request.GET.get("comm_follow_up"):
+            qs = qs.filter(follow_up_needed=True)
+
+        # Page from request
+        page_param = request.GET.get("comm_page")
+        if page_param:
+            try:
+                page = int(page_param)
+            except (ValueError, TypeError):
+                page = 1
+
+    total_count = qs.count()
+    limit = page * COMM_PAGE_SIZE
+    has_more = total_count > limit
+
+    return {
+        "communication_list": qs[:limit],
+        "matter": matter,
+        "has_more": has_more,
+        "next_page": page + 1,
+        "total_count": total_count,
+        "today": timezone.localdate(),
+    }
 
 
 class LegalMatterListView(ListView):
@@ -102,8 +172,13 @@ class LegalMatterDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         obj = self.object
-        ctx["communication_list"] = obj.communications.select_related("stakeholder").all()
+        ctx.update(_comm_list_context(obj))
         ctx["communication_form"] = LegalCommunicationForm()
+        # Distinct stakeholders who have comms on this matter (for filter dropdown)
+        ctx["comm_stakeholders"] = Stakeholder.objects.filter(
+            legal_communications__legal_matter=obj
+        ).distinct().order_by("name")
+        ctx["comm_method_choices"] = get_choices("contact_method")
         ctx["evidence_list"] = obj.evidence.all()
         ctx["evidence_form"] = EvidenceForm()
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
@@ -180,9 +255,10 @@ def export_pdf_detail(request, pk):
     comms = m.communications.select_related("stakeholder").all()
     if comms:
         sections.append({"heading": "Communications", "type": "table",
-                         "headers": ["Date", "Direction", "Method", "Contact", "Summary", "Follow-up", "Attachment"],
+                         "headers": ["Date", "Direction", "Subject", "Method", "Contact", "Summary", "Follow-up", "Attachment"],
                          "rows": [[c.date.strftime("%b %d, %Y %I:%M %p"),
                                    c.get_direction_display(),
+                                   c.subject or "-",
                                    get_choice_label("contact_method", c.method),
                                    c.stakeholder.name if c.stakeholder else "-",
                                    c.summary,
@@ -249,6 +325,13 @@ def evidence_delete(request, pk):
                   {"evidence_list": matter.evidence.all(), "matter": matter})
 
 
+def communication_list(request, pk):
+    """HTMX endpoint: filtered, paginated communication list."""
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    ctx = _comm_list_context(matter, request)
+    return render(request, "legal/partials/_communication_list.html", ctx)
+
+
 def communication_add(request, pk):
     matter = get_object_or_404(LegalMatter, pk=pk)
     if request.method == "POST":
@@ -257,8 +340,8 @@ def communication_add(request, pk):
             comm = form.save(commit=False)
             comm.legal_matter = matter
             comm.save()
-            return render(request, "legal/partials/_communication_list.html",
-                          {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
+            ctx = _comm_list_context(matter)
+            return render(request, "legal/partials/_communication_list.html", ctx)
     else:
         form = LegalCommunicationForm()
     return render(request, "legal/partials/_communication_form.html",
@@ -275,8 +358,8 @@ def communication_edit(request, pk):
             if request.POST.get("clear_file"):
                 obj.file = ""
             obj.save()
-            return render(request, "legal/partials/_communication_list.html",
-                          {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
+            ctx = _comm_list_context(matter)
+            return render(request, "legal/partials/_communication_list.html", ctx)
     else:
         form = LegalCommunicationForm(instance=comm)
     return render(request, "legal/partials/_communication_form.html",
@@ -288,8 +371,24 @@ def communication_delete(request, pk):
     matter = comm.legal_matter
     if request.method == "POST":
         comm.delete()
-    return render(request, "legal/partials/_communication_list.html",
-                  {"communication_list": matter.communications.select_related("stakeholder").all(), "matter": matter})
+    ctx = _comm_list_context(matter)
+    return render(request, "legal/partials/_communication_list.html", ctx)
+
+
+@require_POST
+def communication_toggle_followup(request, pk):
+    """Toggle follow_up_completed on a single communication, return row partial."""
+    comm = get_object_or_404(LegalCommunication.objects.select_related("stakeholder", "legal_matter"), pk=pk)
+    if comm.follow_up_completed:
+        comm.follow_up_completed = False
+        comm.follow_up_completed_date = None
+    else:
+        comm.follow_up_completed = True
+        comm.follow_up_completed_date = timezone.localdate()
+    comm.save(update_fields=["follow_up_completed", "follow_up_completed_date"])
+    return render(request, "legal/partials/_communication_row.html", {
+        "comm": comm, "matter": comm.legal_matter, "today": timezone.localdate(),
+    })
 
 
 def bulk_delete(request):

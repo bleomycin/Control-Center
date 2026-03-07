@@ -112,9 +112,12 @@ class LegalCommunication(models.Model):
     date = models.DateTimeField()
     direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES, default="outbound")
     method = models.CharField(max_length=30)
+    subject = models.CharField(max_length=255, blank=True)
     summary = models.TextField()
     follow_up_needed = models.BooleanField(default=False)
     follow_up_date = models.DateField(null=True, blank=True)
+    follow_up_completed = models.BooleanField(default=False)
+    follow_up_completed_date = models.DateField(null=True, blank=True)
     file = models.FileField(upload_to="communications/", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

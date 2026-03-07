@@ -552,38 +552,46 @@ class Command(BaseCommand):
 
         self.stdout.write("Creating legal communications...")
         comm_pks = []
-        # Format: (legal_matter_title, stakeholder_name, days_ago, direction, method, summary, followup, fu_days)
+        # Format: (legal_matter_title, stakeholder_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed)
         comm_data = [
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -14, "outbound", "email",
+             "Case summary and evidence",
              "Sent initial case summary and evidence of missed payments to Marcus for review.",
-             False, None),
+             False, None, False),
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -10, "inbound", "call",
+             "Filing timeline confirmation",
              "Marcus confirmed filing timeline. Expects hearing in 3-4 weeks. Discussed strategy — "
              "going for default judgment if Holston doesn't respond.",
-             True, 7),
+             True, 7, False),
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -5, "outbound", "email",
+             "Bank statements and property photos",
              "Forwarded bank statements showing bounced checks and 3 months of non-payment. "
              "Also sent photos of property condition from last inspection.",
-             False, None),
+             False, None, False),
             ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", -12, "outbound", "call",
+             "Title search results review",
              "Discussed title search results with Sandra. One old mechanics lien found — "
              "she says it should clear before closing.",
-             True, 5),
+             True, -3, True),
             ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", -7, "inbound", "email",
+             "Phase I environmental report",
              "Sandra sent Phase I environmental report summary. Property is clean — "
              "no remediation needed. Recommends proceeding to closing.",
-             False, None),
+             True, 5, False),
         ]
-        for lm_title, sh_name, days_ago, direction, method, summary, followup, fu_days in comm_data:
+        for lm_title, sh_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed in comm_data:
             comm = LegalCommunication.objects.create(
                 legal_matter=legal_matters[lm_title],
                 stakeholder=stakeholders[sh_name],
                 date=now + timedelta(days=days_ago),
                 direction=direction,
                 method=method,
+                subject=subject,
                 summary=summary,
                 follow_up_needed=followup,
                 follow_up_date=today + timedelta(days=fu_days) if fu_days else None,
+                follow_up_completed=fu_completed,
+                follow_up_completed_date=today if fu_completed else None,
             )
             comm_pks.append(comm.pk)
 

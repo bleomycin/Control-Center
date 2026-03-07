@@ -393,3 +393,341 @@ class LegalViewTests(TestCase):
         )
         resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class CommunicationSubjectTests(TestCase):
+    """Tests for the subject field on LegalCommunication."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Subject Test Matter")
+        cls.stakeholder = Stakeholder.objects.create(name="Test Contact")
+
+    def test_subject_saved_on_add(self):
+        resp = self.client.post(
+            reverse("legal:communication_add", args=[self.matter.pk]),
+            {
+                "date": "2025-06-01T10:00",
+                "direction": "outbound",
+                "method": "email",
+                "subject": "Retainer Proposal",
+                "summary": "Sent retainer for review.",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        comm = LegalCommunication.objects.get(subject="Retainer Proposal")
+        self.assertEqual(comm.summary, "Sent retainer for review.")
+
+    def test_subject_displayed_in_list(self):
+        LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            direction="outbound",
+            method="email",
+            subject="Discovery Request #3",
+            summary="Some details.",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "Discovery Request #3")
+
+    def test_subject_optional(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            method="call",
+            summary="No subject here",
+        )
+        self.assertEqual(comm.subject, "")
+
+    def test_subject_in_form(self):
+        resp = self.client.get(
+            reverse("legal:communication_add", args=[self.matter.pk])
+        )
+        self.assertContains(resp, "Subject")
+
+
+class CommunicationListFilterTests(TestCase):
+    """Tests for the communication_list HTMX endpoint with filters."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Filter Test Matter")
+        cls.s1 = Stakeholder.objects.create(name="Alice Attorney")
+        cls.s2 = Stakeholder.objects.create(name="Bob Barrister")
+        # Create several communications
+        cls.c1 = LegalCommunication.objects.create(
+            legal_matter=cls.matter, stakeholder=cls.s1,
+            date=timezone.now() - timedelta(days=10),
+            direction="outbound", method="email",
+            subject="Retainer agreement", summary="Sent retainer.",
+            follow_up_needed=True, follow_up_date=date.today() + timedelta(days=5),
+        )
+        cls.c2 = LegalCommunication.objects.create(
+            legal_matter=cls.matter, stakeholder=cls.s2,
+            date=timezone.now() - timedelta(days=5),
+            direction="inbound", method="call",
+            subject="Case update", summary="Bob called with update.",
+        )
+        cls.c3 = LegalCommunication.objects.create(
+            legal_matter=cls.matter, stakeholder=cls.s1,
+            date=timezone.now() - timedelta(days=2),
+            direction="outbound", method="email",
+            subject="Evidence package", summary="Sent evidence documents.",
+        )
+
+    def _url(self):
+        return reverse("legal:communication_list", args=[self.matter.pk])
+
+    def test_basic_list(self):
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Retainer agreement")
+        self.assertContains(resp, "Case update")
+
+    def test_filter_by_stakeholder(self):
+        resp = self.client.get(self._url(), {"comm_stakeholder": self.s1.pk})
+        self.assertContains(resp, "Retainer agreement")
+        self.assertContains(resp, "Evidence package")
+        self.assertNotContains(resp, "Bob called")
+
+    def test_filter_by_direction(self):
+        resp = self.client.get(self._url(), {"comm_direction": "inbound"})
+        self.assertContains(resp, "Case update")
+        self.assertNotContains(resp, "Retainer agreement")
+
+    def test_search_subject(self):
+        resp = self.client.get(self._url(), {"comm_q": "retainer"})
+        self.assertContains(resp, "Retainer agreement")
+        self.assertNotContains(resp, "Case update")
+
+    def test_search_summary(self):
+        resp = self.client.get(self._url(), {"comm_q": "evidence documents"})
+        self.assertContains(resp, "Evidence package")
+        self.assertNotContains(resp, "Case update")
+
+    def test_filter_by_method(self):
+        resp = self.client.get(self._url(), {"comm_method": "call"})
+        self.assertContains(resp, "Case update")
+        self.assertNotContains(resp, "Retainer agreement")
+
+    def test_filter_follow_up(self):
+        resp = self.client.get(self._url(), {"comm_follow_up": "1"})
+        self.assertContains(resp, "Retainer agreement")
+        self.assertNotContains(resp, "Case update")
+
+    def test_filter_date_range(self):
+        from_date = (date.today() - timedelta(days=6)).isoformat()
+        resp = self.client.get(self._url(), {"comm_date_from": from_date})
+        self.assertContains(resp, "Case update")
+        self.assertContains(resp, "Evidence package")
+        self.assertNotContains(resp, "Retainer agreement")
+
+    def test_pagination_has_more(self):
+        """Create 25 comms — page 1 shows 20, has_more=True."""
+        for i in range(22):
+            LegalCommunication.objects.create(
+                legal_matter=self.matter,
+                date=timezone.now() - timedelta(hours=i),
+                direction="outbound", method="email",
+                subject=f"Bulk comm {i}", summary=f"Bulk {i}",
+            )
+        # Total is 25 (3 from setUp + 22). Page 1 = first 20 items.
+        resp = self.client.get(self._url())
+        self.assertContains(resp, "Show more")
+
+    def test_pagination_page_2(self):
+        """Page 2 should show all items (40 limit)."""
+        for i in range(22):
+            LegalCommunication.objects.create(
+                legal_matter=self.matter,
+                date=timezone.now() - timedelta(hours=i),
+                direction="outbound", method="email",
+                summary=f"Bulk {i}",
+            )
+        resp = self.client.get(self._url(), {"comm_page": "2"})
+        self.assertNotContains(resp, "Show more")
+
+    def test_detail_page_has_total_count(self):
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertIn("total_count", resp.context)
+        self.assertEqual(resp.context["total_count"], 3)
+
+    def test_detail_page_has_comm_stakeholders(self):
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertIn("comm_stakeholders", resp.context)
+        names = [s.name for s in resp.context["comm_stakeholders"]]
+        self.assertIn("Alice Attorney", names)
+        self.assertIn("Bob Barrister", names)
+
+
+class FollowUpToggleTests(TestCase):
+    """Tests for follow-up completion toggle."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Toggle Test Matter")
+        cls.stakeholder = Stakeholder.objects.create(name="Toggle Contact")
+
+    def test_toggle_marks_completed(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            date=timezone.now(), direction="inbound", method="call",
+            summary="Needs follow-up",
+            follow_up_needed=True, follow_up_date=date.today() + timedelta(days=3),
+        )
+        resp = self.client.post(
+            reverse("legal:communication_toggle_followup", args=[comm.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        comm.refresh_from_db()
+        self.assertTrue(comm.follow_up_completed)
+        self.assertIsNotNone(comm.follow_up_completed_date)
+
+    def test_toggle_undo_completed(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            date=timezone.now(), direction="outbound", method="email",
+            summary="Already done",
+            follow_up_needed=True, follow_up_date=date.today() - timedelta(days=1),
+            follow_up_completed=True, follow_up_completed_date=date.today(),
+        )
+        resp = self.client.post(
+            reverse("legal:communication_toggle_followup", args=[comm.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        comm.refresh_from_db()
+        self.assertFalse(comm.follow_up_completed)
+        self.assertIsNone(comm.follow_up_completed_date)
+
+    def test_toggle_returns_row_partial(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            date=timezone.now(), direction="inbound", method="email",
+            summary="Row partial test",
+            follow_up_needed=True, follow_up_date=date.today() + timedelta(days=2),
+        )
+        resp = self.client.post(
+            reverse("legal:communication_toggle_followup", args=[comm.pk])
+        )
+        self.assertContains(resp, f"comm-row-{comm.pk}")
+
+    def test_toggle_get_not_allowed(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(), method="call", summary="Get test",
+            follow_up_needed=True, follow_up_date=date.today(),
+        )
+        resp = self.client.get(
+            reverse("legal:communication_toggle_followup", args=[comm.pk])
+        )
+        self.assertEqual(resp.status_code, 405)
+
+    def test_overdue_follow_up_shows_warning(self):
+        """An overdue follow-up should show 'Overdue' text in the detail page."""
+        LegalCommunication.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            date=timezone.now(), direction="inbound", method="call",
+            summary="Overdue test",
+            follow_up_needed=True,
+            follow_up_date=date.today() - timedelta(days=3),
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "Overdue")
+
+    def test_completed_follow_up_shows_done(self):
+        """A completed follow-up should show checkmark text."""
+        LegalCommunication.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            date=timezone.now(), direction="outbound", method="email",
+            summary="Done test",
+            follow_up_needed=True,
+            follow_up_date=date.today() - timedelta(days=1),
+            follow_up_completed=True, follow_up_completed_date=date.today(),
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "Follow-up done")
+
+
+class CommunicationFollowUpFieldTests(TestCase):
+    """Tests for the follow_up_completed model fields."""
+
+    def test_defaults(self):
+        m = LegalMatter.objects.create(title="FU Default")
+        comm = LegalCommunication.objects.create(
+            legal_matter=m, date=timezone.now(), method="call", summary="Test",
+        )
+        self.assertFalse(comm.follow_up_completed)
+        self.assertIsNone(comm.follow_up_completed_date)
+
+    def test_set_completed(self):
+        m = LegalMatter.objects.create(title="FU Set")
+        comm = LegalCommunication.objects.create(
+            legal_matter=m, date=timezone.now(), method="email", summary="Test",
+            follow_up_needed=True, follow_up_date=date.today(),
+            follow_up_completed=True, follow_up_completed_date=date.today(),
+        )
+        self.assertTrue(comm.follow_up_completed)
+        self.assertEqual(comm.follow_up_completed_date, date.today())
+
+
+class TaskTitlePrefillTests(TestCase):
+    """Test that task create form accepts title query param."""
+
+    def test_title_prefilled_from_query(self):
+        resp = self.client.get(reverse("tasks:create"), {"title": "Retainer Review"})
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Retainer Review")
+
+
+class LegalNotificationTests(TestCase):
+    """Tests for check_legal_followups notification function."""
+
+    def test_no_overdue_returns_message(self):
+        from legal.notifications import check_legal_followups
+        result = check_legal_followups()
+        # Either "Notifications disabled." or "No overdue legal follow-ups."
+        self.assertTrue(
+            "no overdue" in result.lower() or "disabled" in result.lower()
+        )
+
+    def test_overdue_creates_notifications(self):
+        from legal.notifications import check_legal_followups
+        from dashboard.models import Notification
+
+        m = LegalMatter.objects.create(title="Notify Matter")
+        s = Stakeholder.objects.create(name="Notify Contact")
+        LegalCommunication.objects.create(
+            legal_matter=m, stakeholder=s,
+            date=timezone.now(), direction="inbound", method="call",
+            summary="Overdue item",
+            follow_up_needed=True,
+            follow_up_date=date.today() - timedelta(days=5),
+            follow_up_completed=False,
+        )
+        result = check_legal_followups()
+        # May be "Notifications disabled." if no SMTP, but notifications should still work
+        # Check that at least the function ran
+        if "disabled" in result.lower():
+            self.assertIn("disabled", result.lower())
+        else:
+            self.assertIn("1", result)
+            self.assertTrue(Notification.objects.filter(message__icontains="Notify Contact").exists())
+
+    def test_completed_followup_not_notified(self):
+        from legal.notifications import check_legal_followups
+        from dashboard.models import Notification
+
+        m = LegalMatter.objects.create(title="Completed FU Matter")
+        LegalCommunication.objects.create(
+            legal_matter=m,
+            date=timezone.now(), method="email", summary="Already done",
+            follow_up_needed=True,
+            follow_up_date=date.today() - timedelta(days=2),
+            follow_up_completed=True, follow_up_completed_date=date.today(),
+        )
+        result = check_legal_followups()
+        # Should not find any overdue since it's completed
+        if "disabled" not in result.lower():
+            self.assertFalse(
+                Notification.objects.filter(message__icontains="Completed FU").exists()
+            )

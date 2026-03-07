@@ -222,6 +222,8 @@ class TaskCreateView(CreateView):
             initial["due_time"] = self.request.GET["due_time"]
         if self.request.GET.get("task_type"):
             initial["task_type"] = self.request.GET["task_type"]
+        if self.request.GET.get("title"):
+            initial["title"] = self.request.GET["title"]
         return initial
 
     def form_valid(self, form):

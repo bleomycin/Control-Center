@@ -29,6 +29,11 @@ class Command(BaseCommand):
                 "func": "tasks.notifications.check_stale_followups",
                 "schedule_type": Schedule.DAILY,
             },
+            {
+                "name": "Check Legal Follow-ups",
+                "func": "legal.notifications.check_legal_followups",
+                "schedule_type": Schedule.DAILY,
+            },
         ]
 
         for sched in notification_schedules:

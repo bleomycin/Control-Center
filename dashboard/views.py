@@ -1018,7 +1018,7 @@ def calendar_events(request):
     # Legal communication follow-ups (indigo)
     from legal.models import LegalCommunication
     legal_followups = LegalCommunication.objects.filter(
-        follow_up_needed=True, follow_up_date__isnull=False
+        follow_up_needed=True, follow_up_completed=False, follow_up_date__isnull=False
     ).select_related("stakeholder", "legal_matter")
     if start:
         legal_followups = legal_followups.filter(follow_up_date__gte=start)

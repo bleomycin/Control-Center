@@ -29,6 +29,10 @@
         </div>
     </div>
     <div class="mb-3">
+        <label for="{{ form.subject.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Subject</label>
+        {{ form.subject }}
+    </div>
+    <div class="mb-3">
         <label for="{{ form.summary.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Summary</label>
         {{ form.summary }}
     </div>
