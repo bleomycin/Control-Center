@@ -1,45 +1,49 @@
 <form hx-post="{% if editing %}{% url 'legal:communication_edit' editing.pk %}{% else %}{% url 'legal:communication_add' matter.pk %}{% endif %}" hx-target="#communication-list" hx-swap="innerHTML"
       hx-encoding="multipart/form-data"
-      class="px-4 py-4 border-b border-gray-700 bg-gray-750">
+      class="px-4 py-3 border-b border-gray-700 bg-gray-750">
     {% csrf_token %}
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-2 mb-2">
         <div>
-            <label for="{{ form.stakeholder.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Contact</label>
+            <label for="{{ form.stakeholder.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Contact</label>
             {{ form.stakeholder }}
         </div>
         <div>
-            <label for="{{ form.date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Date</label>
-            {{ form.date }}
-        </div>
-        <div>
-            <label for="{{ form.direction.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Direction</label>
+            <label for="{{ form.direction.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Direction</label>
             {{ form.direction }}
         </div>
         <div>
-            <label for="{{ form.method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Method</label>
+            <label for="{{ form.method.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Method</label>
             {{ form.method }}
         </div>
-        <div class="flex items-center gap-2 pt-5">
-            {{ form.follow_up_needed }}
-            <label for="{{ form.follow_up_needed.id_for_label }}" class="text-xs font-medium text-gray-400">Follow-up needed</label>
-        </div>
         <div>
-            <label for="{{ form.follow_up_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Follow-up date</label>
-            {{ form.follow_up_date }}
+            <label for="{{ form.date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Date</label>
+            {{ form.date }}
+        </div>
+        <div class="col-span-2 sm:col-span-2">
+            <div class="flex items-end gap-3">
+                <label class="flex items-center gap-1.5 cursor-pointer pb-1.5">
+                    {{ form.follow_up_needed }}
+                    <span class="text-xs font-medium text-gray-400 whitespace-nowrap">Follow-up</span>
+                </label>
+                <div class="flex-1">
+                    <label for="{{ form.follow_up_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Follow-up date</label>
+                    {{ form.follow_up_date }}
+                </div>
+            </div>
         </div>
     </div>
-    <div class="mb-3">
-        <label for="{{ form.subject.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Subject</label>
+    <div class="mb-2">
+        <label for="{{ form.subject.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Subject</label>
         {{ form.subject }}
     </div>
-    <div class="mb-3">
-        <label for="{{ form.summary.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Summary</label>
+    <div class="mb-2">
+        <label for="{{ form.summary.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-0.5">Summary</label>
         {{ form.summary }}
     </div>
-    <div class="mb-3">
-        <label class="block text-xs font-medium text-gray-400 mb-1">Attachment</label>
+    <div class="mb-2">
+        <label class="block text-xs font-medium text-gray-400 mb-0.5">Attachment</label>
         {% if editing and editing.file %}
-        <div class="flex items-center gap-2 mb-2">
+        <div class="flex items-center gap-2 mb-1">
             <a href="{{ editing.file.url }}" target="_blank" class="text-sm text-blue-400 hover:text-blue-300">{{ editing.file.name|cut:"communications/" }}</a>
             <label class="flex items-center gap-1 text-xs text-gray-400">
                 <input type="checkbox" name="clear_file" value="1" class="rounded border-gray-600 bg-gray-700 text-red-500 focus:ring-red-500">
