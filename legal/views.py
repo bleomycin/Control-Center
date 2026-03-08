@@ -116,7 +116,7 @@ class LegalMatterListView(ListView):
 
     def get_template_names(self):
         if self.request.headers.get("HX-Request"):
-            return ["legal/partials/_legal_table_rows.html"]
+            return ["legal/partials/_legal_table.html"]
         return [self.template_name]
 
     def get_context_data(self, **kwargs):
