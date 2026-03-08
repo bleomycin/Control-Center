@@ -107,7 +107,7 @@ class LegalMatterListView(ListView):
         hearing_date_to = self.request.GET.get("hearing_date_to")
         if hearing_date_to:
             qs = qs.filter(next_hearing_date__lte=hearing_date_to)
-        ALLOWED_SORTS = {"title", "status", "matter_type", "filing_date", "next_hearing_date"}
+        ALLOWED_SORTS = {"title", "status", "matter_type", "filing_date", "next_hearing_date", "created_at"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
             direction = "" if self.request.GET.get("dir") == "asc" else "-"
