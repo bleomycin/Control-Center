@@ -163,9 +163,17 @@ class Command(BaseCommand):
             "--sections", nargs="+", choices=SECTION_ORDER,
             help="Sections to load (default: all). Options: " + ", ".join(SECTION_ORDER),
         )
+        parser.add_argument(
+            "--hard-reset", action="store_true",
+            help="Delete ALL data from sample-data models and reset manifest. "
+                 "Use when sample data is corrupted or duplicated.",
+        )
 
     def handle(self, *args, **options):
         from dashboard.models import SampleDataStatus
+
+        if options.get("hard_reset"):
+            return self._hard_reset()
 
         sample_status = SampleDataStatus.load()
         sections = options.get("sections") or SECTION_ORDER
@@ -180,7 +188,7 @@ class Command(BaseCommand):
             if not sections:
                 return
 
-        today = date.today()
+        today = timezone.localdate()
         now = timezone.now()
 
         # Seed choices (always, idempotent)
@@ -210,6 +218,34 @@ class Command(BaseCommand):
             self.stdout.write(f"  {SECTION_LABELS[section]}: {total} records")
 
         self.stdout.write(self.style.SUCCESS("Done."))
+
+    def _hard_reset(self):
+        """Delete ALL records from every model used by sample data, reset manifest."""
+        from django.apps import apps
+        from dashboard.models import SampleDataStatus
+
+        self.stdout.write(self.style.WARNING("Hard reset: deleting ALL data from sample-data models..."))
+
+        # Delete in dependency order (children first)
+        all_models_ordered = []
+        for section in reversed(SECTION_ORDER):
+            all_models_ordered.extend(SECTION_DELETION_ORDER.get(section, []))
+
+        for model_label in all_models_ordered:
+            Model = apps.get_model(model_label)
+            count = Model.objects.count()
+            if count:
+                Model.objects.all().delete()
+                self.stdout.write(f"  Deleted {count} {model_label} records")
+
+        # Reset the manifest
+        status = SampleDataStatus.load()
+        status.manifest = {}
+        status.is_loaded = False
+        status.loaded_at = None
+        status.save()
+
+        self.stdout.write(self.style.SUCCESS("Hard reset complete. All sample-data models emptied, manifest cleared."))
 
     # -----------------------------------------------------------------------
     # STAKEHOLDERS

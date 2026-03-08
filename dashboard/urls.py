@@ -21,6 +21,7 @@ urlpatterns = [
     path("settings/sample-data/remove/", views.sample_data_remove, name="sample_data_remove"),
     path("settings/sample-data/load/<str:section>/", views.sample_data_load_section, name="sample_data_load_section"),
     path("settings/sample-data/remove/<str:section>/", views.sample_data_remove_section, name="sample_data_remove_section"),
+    path("settings/sample-data/hard-reset/", views.sample_data_hard_reset, name="sample_data_hard_reset"),
     path("settings/choices/", views.choice_settings, name="choice_settings"),
     path("settings/choices/add/<str:category>/", views.choice_add, name="choice_add"),
     path("settings/choices/edit/<int:pk>/", views.choice_edit, name="choice_edit"),

@@ -1302,9 +1302,12 @@ def sample_data_load(request):
     from django.core.management import call_command
     from io import StringIO
 
-    out = StringIO()
-    call_command("load_sample_data", stdout=out)
-    return _sample_data_card_response(request, out.getvalue().strip())
+    try:
+        out = StringIO()
+        call_command("load_sample_data", stdout=out)
+        return _sample_data_card_response(request, out.getvalue().strip())
+    except Exception as e:
+        return _sample_data_card_response(request, f"Error loading data: {e}")
 
 
 @require_POST
@@ -1331,11 +1334,14 @@ def sample_data_load_section(request, section):
     if section not in SECTION_ORDER:
         return _sample_data_card_response(request, f"Unknown section: {section}")
 
-    out = StringIO()
-    call_command("load_sample_data", "--sections", section, stdout=out)
-    return _sample_data_card_response(
-        request, f"{SECTION_LABELS[section]} loaded successfully."
-    )
+    try:
+        out = StringIO()
+        call_command("load_sample_data", "--sections", section, stdout=out)
+        return _sample_data_card_response(
+            request, f"{SECTION_LABELS[section]} loaded successfully."
+        )
+    except Exception as e:
+        return _sample_data_card_response(request, f"Error loading {section}: {e}")
 
 
 @require_POST
@@ -1355,6 +1361,20 @@ def sample_data_remove_section(request, section):
     return _sample_data_card_response(
         request, f"{SECTION_LABELS[section]} removed."
     )
+
+
+@require_POST
+def sample_data_hard_reset(request):
+    """Nuclear option: delete ALL data from sample-data models, reset manifest."""
+    from django.core.management import call_command
+    from io import StringIO
+
+    try:
+        out = StringIO()
+        call_command("load_sample_data", "--hard-reset", stdout=out)
+        return _sample_data_card_response(request, "Hard reset complete. All sample data models emptied.")
+    except Exception as e:
+        return _sample_data_card_response(request, f"Error during reset: {e}")
 
 
 def _remove_section_data(status, section):
