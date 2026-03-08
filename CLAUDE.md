@@ -1,10 +1,24 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
+
+## CRITICAL RULES — Follow These Every Session
+
+1. **Docker**: ALWAYS use OrbStack Docker on port 8000. NEVER use `python manage.py runserver`. NEVER kill port 8000 with `lsof`. Use `docker compose down` / `docker compose up --build -d`. ALWAYS leave Docker running when done.
+2. **Git identity**: ALL commits MUST use `bleomycin <bleomycin@users.noreply.github.com>`. Verify with `git config user.name && git config user.email` before first commit.
+3. **Tests**: ALWAYS run `python manage.py test` and verify all tests pass before reporting any work complete.
+4. **Visual verification**: After ANY template/CSS/JS/HTMX change, take Playwright screenshots at mobile (375x812) and desktop (1280x800) against the Docker container. NEVER report UI work complete without visual verification.
+5. **HTMX safety**: After any HTMX partial swap, verify elements OUTSIDE the swap target (counters, progress bars, sort dropdowns, styling) are NOT broken.
+6. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`. UTC vs local mismatch causes wrong results.
+7. **Sample data**: After implementing any new feature/model, ALWAYS update sample data in `load_sample_data.py` to exercise it. Verify M2M relationships use correct field names.
+8. **Tailwind**: ALWAYS run `make tailwind-build` after adding or changing CSS classes in templates.
+9. **iOS Safari**: Do NOT attempt CSS/JS workarounds for native input behaviors. If a first approach fails, stop and discuss alternatives with the user.
+10. **Plan-first**: For any feature touching 3+ files, read the most similar existing feature and present a plan BEFORE writing code.
+11. **Study existing patterns**: When asked for a feature similar to an existing one, study that implementation thoroughly. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
 
 ## Project Overview
 
-**Control Center** is a self-hosted personal management system designed as a single-user command center for managing complex personal affairs. Accessed via VPN on a private server. No team collaboration features needed.
+**Control Center** is a self-hosted personal management system designed as a single-user command center for managing complex personal affairs. Accessed via VPN on a private server.
 
 ## Tech Stack
 
@@ -25,14 +39,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Run Commands
 
-### Docker via OrbStack (required for dev/testing)
-
-The dev server runs in **OrbStack Docker** on port 8000. Always use the Docker container — never use `python manage.py runserver`.
-
-- **Rebuild after code changes**: `docker compose up --build -d`
-- **Tear down**: `docker compose down` (never `lsof -ti:8000 | xargs kill`)
-- **Always leave Docker running** when done so the user can connect to test
-- OK to tear down for rebuilds, but always bring it back up when finished
+The dev server runs in **OrbStack Docker** on port 8000. For local development commands, see `.claude/docs/ARCHITECTURE.md`.
 
 ```bash
 cp .env.example .env    # edit SECRET_KEY for production
@@ -49,77 +56,21 @@ docker compose exec web python manage.py restore /app/backups/<archive>.tar.gz
 docker compose exec web bash
 ```
 
-### Local Development (tests only)
-
-```bash
-# Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run migrations
-python manage.py migrate
-
-# Create superuser (for admin panel access)
-python manage.py createsuperuser
-
-# Run development server
-python manage.py runserver
-
-# Run on LAN / for ngrok
-python manage.py runserver 0.0.0.0:8000
-
-# Load sample data (comprehensive demo dataset)
-python manage.py load_sample_data
-
-# Register notification schedules (django-q2)
-python manage.py setup_schedules
-
-# Start background task worker (django-q2)
-python manage.py qcluster
-
-# Run all tests (unit + e2e)
-python manage.py test
-
-# Run only unit tests (exclude e2e)
-python manage.py test assets cashflow config dashboard legal notes stakeholders tasks
-
-# Run only e2e browser tests
-python manage.py test e2e
-
-# Run a single test module
-python manage.py test <app_name>.tests.<TestClass>
-
-# Make migrations after model changes
-python manage.py makemigrations
-
-# Backup / restore (local)
-python manage.py backup                    # → backups/controlcenter-backup-*.tar.gz
-python manage.py backup --keep 7           # keep only 7 most recent
-python manage.py restore backups/<file>.tar.gz
-
-# Tailwind CSS (standalone CLI — no Node.js required)
-make tailwind-install   # download binary to ./bin/tailwindcss
-make tailwind-build     # one-shot minified build → static/css/tailwind.css
-make tailwind-watch     # watch mode for development
-```
-
 ## Apps & Architecture
 
-Seven Django apps + one e2e test package, all relationally linked:
+Eight Django apps + one e2e test package, all relationally linked:
 
-| App | Models | Purpose |
-|-----|--------|---------|
-| **dashboard** | ChoiceOption, EmailSettings, BackupSettings, Notification, SampleDataStatus | Homepage, global search, timeline, calendar, email/SMTP, notifications, choice management, settings hub, backup config, sample data toggle |
-| **stakeholders** | Stakeholder, StakeholderTab, Relationship, ContactLog | CRM — entity profiles, trust/risk ratings, relationships, contact logs; firm/employee hierarchy via `parent_organization` self-FK; dynamic DB-backed list tabs |
-| **assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty, InsurancePolicy, PolicyHolder, Vehicle, VehicleOwner, Aircraft, AircraftOwner | Unified `/assets/` page with dynamic DB-backed tabs; M2M through models for multi-stakeholder ownership with percentages and roles; inline status editing; insurance policy tracking; loan-to-asset linking (property/investment/vehicle/aircraft); hard money loan tracking; vehicle tracking (VIN, make/model, mileage); aircraft tracking (tail number, total hours, base airport) |
-| **legal** | LegalMatter, Evidence | Case status, attorneys (M2M), evidence, related stakeholders/properties |
-| **tasks** | Task, FollowUp, SubTask | Deadlines, priorities, follow-ups, subtask checklists; bidirectional direction; multi-stakeholder M2M; meetings with time; kanban board; recurring tasks; grouped views |
-| **cashflow** | CashFlowEntry | Actual + projected inflows/outflows with category filtering and charts |
-| **notes** | Note, Attachment, Link, Tag, Folder | Searchable records linked to entities via M2M; external links; pinned notes, tags, folders, 3 view modes (cards/table/timeline) |
-| **e2e** | *(no models)* | Playwright browser tests — `StaticLiveServerTestCase` base class in `e2e/base.py`; 78 tests covering inline editing, HTMX swaps, form interactivity, calendar |
+| App | Purpose |
+|-----|---------|
+| **dashboard** | Homepage, global search, timeline, calendar, notifications, settings hub, backup config |
+| **stakeholders** | CRM — entity profiles, trust/risk ratings, relationships, contact logs; DB-backed tabs |
+| **assets** | Unified `/assets/` page with DB-backed tabs; properties, investments, loans, insurance, vehicles, aircraft, leases |
+| **legal** | Case status, attorneys (M2M), evidence, related stakeholders/assets |
+| **tasks** | Deadlines, priorities, follow-ups, subtasks, kanban, recurring tasks, meetings |
+| **cashflow** | Actual + projected inflows/outflows with category filtering and charts |
+| **notes** | Searchable records linked to entities via M2M; tags, folders, 3 view modes |
+| **healthcare** | Providers, medications, conditions, procedures, allergies, immunizations, insurance, vitals, appointments |
+| **e2e** | Playwright browser tests — `StaticLiveServerTestCase` base |
 
 ## Key Patterns
 
@@ -156,158 +107,43 @@ Seven Django apps + one e2e test package, all relationally linked:
 
 ### Multi-Stakeholder Ownership
 - Through models: `PropertyOwnership`, `InvestmentParticipant`, `LoanParty`, `VehicleOwner`, `AircraftOwner` — each stores percentage, role, and notes; all have `unique_together` on (asset FK, stakeholder FK); `PolicyHolder` also has `unique_together`
-- HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern for all 5 through models + PolicyHolder)
-- Inline notes: `_inline_notes.html`/`_inline_notes_form.html` shared partials; click-to-edit, save/cancel/clear; `get_notes_url()`/`get_notes_id()` on each through model
-- Stakeholder detail "All Connections" tabs: Stakeholders, Properties, Investments, Loans, Vehicles, Aircraft, Insurance, Legal, Tasks, Notes, Cash Flow
-- `StakeholderVehicleForm`, `StakeholderAircraftForm`, `StakeholderPolicyForm` in `stakeholders/forms.py`
+- HTMX inline add/delete on asset detail pages AND stakeholder detail page (mirror pattern for all through models)
 - Create forms include optional "Initial Owner/Participant" fields, hidden on edit via `get_form()` field deletion
 
-### Insurance Policy Tracking
-- `InsurancePolicy`: `policy_type` (DB-backed ChoiceOption), `status` (hardcoded: active/expired/cancelled/pending), carrier/agent FKs → Stakeholder
-- `PolicyHolder` through model (role, notes — no percentage); `covered_properties` M2M → RealEstate, `covered_vehicles` M2M → Vehicle, `covered_aircraft` M2M → Aircraft
-- Integrated into unified `/assets/` page as "policies" asset type; "Insurance" seed tab
-- HTMX inline policyholder add/delete on detail page; inline status editing on list
-- Asset detail pages: HTMX inline policy link/unlink (`AssetPolicyLinkForm`); shared partials `_asset_policy_form.html`/`_asset_policy_list.html`; "+ New Policy" pre-selects asset via query param
-- Graph shows octagon nodes (prefix `ins-`) for carrier, agent, and policyholder edges
-- Notes link via `related_policies` M2M
-
-### Loan Tracking
-- `Loan` has FKs to all 4 asset types: `related_property`, `related_investment`, `related_vehicle`, `related_aircraft` (all SET_NULL, nullable)
-- `is_hard_money` BooleanField + `default_interest_rate` DecimalField for hard money loans; orange "HM" badge on list/detail
-- Asset detail pages: HTMX inline loan link/unlink (`AssetLoanLinkForm`); shared partials `_asset_loan_form.html`/`_asset_loan_list.html`; "+ New Loan" pre-selects asset via query param
-- Same pattern as policy link/unlink but uses FK (set `loan.related_X = asset` / `= None`) instead of M2M `.add()`/`.remove()`
-- Unlink views verify FK ownership before clearing (prevents unlinking a loan that belongs to a different asset)
-- Asset list rows show orange loan count/balance subtitle via `Count`/`Sum` annotations
-
-### Vehicle & Aircraft Tracking
-- `Vehicle`: `vehicle_type` (DB-backed ChoiceOption), `status` (hardcoded: active/stored/sold/in_dispute); fields for VIN, make/model, mileage, license plate, registration state
-- `Aircraft`: `aircraft_type` (DB-backed ChoiceOption), `status` (adds in_maintenance); fields for tail number, serial number, total hours, base airport, registration country, num_engines
-- `VehicleOwner`/`AircraftOwner` through models with ownership percentage and role
-- Integrated into unified `/assets/` page as "vehicles"/"aircraft" asset types; seed tabs for each
-- Graph shows pentagon nodes (`v-` prefix) for vehicles, vee nodes (`ac-` prefix) for aircraft
-- Notes link via `related_vehicles`/`related_aircraft` M2M
-
-### Task System
-- `Task.direction`: `personal`/`outbound`/`inbound` — NOT a DB-backed ChoiceOption
-- `Task.related_stakeholders` M2M (plain, no through model); `_grouped_stakeholder_choices()` builds `<optgroup>` widget
-- `SubTask`: HTMX add/toggle/delete; progress bar on detail, `N/M` annotations on list/kanban; clickable counter on list expands inline toggle-only panel (`_inline_subtask_panel.html`) with OOB counter swap
-- Recurring: `is_recurring` + `recurrence_rule`; `create_next_recurrence()` called in all 4 completion paths
-- Meeting: `task_type="meeting"` + optional `due_time` TimeField; `QuickTaskForm` also supports meetings (type select + conditional time field)
-- Kanban: SortableJS drag-and-drop, `kanban_update` endpoint
-- Inline list edit: clickable status/priority badges cycle values; inline date picker; `_task_row.html` partial for single-row re-render
-- Inline detail edit: title (pencil → input), description (click → textarea), metadata (badges → dropdowns) — partials in `tasks/partials/_detail_*_display.html` / `_detail_*_editor.html`; breadcrumb synced via `HX-Trigger: updateTaskBreadcrumb`
-- Note indicator: `note_count` annotation on list queryset; icon + count link on list rows (links to `#notes-section` on detail); count badge in detail Notes section header
-
-### Calendar
-- FullCalendar v6.1.11, dark theme CSS overrides in `calendar.html`; JSON events from `calendar_events()` in `dashboard/views.py`
-- Event types: task (priority-colored), meeting (blue), payment (red), followup (amber), legal (purple), hearing (violet), contact (cyan)
-- Client-side filter toggles: `cal-toggle` buttons with `hiddenTypes` object; mobile collapsible filter panel
-- `dayMaxEvents: isMobile ? 3 : 4` — desktop shows "+N more" overflow link
-- Meetings with `due_time` rendered as timed events (`allDay: false`); week view shows them in time slots
-- Week view: `slotMinTime: '07:00:00'`, `slotMaxTime: '22:00:00'`, `expandRows: true` (hides dead hours)
-- Direction arrows: `↗` (outbound) / `↙` (inbound) replace old `[OUT]`/`[IN]` text prefixes
-- Payment amounts: `$2,500 — Loan Name` when `monthly_payment` exists; falls back to `Payment: Loan Name`
-- Hover tooltips: `info.el.title = info.event.title` in `eventDidMount`
-- Click-to-create: desktop `dateClick` → `/tasks/create/?due_date=YYYY-MM-DD`; week view also passes `due_time` + `task_type=meeting`
-- `TaskCreateView.get_initial()` accepts `due_date`, `due_time`, `task_type` query params
-
-### Quick Capture (mobile-first)
-- Sidebar "Quick Note" button → HTMX modal (`notes:quick_capture`); `QuickNoteForm` in `notes/forms.py`
-- Content-first layout: content textarea above title; title optional (auto-generated from first ~50 chars of content)
-- Auto-expanding textarea: JS `oninput` resize up to 40% viewport height; auto-focus on open
-- Date + Type stacked on mobile (`grid-cols-1 sm:grid-cols-2`); date wrapped in `w-fit` to prevent stretching
-- "More options" collapsible: folder, tag pills (colored `toggleTypePill` pattern), multi-select stakeholder, task
-- Stakeholder field is `ModelMultipleChoiceField` (multi-select, adds to `note.participants`)
-- No flex layout on form — simple `space-y-3` to prevent content collapsing when "More options" opens
-- Auto-title: view does `commit=False`, generates title from `content.split("\n", 1)[0][:50]`, then `save()` + `save_m2m()`
-
-### Notes System
-- 3 view modes: cards, list, timeline — `get_template_names()` routes by `view` param
-- `Tag` (name, slug, color) + `Folder` (name, color, sort_order); `notes/templatetags/tag_colors.py` maps color names → CSS class string literals (for Tailwind scanning)
-- Template tags: `tag_classes(color)`, `folder_classes(color)`, `note_type_classes(note_type)` — all return `{bg, text, border}` dict for colored pill rendering
-- Note type filter pills on list page: colored pill toggles (not plain checkboxes); `toggleTypePill` JS; `NOTE_TYPE_COLOR_MAP` for 7 types including `text_message`
-- Folder tab bar with inline "Manage Folders" panel; `HX-Trigger: foldersChanged` auto-refreshes tabs
-- Inline detail edit: title (pencil → input), content (click → EasyMDE textarea), metadata (badges → dropdowns + tag pills) — partials in `notes/partials/_detail_*_display.html` / `_detail_*_editor.html`
-- Note form: explicit field layout with 3-col grid (Date/Type/Folder); tags rendered as horizontal colored pills (not CheckboxSelectMultiple); `selected_tag_pks` property on form
-- Markdown: `render_markdown` template filter with `nl2br` + blank-line preprocessor; `prose-markdown` CSS in `input.css`
-
-### Notifications & Email
-- `tasks/notifications.py` — 3 django-q2 scheduled functions: overdue tasks, upcoming reminders, stale follow-ups; overdue/reminder notifications include subtask progress (`checklist N/M`) when incomplete
-- `EmailSettings` singleton (pk=1) stores SMTP config; `dashboard/email.py` provides connection helpers
-- `Notification` model with levels (info/warning/critical); sidebar bell with HTMX badge polling (60s)
-
-### Scheduled Tasks (Django-Q2)
-All registered via `python manage.py setup_schedules`; executed by `python manage.py qcluster`:
-
-| Task | Frequency | Function |
-|------|-----------|----------|
-| Check Overdue Tasks | Daily | `tasks.notifications.check_overdue_tasks` |
-| Check Upcoming Reminders | Hourly | `tasks.notifications.check_upcoming_reminders` |
-| Check Stale Follow-ups | Daily | `tasks.notifications.check_stale_followups` |
-| Automated Backup | Configurable (Settings UI) | `dashboard.backup_task.run_backup` |
-
-- Backup schedule is configurable via `/settings/backups/` — `BackupSettings` singleton (frequency, time, retention count, enabled/disabled)
-- Saving backup config from the UI immediately syncs the live `Schedule` record (no restart needed)
-- The 3 notification schedules are hardcoded (not user-configurable)
-
-### Infrastructure
-- **SQLite**: WAL mode + pragmas via `connection_created` signal in `dashboard/apps.py` (weak=False). Indexes on frequently-filtered fields.
-- **Backup**: `sqlite3.backup()` API + media → `.tar.gz`; configurable automated backup via `BackupSettings` singleton; web UI at `/settings/backups/` for schedule config + manual create/download/restore/upload
-- **Docker**: Single container — Gunicorn (2 workers, 30s timeout) foreground + qcluster background. `entrypoint.sh` handles migrate/collectstatic/createsuperuser.
-- **Tailwind**: Standalone CLI v3.4.17; config in `tailwind.config.js`, output at `static/css/tailwind.css`. Rebuild after adding/changing classes: `make tailwind-build`
-- **Environment**: `settings.py` uses `os.environ.get()` with dev-friendly fallbacks; production security headers gated behind `not DEBUG`
-- **Sample data**: `SampleDataStatus` singleton tracks loaded PKs in `manifest` JSONField; remove deletes only manifested PKs in reverse-dependency order
-
-### E2E Browser Testing (Playwright)
-- `e2e/base.py`: `PlaywrightTestCase` extends `StaticLiveServerTestCase` — spins up real HTTP server on random port, serves static files
-- Browser shared per class (expensive to launch), fresh page per test for isolation; `url()` helper constructs full URL
-- `requirements-dev.txt` for dev-only dependencies (playwright); install browsers via `playwright install chromium`
-- Tests verify actual DOM state after HTMX swaps, JS toggle functions, and responsive behavior
-- Test files: `test_task_inline.py` (detail editing), `test_task_list.py` (list + form), `test_note_inline.py` (detail editing), `test_note_list.py` (list + form), `test_subtasks.py` (checklist interactions), `test_calendar.py` (calendar events, filters, click-to-create)
-- `setUp()` calls `invalidate_choice_cache()` to avoid stale ChoiceOption cache across test classes
-- EasyMDE hides `<textarea>` — tests use `page.set_viewport_size({"width": 375, ...})` for mobile to skip EasyMDE
-
 ### Important Gotchas
+- **Local Python**: Use `source venv/bin/activate && python3` — no system-level Django installed
+- **Config dir history**: `blaine/` was renamed to `config/` (settings, urls, wsgi, asgi, forms, export helpers)
+- **Task test data**: Task form POST data requires `"direction": "personal"` or tests fail silently
+- **Data migrations**: Use `apps.get_model()` for model access — direct imports crash in migrations
+- **New templatetag dirs**: Must create `__init__.py` or Django silently fails to find tags
+- **`dashboard/views.py`** needs `get_object_or_404` imported (not available by default)
+- **Mobile modals**: Never use `flex-1 min-h-0` on modal form content — use `space-y-*` + `overflow-y-auto`
+- **datetime-local on mobile**: Use `grid-cols-1 sm:grid-cols-2` + `w-fit` wrapper
 - Dashboard views use lazy imports inside functions
 - Forms use `__init__` override for dynamic widget/choices setup
 - `Relationship`/`ContactLog`/`FollowUp` FKs use SET_NULL (not CASCADE) to prevent data loss on stakeholder deletion
 - Tag/AssetTab slug collision: uniqueness loop generates `base-slug-1`, `-2`, etc.
 - `bulk-actions.js` looks up `#select-all` dynamically and uses fully delegated change events (works after HTMX swaps)
 - `switchView()` uses `source: form` (not `values: getFilterValues()`) for proper multi-select serialization
-- **Timezone**: `TIME_ZONE = 'America/Los_Angeles'` with `USE_TZ = True`. Always use `timezone.localdate()` (not `date.today()`) and `timezone.localdate(dt)` (not `dt.date()`) when comparing dates from DateTimeFields — UTC vs local mismatch causes wrong results
 - Django test runner uses in-memory SQLite — WAL mode returns 'memory', not 'wal'
 - Backup/restore tests must use temp file-based DBs, not the in-memory test DB
 - E2E tests need `DJANGO_ALLOW_ASYNC_UNSAFE=true` (set in `e2e/base.py` setUp) for Playwright + LiveServerTestCase
 - EasyMDE textarea hiding: in e2e tests, use mobile viewport or target `.EasyMDEContainer` instead of the hidden `<textarea>`
-
-## UI & Frontend
-- Always verify UI changes visually using Playwright browser tests before marking mobile/responsive work as complete. Never assume CSS or layout changes work — take a screenshot or run an e2e check.
-- **Visual verification protocol**: After every template, CSS, or JS change, take Playwright screenshots at mobile (375x812) and desktop (1280x800) viewports against the running dev server. Examine for: overlapping elements, text overflow, hidden/misaligned buttons, missing backgrounds/borders, hamburger menu accessibility on mobile, HTMX-swapped content rendering correctly. Fix any issue and re-screenshot before moving on. Only report completion after both visual and test verification succeed.
-- iOS Safari is extremely finicky. Do NOT attempt CSS/JS workarounds for native input behaviors (date pickers, select styling). If a first approach fails, stop and discuss alternatives with the user rather than iterating through multiple failing approaches.
-
-## Data & Migrations
-- After implementing any feature, ensure sample data / seed data is updated to exercise the new feature in Docker. Check that migrations run before sample data is loaded, and verify M2M relationships use correct field/property name keys.
-
-## HTMX Patterns
-- When working with HTMX, always verify that elements outside the swap target (counters, progress bars, sort dropdowns, background styling) are not broken by the swap. Test the full page state after any HTMX partial update.
+- `render_pdf()` signature: `render_pdf(request, filename, title, subtitle="", sections=None)`
+- Investment model has no `status` field (unlike RealEstate, Loan, Vehicle, Aircraft)
+- `Django 6.0.2 ManyRelatedManager not iterable`: Must call `.all()` before passing to template `{% for %}` loops
 
 ## Repository
 - **Primary repo**: `https://github.com/bleomycin/Control-Center.git` (remote name: `origin`)
 - The old `Nexus` repo is retired — do NOT push or sync to it
 - There is only one remote (`origin`). If you see a `nexus` remote, remove it.
-- **Git identity (CRITICAL)**: ALL commits MUST use `bleomycin <bleomycin@users.noreply.github.com>` as both Author AND Committer. Before the first commit in any session, verify with `git config user.name && git config user.email`. If not set to `bleomycin` / `bleomycin@users.noreply.github.com`, run `git config user.name "bleomycin" && git config user.email "bleomycin@users.noreply.github.com"` before committing. NEVER commit as the local machine user.
 
 ## Deployment
-- After implementing features, always rebuild Docker and push GitHub release when the user asks. Standard deployment flow: run all tests → git push → docker build → push alpha release tag. Don't wait to be asked twice.
-- **Production upgrade**: `upgrade.sh` in project root automates safe upgrades (backup → git pull → docker build → restart → health check → rollback on failure). Run `./upgrade.sh --help` for options. Logs saved to `persist/logs/`.
+- After implementing features, always rebuild Docker and push GitHub release when the user asks. Standard deployment flow: run all tests → git push → docker build → push alpha release tag.
+- **Production upgrade**: `upgrade.sh` in project root automates safe upgrades (backup → git pull → docker build → restart → health check → rollback on failure).
 
 ## Feature Implementation
-- When the user asks for a feature similar to an existing one (e.g., 'like stakeholders'), study the existing implementation thoroughly before proposing a plan. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
-- **Plan-first for complex features**: For any feature touching 3+ files, read the existing implementation of the most similar feature and present a plan (models, views, templates, URLs) before writing code. Wait for user approval before implementing. This avoids wrong-approach rework.
-- **Bundle deployment into feature completion**: A feature is not "done" until all tests pass, changes are committed and pushed to GitHub, Docker is rebuilt and verified running, and a new alpha release tag is created. Don't stop at code — complete the full deploy pipeline. Use `/deploy` skill when ready.
-- **Test-driven iteration**: After each major component, write tests and run them before moving on. For any HTMX endpoint, write a test that verifies: 1) the partial renders correctly, 2) elements outside the swap target are preserved, 3) the feature works with and without sample data loaded.
-- **Always work in parallel**: Maximize use of parallel tool calls and background agents. Run independent operations concurrently (e.g., tests + Docker rebuild, multiple file reads, research agents). Never do sequentially what can be done in parallel.
-- **Optimize worker count**: Before starting any task, contemplate and spin up the optimum number of parallel workers (Task agents, background commands, concurrent tool calls) to maximize throughput. For research, launch multiple Explore agents covering different areas simultaneously. For implementation, run file reads in parallel, edits in parallel where independent, and tests + builds concurrently. Always think: "How many workers can I usefully run right now?"
-
-## Next Steps
-- User authentication (currently no login required — fine for single-user VPN access)
+- **Bundle deployment into feature completion**: A feature is not "done" until all tests pass, changes are committed and pushed to GitHub, Docker is rebuilt and verified running, and a new alpha release tag is created. Use `/deploy` skill when ready.
+- **Test-driven iteration**: After each major component, write tests and run them before moving on.
+- **Always work in parallel**: Maximize parallel tool calls and background agents. Run independent operations concurrently (tests + Docker rebuild, multiple file reads, research agents). Ask: "How many workers can I usefully run right now?"
+- For detailed feature-specific patterns (Insurance, Loans, Calendar, Tasks, Notes, etc.), see `.claude/docs/ARCHITECTURE.md`.
