@@ -1,0 +1,18 @@
+<div class="divide-y divide-gray-700">
+    {% for entity in entities %}
+    <div class="flex items-center justify-between px-4 py-2 group">
+        <div class="flex items-center gap-2 min-w-0">
+            <span class="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-400 whitespace-nowrap flex-shrink-0">{{ entity.type_label }}</span>
+            <a href="{{ entity.url }}" class="text-sm text-blue-400 hover:text-blue-300 truncate">{{ entity.name }}</a>
+            {% if entity.detail %}<span class="text-xs text-gray-500 truncate hidden sm:inline">{{ entity.detail }}</span>{% endif %}
+        </div>
+        <button hx-post="{% url 'legal:related_entity_unlink' matter.pk %}?type={{ entity.type_key }}&entity_pk={{ entity.pk }}"
+                hx-target="#related-entities-list"
+                hx-swap="innerHTML"
+                hx-confirm="Unlink {{ entity.name }}?"
+                class="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity text-sm flex-shrink-0 ml-2">&times;</button>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No related entities</p>
+    {% endfor %}
+</div>

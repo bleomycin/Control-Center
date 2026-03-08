@@ -321,136 +321,18 @@ function clearCommFilters() {
     </div>
 </div>
 
-<!-- Related Entities (collapsible) -->
-{% with has_attorneys=matter.attorneys.exists has_stakeholders=matter.related_stakeholders.exists has_properties=matter.related_properties.exists has_investments=matter.related_investments.exists has_loans=matter.related_loans.exists has_vehicles=matter.related_vehicles.exists has_aircraft=matter.related_aircraft.exists has_policies=matter.related_policies.exists has_leases=matter.related_leases.exists %}
-{% if has_attorneys or has_stakeholders or has_properties or has_investments or has_loans or has_vehicles or has_aircraft or has_policies or has_leases %}
-<details class="bg-gray-800 rounded-lg border border-gray-700 mb-6 group" open>
-    <summary class="px-4 py-3 cursor-pointer flex items-center gap-2 text-sm font-semibold text-gray-200 uppercase tracking-wide select-none hover:bg-gray-700/30 transition-colors">
-        <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-        Related Entities
-    </summary>
-    <div class="border-t border-gray-700 divide-y divide-gray-700">
-        {% if has_attorneys %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Attorneys</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for atty in matter.attorneys.all %}
-                <a href="{{ atty.get_absolute_url }}" class="flex items-center justify-between px-4 py-2.5 hover:bg-gray-700/50">
-                    <span class="text-sm text-blue-400">{{ atty.name }}</span>
-                    <span class="text-xs text-gray-400">{{ atty.organization|default:"" }}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_stakeholders %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Stakeholders</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for s in matter.related_stakeholders.all %}
-                <a href="{{ s.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ s.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_properties %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Properties</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for p in matter.related_properties.all %}
-                <a href="{{ p.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ p.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_investments %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Investments</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for inv in matter.related_investments.all %}
-                <a href="{{ inv.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ inv.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_loans %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Loans</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for loan in matter.related_loans.all %}
-                <a href="{{ loan.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ loan.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_vehicles %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Vehicles</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for v in matter.related_vehicles.all %}
-                <a href="{{ v.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ v.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_aircraft %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Aircraft</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for ac in matter.related_aircraft.all %}
-                <a href="{{ ac.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ ac.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_policies %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Insurance Policies</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for pol in matter.related_policies.all %}
-                <a href="{{ pol.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ pol.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-
-        {% if has_leases %}
-        <div>
-            <div class="px-4 py-2 bg-gray-800/50">
-                <span class="text-xs text-gray-400 uppercase tracking-wide">Leases</span>
-            </div>
-            <div class="divide-y divide-gray-700/50">
-                {% for lease in matter.related_leases.all %}
-                <a href="{{ lease.get_absolute_url }}" class="block px-4 py-2.5 text-sm text-blue-400 hover:text-blue-300 hover:bg-gray-700/50">{{ lease.name }}</a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
+<!-- Related Entities -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Entities</h2>
+        <button hx-get="{% url 'legal:related_entity_link' matter.pk %}"
+                hx-target="#related-entity-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Link</button>
     </div>
-</details>
-{% endif %}
-{% endwith %}
+    <div id="related-entity-form-container"></div>
+    <div id="related-entities-list">
+        {% include "legal/partials/_related_entities_list.html" with entities=related_entities %}
+    </div>
+</div>
 {% endblock %}

@@ -1,0 +1,7 @@
+<label class="block text-xs font-medium text-gray-400 mb-1">Entity</label>
+<select name="entity_pk" class="w-full bg-gray-700 border border-gray-600 rounded-md px-2.5 py-1.5 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+    <option value="">Select...</option>
+    {% for pk, name in options %}
+    <option value="{{ pk }}">{{ name }}</option>
+    {% endfor %}
+</select>

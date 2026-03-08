@@ -21,4 +21,7 @@ urlpatterns = [
     path("communications/<int:pk>/toggle-followup/", views.communication_toggle_followup, name="communication_toggle_followup"),
     path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
+    path("<int:pk>/related/link/", views.related_entity_link, name="related_entity_link"),
+    path("<int:pk>/related/unlink/", views.related_entity_unlink, name="related_entity_unlink"),
+    path("<int:pk>/related/options/", views.related_entity_options, name="related_entity_options"),
 ]

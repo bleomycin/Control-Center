@@ -201,6 +201,7 @@ class LegalMatterDetailView(DetailView):
         ctx["recent_comm_count"] = obj.communications.filter(
             date__date__gte=thirty_days_ago
         ).count()
+        ctx["related_entities"] = _build_entity_list(obj)
         return ctx
 
 
@@ -441,3 +442,111 @@ def bulk_export_csv(request):
         ("judgment_amount", "Judgment Amount"),
     ]
     return do_export(qs, fields, "legal_matters_selected")
+
+
+# ---------------------------------------------------------------------------
+# Related Entity Link / Unlink (HTMX)
+# ---------------------------------------------------------------------------
+
+# Mapping of entity type key -> (m2m_field_name, model_path, label, extra_detail_field)
+ENTITY_TYPE_MAP = {
+    "attorney":    ("attorneys", "stakeholders.Stakeholder", "Attorney", "organization"),
+    "stakeholder": ("related_stakeholders", "stakeholders.Stakeholder", "Stakeholder", "organization"),
+    "property":    ("related_properties", "assets.RealEstate", "Property", None),
+    "investment":  ("related_investments", "assets.Investment", "Investment", None),
+    "loan":        ("related_loans", "assets.Loan", "Loan", None),
+    "vehicle":     ("related_vehicles", "assets.Vehicle", "Vehicle", None),
+    "aircraft":    ("related_aircraft", "assets.Aircraft", "Aircraft", None),
+    "policy":      ("related_policies", "assets.InsurancePolicy", "Policy", None),
+    "lease":       ("related_leases", "assets.Lease", "Lease", None),
+}
+
+
+def _build_entity_list(matter):
+    """Build a flat list of all related entities for template rendering."""
+    entities = []
+    for type_key, (field_name, _model_path, label, detail_field) in ENTITY_TYPE_MAP.items():
+        for obj in getattr(matter, field_name).all():
+            entities.append({
+                "type_key": type_key,
+                "type_label": label,
+                "pk": obj.pk,
+                "name": str(obj),
+                "url": obj.get_absolute_url(),
+                "detail": getattr(obj, detail_field, "") if detail_field else "",
+            })
+    return entities
+
+
+def _related_entities_response(request, matter):
+    """Render the related entities list partial."""
+    return render(request, "legal/partials/_related_entities_list.html", {
+        "matter": matter,
+        "entities": _build_entity_list(matter),
+    })
+
+
+def related_entity_link(request, pk):
+    """GET = show link form, POST = add entity to M2M."""
+    from django.apps import apps
+
+    matter = get_object_or_404(LegalMatter, pk=pk)
+
+    if request.method == "POST":
+        entity_type = request.POST.get("entity_type", "")
+        entity_pk = request.POST.get("entity_pk", "")
+        if entity_type in ENTITY_TYPE_MAP and entity_pk:
+            field_name, model_path, _label, _detail = ENTITY_TYPE_MAP[entity_type]
+            Model = apps.get_model(model_path)
+            try:
+                obj = Model.objects.get(pk=entity_pk)
+                getattr(matter, field_name).add(obj)
+            except Model.DoesNotExist:
+                pass
+        return _related_entities_response(request, matter)
+
+    # GET: show form
+    type_choices = [(k, v[2]) for k, v in ENTITY_TYPE_MAP.items()]
+    return render(request, "legal/partials/_related_entity_form.html", {
+        "matter": matter,
+        "type_choices": type_choices,
+    })
+
+
+@require_POST
+def related_entity_unlink(request, pk):
+    """Remove an entity from the matter's M2M field."""
+    from django.apps import apps
+
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    entity_type = request.GET.get("type", "")
+    entity_pk = request.GET.get("entity_pk", "")
+    if entity_type in ENTITY_TYPE_MAP and entity_pk:
+        field_name, model_path, _label, _detail = ENTITY_TYPE_MAP[entity_type]
+        Model = apps.get_model(model_path)
+        try:
+            obj = Model.objects.get(pk=entity_pk)
+            getattr(matter, field_name).remove(obj)
+        except Model.DoesNotExist:
+            pass
+    return _related_entities_response(request, matter)
+
+
+def related_entity_options(request, pk):
+    """HTMX: return <select> options for the chosen entity type."""
+    from django.apps import apps
+
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    entity_type = request.GET.get("entity_type", "")
+    options = []
+    if entity_type in ENTITY_TYPE_MAP:
+        field_name, model_path, _label, _detail = ENTITY_TYPE_MAP[entity_type]
+        Model = apps.get_model(model_path)
+        # Exclude already-linked entities
+        existing_pks = set(getattr(matter, field_name).values_list("pk", flat=True))
+        for obj in Model.objects.order_by("name"):
+            if obj.pk not in existing_pks:
+                options.append((obj.pk, str(obj)))
+    return render(request, "legal/partials/_related_entity_options.html", {
+        "options": options,
+    })
