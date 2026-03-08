@@ -183,6 +183,24 @@ class LegalMatterDetailView(DetailView):
         ctx["evidence_form"] = EvidenceForm()
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
         ctx["notes"] = obj.notes.all()[:5]
+        # Activity summary stats
+        today = timezone.localdate()
+        ctx["pending_followups"] = obj.communications.filter(
+            follow_up_needed=True, follow_up_completed=False
+        ).count()
+        ctx["overdue_followups"] = obj.communications.filter(
+            follow_up_needed=True, follow_up_completed=False,
+            follow_up_date__lt=today,
+        ).count()
+        ctx["active_task_count"] = obj.tasks.exclude(status="complete").count()
+        nearest_due = obj.tasks.exclude(status="complete").exclude(
+            due_date__isnull=True
+        ).order_by("due_date").values_list("due_date", flat=True).first()
+        ctx["nearest_due_date"] = nearest_due
+        thirty_days_ago = today - timezone.timedelta(days=30)
+        ctx["recent_comm_count"] = obj.communications.filter(
+            date__date__gte=thirty_days_ago
+        ).count()
         return ctx
 
 

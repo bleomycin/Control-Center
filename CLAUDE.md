@@ -4,17 +4,19 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## CRITICAL RULES — Follow These Every Session
 
-1. **Docker**: ALWAYS use OrbStack Docker on port 8000. NEVER use `python manage.py runserver`. NEVER kill port 8000 with `lsof`. Use `docker compose down` / `docker compose up --build -d`. ALWAYS leave Docker running when done.
+1. **Docker**: ALWAYS use OrbStack Docker on port 8000. NEVER use `python manage.py runserver`. NEVER kill port 8000 with `lsof`. Use `docker compose down` / `docker compose up --build -d`. ALWAYS leave Docker running when done. Rebuild after code changes.
 2. **Git identity**: ALL commits MUST use `bleomycin <bleomycin@users.noreply.github.com>`. Verify with `git config user.name && git config user.email` before first commit.
-3. **Tests**: Run `make test` (or `make test-unit` + `make test-e2e` separately). Unit tests run in Docker; e2e Playwright tests run locally (random port, never touches Docker on :8000). NEVER run bare `python manage.py test` inside Docker — it fails on e2e imports. All tests must pass before reporting work complete.
-4. **Visual verification**: After ANY template/CSS/JS/HTMX change, take Playwright screenshots at mobile (375x812) and desktop (1280x800) against the Docker container. NEVER report UI work complete without visual verification.
-5. **HTMX safety**: After any HTMX partial swap, verify elements OUTSIDE the swap target (counters, progress bars, sort dropdowns, styling) are NOT broken.
-6. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`. UTC vs local mismatch causes wrong results.
-7. **Sample data**: After implementing any new feature/model, ALWAYS update sample data in `load_sample_data.py` to exercise it. Verify M2M relationships use correct field names.
-8. **Tailwind**: ALWAYS run `make tailwind-build` after adding or changing CSS classes in templates.
-9. **iOS Safari**: Do NOT attempt CSS/JS workarounds for native input behaviors. If a first approach fails, stop and discuss alternatives with the user.
-10. **Plan-first**: For any feature touching 3+ files, read the most similar existing feature and present a plan BEFORE writing code.
-11. **Study existing patterns**: When asked for a feature similar to an existing one, study that implementation thoroughly. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
+3. **Definition of Done** — ALL of these before reporting ANY work complete:
+   - (a) `make test-unit` (in Docker) + `make test-e2e` (local) — all pass. NEVER run bare `python manage.py test` inside Docker.
+   - (b) Playwright interactive verification against Docker on :8000 — click every new/changed button, link, HTMX action, form, toggle, collapsible. Verify they **work**, not just that they render.
+   - (c) Screenshots at desktop (1280x800) + mobile (375x812) — verify layout, empty states, edge cases.
+   - (d) After HTMX swaps: verify elements OUTSIDE the swap target (counters, progress bars, styling) are intact.
+   - (e) `make tailwind-build` if any CSS classes changed.
+   - **This is NOT optional. Do NOT report done without completing a–e.**
+4. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`.
+5. **Sample data**: After implementing any new feature/model, ALWAYS update `load_sample_data.py` to exercise it.
+6. **iOS Safari**: Do NOT attempt CSS/JS workarounds for native input behaviors. If a first approach fails, stop and discuss alternatives.
+7. **Plan-first**: For any feature touching 3+ files, read the most similar existing feature and present a plan BEFORE writing code. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
 
 ## Project Overview
 
