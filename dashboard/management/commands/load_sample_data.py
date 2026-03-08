@@ -1,6 +1,6 @@
 """
 Management command to populate Control Center with comprehensive sample data.
-Usage: python manage.py load_sample_data
+Usage: python manage.py load_sample_data [--sections stakeholders assets ...]
 """
 from datetime import date, timedelta
 from decimal import Decimal
@@ -23,22 +23,167 @@ from healthcare.models import (
 )
 
 
+# Canonical section order and labels
+SECTION_ORDER = [
+    "stakeholders", "assets", "legal", "tasks", "cashflow", "notes", "healthcare",
+]
+SECTION_LABELS = {
+    "stakeholders": "Stakeholders",
+    "assets": "Assets",
+    "legal": "Legal",
+    "tasks": "Tasks",
+    "cashflow": "Cash Flow",
+    "notes": "Notes",
+    "healthcare": "Healthcare",
+}
+
+# Which sections depend on which others (for loading)
+SECTION_DEPS = {
+    "stakeholders": [],
+    "assets": ["stakeholders"],
+    "legal": ["stakeholders", "assets"],
+    "tasks": ["stakeholders"],
+    "cashflow": ["stakeholders"],
+    "notes": [],
+    "healthcare": [],
+}
+
+# Deletion order per section (children before parents within each section)
+SECTION_DELETION_ORDER = {
+    "healthcare": [
+        "healthcare.appointment", "healthcare.advice", "healthcare.visit",
+        "healthcare.testresult", "healthcare.supplement", "healthcare.prescription",
+        "healthcare.condition", "healthcare.provider",
+    ],
+    "notes": ["notes.note", "notes.tag", "notes.folder"],
+    "cashflow": ["cashflow.cashflowentry"],
+    "tasks": ["tasks.followup", "tasks.task"],
+    "legal": ["legal.legalcommunication", "legal.evidence", "legal.legalmatter"],
+    "assets": [
+        "assets.leaseparty", "assets.lease", "assets.policyholder",
+        "assets.insurancepolicy", "assets.aircraftowner", "assets.vehicleowner",
+        "assets.loanparty", "assets.investmentparticipant", "assets.propertyownership",
+        "assets.aircraft", "assets.vehicle", "assets.loan", "assets.investment",
+        "assets.realestate",
+    ],
+    "stakeholders": [
+        "stakeholders.contactlog", "stakeholders.relationship",
+        "stakeholders.stakeholder",
+    ],
+}
+
+
+def _get_sample_stakeholders():
+    """Return dict of sample stakeholders by name, or empty dict if none loaded."""
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("stakeholders", {}).get("stakeholders.stakeholder", [])
+    if not pks:
+        return {}
+    return {s.name: s for s in Stakeholder.objects.filter(pk__in=pks)}
+
+
+def _get_sample_properties():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("assets", {}).get("assets.realestate", [])
+    if not pks:
+        return {}
+    return {p.name: p for p in RealEstate.objects.filter(pk__in=pks)}
+
+
+def _get_sample_investments():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("assets", {}).get("assets.investment", [])
+    if not pks:
+        return {}
+    return {i.name: i for i in Investment.objects.filter(pk__in=pks)}
+
+
+def _get_sample_loans():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("assets", {}).get("assets.loan", [])
+    if not pks:
+        return {}
+    return {ln.name: ln for ln in Loan.objects.filter(pk__in=pks)}
+
+
+def _get_sample_vehicles():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("assets", {}).get("assets.vehicle", [])
+    if not pks:
+        return {}
+    return {v.name: v for v in Vehicle.objects.filter(pk__in=pks)}
+
+
+def _get_sample_legal_matters():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("legal", {}).get("legal.legalmatter", [])
+    if not pks:
+        return {}
+    return {lm.title: lm for lm in LegalMatter.objects.filter(pk__in=pks)}
+
+
+def _get_sample_tasks():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("tasks", {}).get("tasks.task", [])
+    if not pks:
+        return {}
+    return {t.title: t for t in Task.objects.filter(pk__in=pks)}
+
+
+def _get_sample_leases():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("assets", {}).get("assets.lease", [])
+    if not pks:
+        return {}
+    return {l.name: l for l in Lease.objects.filter(pk__in=pks)}
+
+
+def _get_sample_insurance():
+    from dashboard.models import SampleDataStatus
+    status = SampleDataStatus.load()
+    pks = status.manifest.get("assets", {}).get("assets.insurancepolicy", [])
+    if not pks:
+        return {}
+    return {p.name: p for p in InsurancePolicy.objects.filter(pk__in=pks)}
+
+
 class Command(BaseCommand):
     help = "Load comprehensive sample data for demo purposes"
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--sections", nargs="+", choices=SECTION_ORDER,
+            help="Sections to load (default: all). Options: " + ", ".join(SECTION_ORDER),
+        )
 
     def handle(self, *args, **options):
         from dashboard.models import SampleDataStatus
 
         sample_status = SampleDataStatus.load()
-        if sample_status.is_loaded:
+        sections = options.get("sections") or SECTION_ORDER
+
+        # Check which sections are already loaded
+        already_loaded = [s for s in sections if sample_status.manifest.get(s)]
+        if already_loaded:
             self.stdout.write(self.style.WARNING(
-                "Sample data is already loaded. Remove it first via Settings before reloading."
+                f"Already loaded: {', '.join(already_loaded)}. Remove first before reloading."
             ))
-            return
+            sections = [s for s in sections if s not in already_loaded]
+            if not sections:
+                return
 
         today = date.today()
         now = timezone.now()
 
+        # Seed choices (always, idempotent)
         self.stdout.write("Seeding choice options...")
         from dashboard.models import ChoiceOption
         from dashboard.choice_seed_data import SEED_DATA
@@ -47,6 +192,30 @@ class Command(BaseCommand):
                 category=category, value=value,
                 defaults={"label": label, "sort_order": sort_order},
             )
+
+        for section in sections:
+            loader = getattr(self, f"_load_{section}")
+            manifest = loader(today, now)
+            sample_status.manifest[section] = manifest
+            self.stdout.write(self.style.SUCCESS(f"  Loaded {SECTION_LABELS[section]}"))
+
+        sample_status.is_loaded = any(sample_status.manifest.get(s) for s in SECTION_ORDER)
+        sample_status.loaded_at = timezone.now()
+        sample_status.save()
+
+        # Print summary
+        for section in sections:
+            m = sample_status.manifest.get(section, {})
+            total = sum(len(v) for v in m.values())
+            self.stdout.write(f"  {SECTION_LABELS[section]}: {total} records")
+
+        self.stdout.write(self.style.SUCCESS("Done."))
+
+    # -----------------------------------------------------------------------
+    # STAKEHOLDERS
+    # -----------------------------------------------------------------------
+    def _load_stakeholders(self, today, now):
+        from assets.models import PropertyOwnership  # noqa: F811 - needed for manifest
 
         self.stdout.write("Creating stakeholders...")
         stakeholders = {}
@@ -84,7 +253,6 @@ class Command(BaseCommand):
             stakeholders[name] = s
 
         # Firm: Armanino LLP
-        self.stdout.write("Creating firm and employees...")
         armanino = Stakeholder.objects.create(
             name="Armanino LLP", entity_type="firm", firm_type="accounting",
             email="info@armanino.com", phone="555-700-1000",
@@ -153,10 +321,30 @@ class Command(BaseCommand):
                 follow_up_date=today + timedelta(days=fu_days) if fu_days else None,
             )
 
+        return {
+            "stakeholders.stakeholder": [s.pk for s in stakeholders.values()],
+            "stakeholders.relationship": list(
+                Relationship.objects.filter(
+                    from_stakeholder__in=stakeholders.values()
+                ).values_list("pk", flat=True)
+            ),
+            "stakeholders.contactlog": list(
+                ContactLog.objects.filter(
+                    stakeholder__in=stakeholders.values()
+                ).values_list("pk", flat=True)
+            ),
+        }
+
+    # -----------------------------------------------------------------------
+    # ASSETS
+    # -----------------------------------------------------------------------
+    def _load_assets(self, today, now):
+        from assets.models import PropertyOwnership, InvestmentParticipant, LoanParty
+
+        stakeholders = _get_sample_stakeholders()
+
         self.stdout.write("Creating real estate...")
-        from assets.models import PropertyOwnership
         properties = {}
-        # Format: (name, tenant, addr, juris, ptype, val, acq, status, notes, [(stakeholder_name, ownership%, role)])
         prop_data = [
             ("1200 Oak Avenue", "", "1200 Oak Ave, Austin, TX 78701", "Travis County, TX", "Single Family",
              Decimal("385000.00"), today - timedelta(days=730), "owned",
@@ -222,29 +410,27 @@ class Command(BaseCommand):
                 **financials,
             )
             properties[name] = p
-            # Add ownership records
             for owner_name, percentage, role in owners:
-                PropertyOwnership.objects.create(
-                    property=p, stakeholder=stakeholders[owner_name],
-                    ownership_percentage=percentage, role=role
-                )
+                if owner_name in stakeholders:
+                    PropertyOwnership.objects.create(
+                        property=p, stakeholder=stakeholders[owner_name],
+                        ownership_percentage=percentage, role=role
+                    )
 
-        # Multi-role example: Tom Driscoll is also the contractor on 450 Elm Street
-        PropertyOwnership.objects.create(
-            property=properties["450 Elm Street"],
-            stakeholder=stakeholders["Tom Driscoll"],
-            role="Contractor",
-            notes="Handling renovation project on Unit B",
-        )
+        if "Tom Driscoll" in stakeholders and "450 Elm Street" in properties:
+            PropertyOwnership.objects.create(
+                property=properties["450 Elm Street"],
+                stakeholder=stakeholders["Tom Driscoll"],
+                role="Contractor",
+                notes="Handling renovation project on Unit B",
+            )
 
         self.stdout.write("Creating investments...")
-        from assets.models import InvestmentParticipant
         investments = {}
-        # Format: (name, type, institution, value, notes, [(stakeholder_name, ownership%, role)])
         inv_data = [
             ("Vanguard Total Market Index", "Index Fund", "Vanguard", Decimal("142500.00"),
              "Core holding. Dollar-cost averaging $2k/month.",
-             [("Derek Vasquez", None, "Advisor")]),  # Derek manages but doesn't own
+             [("Derek Vasquez", None, "Advisor")]),
             ("Schwab S&P 500 ETF", "ETF", "Charles Schwab", Decimal("87300.00"),
              "Large cap exposure. Rebalance quarterly.",
              [("Derek Vasquez", None, "Advisor")]),
@@ -253,27 +439,25 @@ class Command(BaseCommand):
              [("Derek Vasquez", None, "Advisor")]),
             ("NP Investments LP - Fund II", "Private Equity", "NP Investments", Decimal("50000.00"),
              "Committed $50k to Nina's real estate fund. 3-year lockup. Annual distributions.",
-             [("Nina Patel", None, "Fund Manager")]),  # Nina manages the fund
+             [("Nina Patel", None, "Fund Manager")]),
             ("Bitcoin Holdings", "Cryptocurrency", "Coinbase", Decimal("22400.00"),
              "Speculative position. 0.35 BTC. Consider taking profits if above $70k.",
-             []),  # Sole ownership
+             []),
         ]
         for name, itype, inst, val, notes, participants in inv_data:
             inv = Investment.objects.create(
                 name=name, investment_type=itype, institution=inst, current_value=val, notes_text=notes,
             )
             investments[name] = inv
-            # Add participant records
             for participant_name, percentage, role in participants:
-                InvestmentParticipant.objects.create(
-                    investment=inv, stakeholder=stakeholders[participant_name],
-                    ownership_percentage=percentage, role=role
-                )
+                if participant_name in stakeholders:
+                    InvestmentParticipant.objects.create(
+                        investment=inv, stakeholder=stakeholders[participant_name],
+                        ownership_percentage=percentage, role=role
+                    )
 
         self.stdout.write("Creating loans...")
-        from assets.models import LoanParty
         loans = {}
-        # Format: (name, borrower_desc, orig, bal, rate, default_rate, is_hard_money, pmt, npd, mat, collat, status, notes, property_name, [(stakeholder_name, ownership%, role)])
         loan_data = [
             ("First National - Oak Ave Mortgage", "Owner (personal)",
              Decimal("320000.00"), Decimal("285400.00"), Decimal("4.750"), None, False,
@@ -302,7 +486,7 @@ class Command(BaseCommand):
              "2023 Ford F-150", "active",
              "Auto loan through credit union. On track.",
              None,
-             []),  # No specific lender stakeholder tracked; vehicle linked after creation
+             []),
         ]
         for name, borrower, orig, bal, rate, default_rate, is_hm, pmt, npd, mat, collat, status, notes, prop_name, parties in loan_data:
             ln = Loan.objects.create(
@@ -314,12 +498,12 @@ class Command(BaseCommand):
                 related_property=properties.get(prop_name) if prop_name else None,
             )
             loans[name] = ln
-            # Add party records
             for party_name, percentage, role in parties:
-                LoanParty.objects.create(
-                    loan=ln, stakeholder=stakeholders[party_name],
-                    ownership_percentage=percentage, role=role
-                )
+                if party_name in stakeholders:
+                    LoanParty.objects.create(
+                        loan=ln, stakeholder=stakeholders[party_name],
+                        ownership_percentage=percentage, role=role
+                    )
 
         self.stdout.write("Creating insurance policies...")
         insurance_policies = {}
@@ -345,14 +529,14 @@ class Command(BaseCommand):
              date(2024, 7, 1), date(2025, 1, 1), False,
              [], "Blanket auto coverage for all vehicles"),
         ]
-        # Get or create carrier stakeholder
         carrier, created = Stakeholder.objects.get_or_create(
             name="National Property Ins",
             defaults={"entity_type": "lender", "email": "claims@natpropins.com",
                       "phone": "555-800-4567", "notes_text": "Insurance carrier for property and auto policies"},
         )
-        if created:
-            stakeholders["National Property Ins"] = carrier
+        # Track carrier in stakeholders manifest if we created it and stakeholders are loaded
+        extra_stakeholder_pks = [carrier.pk] if created else []
+
         policy_pks = []
         for (name, policy_num, ptype, status, carrier_name, agent_name,
              premium, freq, deductible, coverage, eff, exp, auto_renew,
@@ -367,9 +551,10 @@ class Command(BaseCommand):
             for pname in covered_prop_names:
                 if pname in properties:
                     pol.covered_properties.add(properties[pname])
-            PolicyHolder.objects.create(
-                policy=pol, stakeholder=stakeholders["Tom Driscoll"], role="Named Insured",
-            )
+            if "Tom Driscoll" in stakeholders:
+                PolicyHolder.objects.create(
+                    policy=pol, stakeholder=stakeholders["Tom Driscoll"], role="Named Insured",
+                )
             insurance_policies[name] = pol
             policy_pks.append(pol.pk)
 
@@ -403,10 +588,11 @@ class Command(BaseCommand):
             )
             vehicles[name] = v
             for owner_name, percentage, role in owners:
-                VehicleOwner.objects.create(
-                    vehicle=v, stakeholder=stakeholders[owner_name],
-                    ownership_percentage=percentage, role=role,
-                )
+                if owner_name in stakeholders:
+                    VehicleOwner.objects.create(
+                        vehicle=v, stakeholder=stakeholders[owner_name],
+                        ownership_percentage=percentage, role=role,
+                    )
 
         # Link Vehicle Loan to F-150
         f150_loan = loans.get("Vehicle Loan - F-150")
@@ -448,10 +634,96 @@ class Command(BaseCommand):
             )
             aircraft_dict[name] = ac
             for owner_name, percentage, role in owners:
-                AircraftOwner.objects.create(
-                    aircraft=ac, stakeholder=stakeholders[owner_name],
-                    ownership_percentage=percentage, role=role,
-                )
+                if owner_name in stakeholders:
+                    AircraftOwner.objects.create(
+                        aircraft=ac, stakeholder=stakeholders[owner_name],
+                        ownership_percentage=percentage, role=role,
+                    )
+
+        self.stdout.write("Creating leases...")
+        leases = {}
+        lease_data = [
+            ("Oak Ave Residential Lease", "1200 Oak Avenue", "residential", "active",
+             today - timedelta(days=300), today + timedelta(days=65),
+             Decimal("1800.00"), Decimal("1800.00"), 1, "auto",
+             "Standard 1-year residential lease with auto-renewal clause.", Decimal("3.00")),
+            ("Elm St Unit A Lease", "450 Elm Street", "residential", "active",
+             today - timedelta(days=200), today + timedelta(days=165),
+             Decimal("1350.00"), Decimal("1350.00"), 1, "option",
+             "1-year residential lease. Tenant has option to renew for another year at same rate.", None),
+            ("Elm St Unit B Lease", "450 Elm Street", "residential", "active",
+             today - timedelta(days=300), today + timedelta(days=65),
+             Decimal("1275.00"), Decimal("1275.00"), 1, "negotiable",
+             "Lease expiring soon. Need to discuss renewal terms with tenant.", None),
+            ("Magnolia Commercial Lease", "3300 Magnolia Blvd", "commercial", "upcoming",
+             today + timedelta(days=30), today + timedelta(days=30 + 365 * 5),
+             Decimal("8500.00"), Decimal("12000.00"), 1, "negotiable",
+             "5-year NNN commercial lease. Starts after property closing.", Decimal("4.00")),
+        ]
+        lease_pks = []
+        lease_party_pks = []
+        for name, prop_name, ltype, status, start, end, rent, deposit, due_day, renewal, notes, escalation in lease_data:
+            lease = Lease.objects.create(
+                name=name, related_property=properties[prop_name],
+                lease_type=ltype, status=status,
+                start_date=start, end_date=end,
+                monthly_rent=rent, security_deposit=deposit,
+                rent_due_day=due_day, renewal_type=renewal,
+                notes_text=notes, escalation_rate=escalation,
+            )
+            leases[name] = lease
+            lease_pks.append(lease.pk)
+
+        if "Nina Patel" in stakeholders and "Magnolia Commercial Lease" in leases:
+            lp = LeaseParty.objects.create(
+                lease=leases["Magnolia Commercial Lease"],
+                stakeholder=stakeholders["Nina Patel"],
+                role="Co-landlord",
+                notes="Co-investor on Magnolia portfolio.",
+            )
+            lease_party_pks.append(lp.pk)
+
+        manifest = {
+            "assets.realestate": [p.pk for p in properties.values()],
+            "assets.investment": [i.pk for i in investments.values()],
+            "assets.loan": [ln.pk for ln in loans.values()],
+            "assets.propertyownership": list(
+                PropertyOwnership.objects.filter(property__in=properties.values()).values_list("pk", flat=True)
+            ),
+            "assets.investmentparticipant": list(
+                InvestmentParticipant.objects.filter(investment__in=investments.values()).values_list("pk", flat=True)
+            ),
+            "assets.loanparty": list(
+                LoanParty.objects.filter(loan__in=loans.values()).values_list("pk", flat=True)
+            ),
+            "assets.insurancepolicy": policy_pks,
+            "assets.policyholder": list(
+                PolicyHolder.objects.filter(policy__pk__in=policy_pks).values_list("pk", flat=True)
+            ),
+            "assets.vehicle": [v.pk for v in vehicles.values()],
+            "assets.vehicleowner": list(
+                VehicleOwner.objects.filter(vehicle__in=vehicles.values()).values_list("pk", flat=True)
+            ),
+            "assets.aircraft": [ac.pk for ac in aircraft_dict.values()],
+            "assets.aircraftowner": list(
+                AircraftOwner.objects.filter(aircraft__in=aircraft_dict.values()).values_list("pk", flat=True)
+            ),
+            "assets.lease": lease_pks,
+            "assets.leaseparty": lease_party_pks,
+        }
+        if extra_stakeholder_pks:
+            manifest["_extra_stakeholder_pks"] = extra_stakeholder_pks
+        return manifest
+
+    # -----------------------------------------------------------------------
+    # LEGAL
+    # -----------------------------------------------------------------------
+    def _load_legal(self, today, now):
+        stakeholders = _get_sample_stakeholders()
+        properties = _get_sample_properties()
+        investments = _get_sample_investments()
+        vehicles = _get_sample_vehicles()
+        leases = _get_sample_leases()
 
         self.stdout.write("Creating legal matters...")
         legal_matters = {}
@@ -487,19 +759,14 @@ class Command(BaseCommand):
              "updating beneficiary designations, power of attorney refresh.",
              ["Dr. Helen Park"], [], []),
         ]
-        # Hearing dates and financial amounts per matter
         lm_extras = {
             "Holston Eviction - 1200 Oak Ave": {
                 "next_hearing_date": today + timedelta(days=21),
                 "judgment_amount": Decimal("4200.00"),
             },
-            "Cedar Lane Boundary Dispute": {
-                "next_hearing_date": today + timedelta(days=45),
-            },
+            "Cedar Lane Boundary Dispute": {"next_hearing_date": today + timedelta(days=45)},
             "Magnolia Blvd Acquisition - Due Diligence": {},
-            "Riverside Zoning Application": {
-                "next_hearing_date": today + timedelta(days=14),
-            },
+            "Riverside Zoning Application": {"next_hearing_date": today + timedelta(days=14)},
             "Estate Plan Update": {},
         }
         for title, case, mtype, status, juris, court, filed, desc, attys, shs, props in lm_data:
@@ -510,20 +777,26 @@ class Command(BaseCommand):
                 **extras,
             )
             for a in attys:
-                lm.attorneys.add(stakeholders[a])
+                if a in stakeholders:
+                    lm.attorneys.add(stakeholders[a])
             for s in shs:
-                lm.related_stakeholders.add(stakeholders[s])
+                if s in stakeholders:
+                    lm.related_stakeholders.add(stakeholders[s])
             for p in props:
-                lm.related_properties.add(properties[p])
+                if p in properties:
+                    lm.related_properties.add(properties[p])
             legal_matters[title] = lm
 
-        # Link legal matters to other asset types (investments + vehicles available now)
+        # Cross-link to other asset types
         if "Estate Plan Update" in legal_matters and investments:
             for inv_name in list(investments.keys())[:2]:
                 legal_matters["Estate Plan Update"].related_investments.add(investments[inv_name])
         if "Cedar Lane Boundary Dispute" in legal_matters and vehicles:
             for v_name in list(vehicles.keys())[:1]:
                 legal_matters["Cedar Lane Boundary Dispute"].related_vehicles.add(vehicles[v_name])
+        if "Holston Eviction - 1200 Oak Ave" in legal_matters and leases:
+            for lease_name in list(leases.keys())[:1]:
+                legal_matters["Holston Eviction - 1200 Oak Ave"].related_leases.add(leases[lease_name])
 
         self.stdout.write("Creating evidence...")
         evidence_data = [
@@ -544,15 +817,15 @@ class Command(BaseCommand):
             ]),
         ]
         for lm_title, items in evidence_data:
-            for title, desc, etype, dt in items:
-                Evidence.objects.create(
-                    legal_matter=legal_matters[lm_title],
-                    title=title, description=desc, evidence_type=etype, date_obtained=dt,
-                )
+            if lm_title in legal_matters:
+                for title, desc, etype, dt in items:
+                    Evidence.objects.create(
+                        legal_matter=legal_matters[lm_title],
+                        title=title, description=desc, evidence_type=etype, date_obtained=dt,
+                    )
 
         self.stdout.write("Creating legal communications...")
         comm_pks = []
-        # Format: (legal_matter_title, stakeholder_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed)
         comm_data = [
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -14, "outbound", "email",
              "Case summary and evidence",
@@ -580,24 +853,38 @@ class Command(BaseCommand):
              True, 5, False),
         ]
         for lm_title, sh_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed in comm_data:
-            comm = LegalCommunication.objects.create(
-                legal_matter=legal_matters[lm_title],
-                stakeholder=stakeholders[sh_name],
-                date=now + timedelta(days=days_ago),
-                direction=direction,
-                method=method,
-                subject=subject,
-                summary=summary,
-                follow_up_needed=followup,
-                follow_up_date=today + timedelta(days=fu_days) if fu_days else None,
-                follow_up_completed=fu_completed,
-                follow_up_completed_date=today if fu_completed else None,
-            )
-            comm_pks.append(comm.pk)
+            if lm_title in legal_matters and sh_name in stakeholders:
+                comm = LegalCommunication.objects.create(
+                    legal_matter=legal_matters[lm_title],
+                    stakeholder=stakeholders[sh_name],
+                    date=now + timedelta(days=days_ago),
+                    direction=direction, method=method,
+                    subject=subject, summary=summary,
+                    follow_up_needed=followup,
+                    follow_up_date=today + timedelta(days=fu_days) if fu_days else None,
+                    follow_up_completed=fu_completed,
+                    follow_up_completed_date=today if fu_completed else None,
+                )
+                comm_pks.append(comm.pk)
+
+        return {
+            "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
+            "legal.evidence": list(
+                Evidence.objects.filter(legal_matter__in=legal_matters.values()).values_list("pk", flat=True)
+            ),
+            "legal.legalcommunication": comm_pks,
+        }
+
+    # -----------------------------------------------------------------------
+    # TASKS
+    # -----------------------------------------------------------------------
+    def _load_tasks(self, today, now):
+        stakeholders = _get_sample_stakeholders()
+        legal_matters = _get_sample_legal_matters()
+        properties = _get_sample_properties()
 
         self.stdout.write("Creating tasks...")
         tasks = {}
-        # Format: (title, desc, due, status, priority, ttype, direction, sh_name, lm_title, prop_name)
         task_data = [
             ("Follow up with Marcus on Holston hearing date", "Call Marcus Reed to confirm hearing date and discuss strategy.",
              today + timedelta(days=3), "not_started", "high", "one_time", "outbound",
@@ -644,7 +931,6 @@ class Command(BaseCommand):
             ("Research Bitcoin exit strategy", "Price is near target. Set limit orders or hold?",
              today + timedelta(days=2), "not_started", "low", "one_time", "personal",
              None, None, None),
-            # Armanino outbound tasks
             ("Request Polaris Risk background report via Armanino",
              "Asked Lisa Park to run a background/forensic report on Polaris Risk Group before considering their investment proposal.",
              today + timedelta(days=12), "not_started", "high", "one_time", "outbound",
@@ -657,7 +943,6 @@ class Command(BaseCommand):
              "Asked Michael Torres to review the tax implications of the Magnolia Blvd acquisition structure.",
              today + timedelta(days=25), "not_started", "medium", "one_time", "outbound",
              "Michael Torres", "Magnolia Blvd Acquisition - Due Diligence", "3300 Magnolia Blvd"),
-            # Armanino inbound tasks
             ("Schedule meeting with Michael Torres",
              "Michael Torres requested a meeting to discuss Q4 tax planning strategy and year-end adjustments.",
              today + timedelta(days=7), "not_started", "medium", "meeting", "inbound",
@@ -683,7 +968,7 @@ class Command(BaseCommand):
                 t.related_stakeholders.add(stakeholders[sh_name])
             tasks[title] = t
 
-        # Set meeting time/duration for meeting-type tasks
+        # Set meeting time/duration
         from datetime import time as t_time
         meeting_task = tasks.get("Schedule meeting with Michael Torres")
         if meeting_task:
@@ -692,7 +977,6 @@ class Command(BaseCommand):
             meeting_task.save(update_fields=["due_time", "duration_minutes"])
 
         self.stdout.write("Creating follow-ups...")
-        # Tuple: (task_title, stakeholder, days_ago, method, reminder_on, fu_days, responded, resp_date, notes)
         followup_data = [
             ("Follow up with Marcus on Holston hearing date", "Marcus Reed", -2, "call", True, 3, False, None,
              "Left voicemail. Will try again tomorrow."),
@@ -716,16 +1000,31 @@ class Command(BaseCommand):
              "Emailed Sarah with access to the Elm St bank statements. She'll compile the summary."),
         ]
         for task_title, sh_name, days_ago, method, reminder_on, fu_days, responded, resp_date, notes in followup_data:
-            FollowUp.objects.create(
-                task=tasks[task_title], stakeholder=stakeholders[sh_name],
-                outreach_date=now + timedelta(days=days_ago),
-                method=method, reminder_enabled=reminder_on, follow_up_days=fu_days,
-                response_received=responded, response_date=resp_date, notes_text=notes,
-            )
+            if task_title in tasks and sh_name in stakeholders:
+                FollowUp.objects.create(
+                    task=tasks[task_title], stakeholder=stakeholders[sh_name],
+                    outreach_date=now + timedelta(days=days_ago),
+                    method=method, reminder_enabled=reminder_on, follow_up_days=fu_days,
+                    response_received=responded, response_date=resp_date, notes_text=notes,
+                )
+
+        return {
+            "tasks.task": [t.pk for t in tasks.values()],
+            "tasks.followup": list(
+                FollowUp.objects.filter(task__in=tasks.values()).values_list("pk", flat=True)
+            ),
+        }
+
+    # -----------------------------------------------------------------------
+    # CASHFLOW
+    # -----------------------------------------------------------------------
+    def _load_cashflow(self, today, now):
+        stakeholders = _get_sample_stakeholders()
+        properties = _get_sample_properties()
+        loans = _get_sample_loans()
 
         self.stdout.write("Creating cash flow entries...")
         cf_data = [
-            # Recent actual entries
             ("Oak Ave rent received", Decimal("1800.00"), "inflow", "Rental Income", today - timedelta(days=2), False,
              None, "1200 Oak Avenue", None, "February rent from current tenant."),
             ("Elm St Unit A rent", Decimal("1400.00"), "inflow", "Rental Income", today - timedelta(days=5), False,
@@ -752,7 +1051,6 @@ class Command(BaseCommand):
              "Derek Vasquez", None, None, "Monthly dollar-cost average into index fund."),
             ("Whitfield appraisal fee", Decimal("450.00"), "outflow", "Professional Services", today - timedelta(days=12), False,
              "Karen Whitfield", "1200 Oak Avenue", None, "Appraisal for refinance consideration."),
-            # Projected entries
             ("Magnolia closing - down payment", Decimal("250000.00"), "outflow", "Acquisition", today + timedelta(days=25), True,
              "Nina Patel", "3300 Magnolia Blvd", None, "Due at closing. Split with Nina."),
             ("Magnolia closing - closing costs", Decimal("18500.00"), "outflow", "Acquisition", today + timedelta(days=25), True,
@@ -784,53 +1082,16 @@ class Command(BaseCommand):
             )
             cashflow_pks.append(cf.pk)
 
-        self.stdout.write("Creating leases...")
-        leases = {}
-        lease_data = [
-            ("Oak Ave Residential Lease", "1200 Oak Avenue", "residential", "active",
-             today - timedelta(days=300), today + timedelta(days=65),
-             Decimal("1800.00"), Decimal("1800.00"), 1, "auto",
-             "Standard 1-year residential lease with auto-renewal clause.", Decimal("3.00")),
-            ("Elm St Unit A Lease", "450 Elm Street", "residential", "active",
-             today - timedelta(days=200), today + timedelta(days=165),
-             Decimal("1350.00"), Decimal("1350.00"), 1, "option",
-             "1-year residential lease. Tenant has option to renew for another year at same rate.", None),
-            ("Elm St Unit B Lease", "450 Elm Street", "residential", "active",
-             today - timedelta(days=300), today + timedelta(days=65),
-             Decimal("1275.00"), Decimal("1275.00"), 1, "negotiable",
-             "Lease expiring soon. Need to discuss renewal terms with tenant.", None),
-            ("Magnolia Commercial Lease", "3300 Magnolia Blvd", "commercial", "upcoming",
-             today + timedelta(days=30), today + timedelta(days=30 + 365 * 5),
-             Decimal("8500.00"), Decimal("12000.00"), 1, "negotiable",
-             "5-year NNN commercial lease. Starts after property closing.", Decimal("4.00")),
-        ]
-        lease_pks = []
-        for name, prop_name, ltype, status, start, end, rent, deposit, due_day, renewal, notes, escalation in lease_data:
-            lease = Lease.objects.create(
-                name=name, related_property=properties[prop_name],
-                lease_type=ltype, status=status,
-                start_date=start, end_date=end,
-                monthly_rent=rent, security_deposit=deposit,
-                rent_due_day=due_day, renewal_type=renewal,
-                notes_text=notes, escalation_rate=escalation,
-            )
-            leases[name] = lease
-            lease_pks.append(lease.pk)
+        return {"cashflow.cashflowentry": cashflow_pks}
 
-        # Add Nina Patel as Co-landlord on Magnolia lease
-        lease_party_pks = []
-        lp = LeaseParty.objects.create(
-            lease=leases["Magnolia Commercial Lease"],
-            stakeholder=stakeholders["Nina Patel"],
-            role="Co-landlord",
-            notes="Co-investor on Magnolia portfolio.",
-        )
-        lease_party_pks.append(lp.pk)
-
-        # Link legal matters to leases (leases now exist)
-        if "Holston Eviction - 1200 Oak Ave" in legal_matters and leases:
-            for lease_name in list(leases.keys())[:1]:
-                legal_matters["Holston Eviction - 1200 Oak Ave"].related_leases.add(leases[lease_name])
+    # -----------------------------------------------------------------------
+    # NOTES
+    # -----------------------------------------------------------------------
+    def _load_notes(self, today, now):
+        stakeholders = _get_sample_stakeholders()
+        legal_matters = _get_sample_legal_matters()
+        properties = _get_sample_properties()
+        tasks = _get_sample_tasks()
 
         self.stdout.write("Creating tags and folders...")
         tag_data = [
@@ -843,7 +1104,8 @@ class Command(BaseCommand):
         ]
         tags = {}
         for slug, name, color in tag_data:
-            tags[slug] = Tag.objects.create(name=name, slug=slug, color=color)
+            tag, _ = Tag.objects.get_or_create(slug=slug, defaults={"name": name, "color": color})
+            tags[slug] = tag
 
         folder_data = [
             ("Legal", "red", 1),
@@ -854,145 +1116,51 @@ class Command(BaseCommand):
         ]
         folders = {}
         for name, color, order in folder_data:
-            folders[name] = Folder.objects.create(name=name, color=color, sort_order=order)
+            folder, _ = Folder.objects.get_or_create(name=name, defaults={"color": color, "sort_order": order})
+            folders[name] = folder
 
         self.stdout.write("Creating notes...")
         note_data = [
             ("Holston eviction strategy call with Marcus", "call", now - timedelta(days=2),
-             "Called Marcus to discuss eviction strategy.\n\n"
-             "Key points:\n"
-             "- Hearing likely in 3-4 weeks\n"
-             "- Judge typically rules in landlord's favor with proper documentation\n"
-             "- We have strong case: signed lease, payment history, demand letter\n"
-             "- Marcus recommends also pursuing judgment for back rent\n"
-             "- Total exposure: $4,200 back rent + ~$3,500 legal fees\n\n"
-             "Action items:\n"
-             "- Gather last 12 months bank statements showing no payments\n"
-             "- Get written statement from property manager about condition of unit",
+             "Called Marcus to discuss eviction strategy.\n\nKey points:\n- Hearing likely in 3-4 weeks\n- Judge typically rules in landlord's favor with proper documentation\n- We have strong case: signed lease, payment history, demand letter\n- Marcus recommends also pursuing judgment for back rent\n- Total exposure: $4,200 back rent + ~$3,500 legal fees\n\nAction items:\n- Gather last 12 months bank statements showing no payments\n- Get written statement from property manager about condition of unit",
              ["Marcus Reed"], ["Marcus Reed", "Ray Holston"], ["Holston Eviction - 1200 Oak Ave"],
              ["1200 Oak Avenue"], ["Follow up with Marcus on Holston hearing date"]),
-
             ("Magnolia Blvd walkthrough notes", "meeting", now - timedelta(days=10),
-             "Walked the property with Nina and Sandra.\n\n"
-             "Observations:\n"
-             "- Building is in good condition overall\n"
-             "- HVAC systems (3 units) are 8 years old - budget for replacement in 3-5 years\n"
-             "- Parking lot needs resealing - est $12k\n"
-             "- Current tenants are month-to-month, rents below market by ~15%\n"
-             "- Clear upside: raise rents gradually after closing\n\n"
-             "Nina's take: strong buy at asking price. I agree.\n\n"
-             "Next steps: finalize financing, review seller's disclosures, schedule closing.",
+             "Walked the property with Nina and Sandra.\n\nObservations:\n- Building is in good condition overall\n- HVAC systems (3 units) are 8 years old - budget for replacement in 3-5 years\n- Parking lot needs resealing - est $12k\n- Current tenants are month-to-month, rents below market by ~15%\n- Clear upside: raise rents gradually after closing\n\nNina's take: strong buy at asking price. I agree.\n\nNext steps: finalize financing, review seller's disclosures, schedule closing.",
              ["Nina Patel", "Sandra Liu"], ["Nina Patel", "Sandra Liu"],
              ["Magnolia Blvd Acquisition - Due Diligence"], ["3300 Magnolia Blvd"],
              ["Review Magnolia closing documents"]),
-
             ("Quarterly portfolio review with Derek", "meeting", now - timedelta(days=1),
-             "Met with Derek for Q4 review.\n\n"
-             "Portfolio summary:\n"
-             "- Total liquid investments: ~$367k\n"
-             "- YTD return: 11.2% (vs S&P 10.8%)\n"
-             "- Vanguard Total Market: strong performance, continue DCA\n"
-             "- Municipal bonds: providing steady 3.8% tax-free yield\n"
-             "- Bitcoin: up 45% since purchase, consider trimming\n\n"
-             "Derek's recommendations:\n"
-             "1. Shift 10% from equities to bonds (rising rate environment)\n"
-             "2. Take partial profits on Bitcoin above $70k\n"
-             "3. Max out IRA contribution before April deadline\n"
-             "4. Consider tax-loss harvesting in taxable account",
+             "Met with Derek for Q4 review.\n\nPortfolio summary:\n- Total liquid investments: ~$367k\n- YTD return: 11.2% (vs S&P 10.8%)\n- Vanguard Total Market: strong performance, continue DCA\n- Municipal bonds: providing steady 3.8% tax-free yield\n- Bitcoin: up 45% since purchase, consider trimming\n\nDerek's recommendations:\n1. Shift 10% from equities to bonds (rising rate environment)\n2. Take partial profits on Bitcoin above $70k\n3. Max out IRA contribution before April deadline\n4. Consider tax-loss harvesting in taxable account",
              ["Derek Vasquez"], ["Derek Vasquez"], [], [], ["Quarterly portfolio review follow-up"]),
-
             ("Cedar Lane mediation prep", "research", now - timedelta(days=15),
-             "Research for upcoming mediation on boundary dispute.\n\n"
-             "Our position:\n"
-             "- 2024 survey clearly shows fence is 100% on our property\n"
-             "- Original deed metes and bounds support our survey\n"
-             "- Fence has been in place since 2019 (5 years)\n"
-             "- Neighbor's survey (done by a less reputable firm) shows 3ft encroachment\n\n"
-             "Legal strategy:\n"
-             "- Lead with our survey + deed\n"
-             "- Offer to split cost of a third independent survey\n"
-             "- If mediation fails, file for declaratory judgment\n"
-             "- Marcus estimates trial would cost $15-20k\n\n"
-             "Ideal outcome: neighbor accepts our survey, we avoid court costs.",
+             "Research for upcoming mediation on boundary dispute.\n\nOur position:\n- 2024 survey clearly shows fence is 100% on our property\n- Original deed metes and bounds support our survey\n- Fence has been in place since 2019 (5 years)\n- Neighbor's survey (done by a less reputable firm) shows 3ft encroachment\n\nLegal strategy:\n- Lead with our survey + deed\n- Offer to split cost of a third independent survey\n- If mediation fails, file for declaratory judgment\n- Marcus estimates trial would cost $15-20k\n\nIdeal outcome: neighbor accepts our survey, we avoid court costs.",
              [], [], ["Cedar Lane Boundary Dispute"], ["890 Cedar Lane"],
              ["File property tax protest - Cedar Lane"]),
-
             ("Elm St roof concerns", "general", now - timedelta(days=6),
-             "Tom mentioned during our last call that Unit B tenant reported a small leak "
-             "in the back bedroom during the last heavy rain.\n\n"
-             "Need to:\n"
-             "1. Get Calloway or another contractor to inspect\n"
-             "2. Check if this is covered under existing homeowner's insurance\n"
-             "3. Get 2-3 quotes for repair/replacement\n"
-             "4. Discuss cost split with Tom (50/50 per our agreement)\n\n"
-             "Roof is ~18 years old. May be time for full replacement rather than patching.",
+             "Tom mentioned during our last call that Unit B tenant reported a small leak in the back bedroom during the last heavy rain.\n\nNeed to:\n1. Get Calloway or another contractor to inspect\n2. Check if this is covered under existing homeowner's insurance\n3. Get 2-3 quotes for repair/replacement\n4. Discuss cost split with Tom (50/50 per our agreement)\n\nRoof is ~18 years old. May be time for full replacement rather than patching.",
              [], ["Tom Driscoll", "James Calloway"], [], ["450 Elm Street"],
              ["Schedule roof inspection - Elm St"]),
-
             ("Estate planning meeting notes", "meeting", now - timedelta(days=20),
-             "Annual review with Dr. Helen Park.\n\n"
-             "Updates made:\n"
-             "- Revocable living trust updated with new property acquisitions\n"
-             "- Added 3300 Magnolia Blvd (pending closing) to trust schedule\n"
-             "- Updated beneficiary designations on all investment accounts\n"
-             "- Renewed power of attorney documents\n"
-             "- Healthcare directive remains current\n\n"
-             "Outstanding items:\n"
-             "- Need to sign final documents at Helen's office\n"
-             "- Consider forming LLC for Magnolia Blvd (discuss with Sandra)\n"
-             "- Review life insurance coverage given increased asset base",
+             "Annual review with Dr. Helen Park.\n\nUpdates made:\n- Revocable living trust updated with new property acquisitions\n- Added 3300 Magnolia Blvd (pending closing) to trust schedule\n- Updated beneficiary designations on all investment accounts\n- Renewed power of attorney documents\n- Healthcare directive remains current\n\nOutstanding items:\n- Need to sign final documents at Helen's office\n- Consider forming LLC for Magnolia Blvd (discuss with Sandra)\n- Review life insurance coverage given increased asset base",
              ["Dr. Helen Park"], ["Dr. Helen Park"], ["Estate Plan Update"], [],
              ["Update estate plan documents"]),
-
             ("Huang bridge loan terms review", "research", now - timedelta(days=25),
-             "Reviewed the terms on Victor Huang's bridge loan.\n\n"
-             "Terms:\n"
-             "- Principal: $200,000\n"
-             "- Rate: 9.5% (interest only)\n"
-             "- Term: 6 months\n"
-             "- Monthly payment: $1,583.33\n"
-             "- Maturity: ~5 months from now\n"
-             "- Prepayment penalty: None after 90 days\n\n"
-             "Total interest cost if held to maturity: ~$9,500\n"
-             "Need to refinance ASAP. Talk to Janet about rolling into a conventional loan "
-             "once Magnolia closes and we have rental income to show.",
+             "Reviewed the terms on Victor Huang's bridge loan.\n\nTerms:\n- Principal: $200,000\n- Rate: 9.5% (interest only)\n- Term: 6 months\n- Monthly payment: $1,583.33\n- Maturity: ~5 months from now\n- Prepayment penalty: None after 90 days\n\nTotal interest cost if held to maturity: ~$9,500\nNeed to refinance ASAP. Talk to Janet about rolling into a conventional loan once Magnolia closes and we have rental income to show.",
              [], ["Victor Huang", "Janet Cobb"], [], [],
              ["Refinance Huang bridge loan"]),
-
             ("Riverside development feasibility", "research", now - timedelta(days=40),
-             "Researched development options for 15 Riverside Dr.\n\n"
-             "Zoning: Currently agricultural, requesting residential\n"
-             "Lot size: 0.8 acres\n"
-             "Estimated build cost: $280-350k for single family\n"
-             "Comparable sales in area: $450-520k\n"
-             "Timeline: 6-8 months for permitting + 10-12 months construction\n\n"
-             "Pros: Good margins, growing area, no HOA restrictions\n"
-             "Cons: Long timeline, capital intensive, zoning not guaranteed\n\n"
-             "Decision: Proceed with zoning application, then reassess based on approval and "
-             "available capital after Magnolia closing.",
+             "Researched development options for 15 Riverside Dr.\n\nZoning: Currently agricultural, requesting residential\nLot size: 0.8 acres\nEstimated build cost: $280-350k for single family\nComparable sales in area: $450-520k\nTimeline: 6-8 months for permitting + 10-12 months construction\n\nPros: Good margins, growing area, no HOA restrictions\nCons: Long timeline, capital intensive, zoning not guaranteed\n\nDecision: Proceed with zoning application, then reassess based on approval and available capital after Magnolia closing.",
              [], [], ["Riverside Zoning Application"], ["15 Riverside Dr"],
              ["Prepare zoning hearing materials"]),
-
             ("Call with Tom about Elm St expenses", "call", now - timedelta(days=22),
-             "Quick call with Tom about Q4 expenses.\n\n"
-             "He reported:\n"
-             "- Plumbing repair Unit A: $380\n"
-             "- Landscaping Q4: $600\n"
-             "- Pest control: $150\n"
-             "- General maintenance: $425\n"
-             "- Total: $1,555 (my half: $777.50)\n\n"
-             "Asked him to send receipts for everything. He said he'd email them over. "
-             "Still waiting as of today.",
+             "Quick call with Tom about Q4 expenses.\n\nHe reported:\n- Plumbing repair Unit A: $380\n- Landscaping Q4: $600\n- Pest control: $150\n- General maintenance: $425\n- Total: $1,555 (my half: $777.50)\n\nAsked him to send receipts for everything. He said he'd email them over. Still waiting as of today.",
              ["Tom Driscoll"], ["Tom Driscoll"], [], ["450 Elm Street"],
              ["Review Q4 Elm St expense report"]),
-
             ("Quick note - Bitcoin price alert", "general", now - timedelta(hours=6),
-             "Bitcoin hit $68,500 today. Getting close to my $70k target for trimming. "
-             "Set a limit sell for 0.1 BTC at $71,000 on Coinbase. "
-             "Will reassess remaining position after.",
+             "Bitcoin hit $68,500 today. Getting close to my $70k target for trimming. Set a limit sell for 0.1 BTC at $71,000 on Coinbase. Will reassess remaining position after.",
              [], [], [], [], ["Research Bitcoin exit strategy"]),
         ]
-        # Map note titles to folders, tags, pin status
         note_folders = {
             "Holston eviction strategy call with Marcus": "Legal",
             "Magnolia Blvd walkthrough notes": "Properties",
@@ -1022,65 +1190,76 @@ class Command(BaseCommand):
             )
             note_pks.append(note.pk)
             for name in participants:
-                note.participants.add(stakeholders[name])
+                if name in stakeholders:
+                    note.participants.add(stakeholders[name])
             for name in rel_sh:
-                note.related_stakeholders.add(stakeholders[name])
+                if name in stakeholders:
+                    note.related_stakeholders.add(stakeholders[name])
             for t in rel_lm:
-                note.related_legal_matters.add(legal_matters[t])
+                if t in legal_matters:
+                    note.related_legal_matters.add(legal_matters[t])
             for p in rel_props:
-                note.related_properties.add(properties[p])
+                if p in properties:
+                    note.related_properties.add(properties[p])
             for t in rel_tasks:
-                note.related_tasks.add(tasks[t])
+                if t in tasks:
+                    note.related_tasks.add(tasks[t])
             for tag_slug in note_tags.get(title, []):
-                note.tags.add(tags[tag_slug])
+                if tag_slug in tags:
+                    note.tags.add(tags[tag_slug])
+
+        return {
+            "notes.tag": [t.pk for t in tags.values()],
+            "notes.folder": [f.pk for f in folders.values()],
+            "notes.note": note_pks,
+        }
+
+    # -----------------------------------------------------------------------
+    # HEALTHCARE
+    # -----------------------------------------------------------------------
+    def _load_healthcare(self, today, now):
+        stakeholders = _get_sample_stakeholders()
 
         self.stdout.write("Creating healthcare data...")
-        # Providers
         providers = {}
         provider_data = [
             ("Dr. Sarah Mitchell", "primary_care", "Internal Medicine", "Pacific Primary Care",
              "1234567890", "CA-MD-45678", "415-555-0101", "415-555-0102",
              "smitchell@pacificprimary.com", "2200 Pacific Ave, San Francisco, CA 94115",
-             "active", "Dr. Helen Park", None,
-             "PCP since 2020. Excellent bedside manner. Accepts Blue Cross PPO."),
+             "active", "Dr. Helen Park", None),
             ("Dr. James Wong", "specialist", "Cardiology", "Bay Area Heart Group",
              "2345678901", "CA-MD-56789", "415-555-0201", "",
              "jwong@bayareaheart.com", "1800 Post St, San Francisco, CA 94115",
-             "active", None, None,
-             "Referred by Dr. Mitchell. Annual cardiac checkup."),
+             "active", None, None),
             ("Dr. Emily Chen", "dentist", "General Dentistry", "Sunset Dental",
              "3456789012", "CA-DDS-67890", "415-555-0301", "",
              "echen@sunsetdental.com", "3456 Sunset Blvd, San Francisco, CA 94122",
-             "active", None, None,
-             "Biannual cleanings. Good with anxious patients."),
+             "active", None, None),
             ("Dr. Michael Torres", "specialist", "Orthopedics", "Sports Medicine Associates",
              "4567890123", "CA-MD-78901", "415-555-0401", "",
              "mtorres@sportsmedicine.com", "500 Parnassus Ave, San Francisco, CA 94143",
-             "past", None, None,
-             "Treated knee injury in 2023. No longer seeing."),
+             "past", None, None),
             ("Dr. Lisa Pham", "specialist", "Dermatology", "Pham Dermatology",
              "5678901234", "CA-MD-89012", "415-555-0501", "",
              "lpham@phamderm.com", "1600 Divisadero St, San Francisco, CA 94115",
-             "active", None, None,
-             "Annual skin check. Great reviews."),
+             "active", None, None),
         ]
         hc_pks = {"providers": [], "conditions": [], "prescriptions": [],
                    "supplements": [], "testresults": [], "visits": [],
                    "advice": [], "appointments": []}
         for (name, ptype, spec, practice, npi, lic, phone, fax, email, addr,
-             status, sh_name, policy_name, notes) in provider_data:
+             status, sh_name, policy_name) in provider_data:
             prov = Provider.objects.create(
                 name=name, provider_type=ptype, specialty=spec,
                 practice_name=practice, npi=npi, license_number=lic,
                 phone=phone, fax=fax, email=email, address=addr,
                 status=status,
                 stakeholder=stakeholders.get(sh_name),
-                notes_text=notes,
+                notes_text="",
             )
             providers[name] = prov
             hc_pks["providers"].append(prov.pk)
 
-        # Conditions
         conditions = {}
         condition_data = [
             ("Essential Hypertension", "I10", today - timedelta(days=730),
@@ -1102,8 +1281,6 @@ class Command(BaseCommand):
             conditions[name] = cond
             hc_pks["conditions"].append(cond.pk)
 
-        # Prescriptions
-        prescriptions = {}
         rx_data = [
             ("Lisinopril", "Lisinopril", "10mg", "once_daily", "oral",
              "CVS Pharmacy", "415-555-0901", "RX-2024-001",
@@ -1138,10 +1315,8 @@ class Command(BaseCommand):
                 prescribing_provider=providers.get(prov_name),
                 related_condition=conditions.get(cond_name),
             )
-            prescriptions[med] = rx
             hc_pks["prescriptions"].append(rx.pk)
 
-        # Supplements
         supplement_data = [
             ("Vitamin D3", "Nature Made", "5000 IU", "once_daily",
              "Bone health and immune support", today - timedelta(days=365), None,
@@ -1162,7 +1337,6 @@ class Command(BaseCommand):
             )
             hc_pks["supplements"].append(s.pk)
 
-        # Test Results
         test_data = [
             ("Comprehensive Metabolic Panel", "lab", today - timedelta(days=30),
              "UCSF Medical Center", "All within range", "See reference ranges",
@@ -1191,7 +1365,7 @@ class Command(BaseCommand):
             )
             hc_pks["testresults"].append(tr.pk)
 
-        # Visits
+        from datetime import time as time_type
         visit_data = [
             (today - timedelta(days=30), "10:00", "Dr. Sarah Mitchell",
              "Pacific Primary Care", "routine",
@@ -1199,28 +1373,24 @@ class Command(BaseCommand):
              "Comprehensive exam performed. All vitals within normal range.",
              "BP: 128/82, HR: 72, Temp: 98.6F, Weight: 180lbs",
              "Continue medications. Return in 6 months for BP check.",
-             today + timedelta(days=150), Decimal("40.00"),
-             "Essential Hypertension"),
+             today + timedelta(days=150), Decimal("40.00"), "Essential Hypertension"),
             (today - timedelta(days=90), "14:30", "Dr. James Wong",
              "Bay Area Heart Group", "specialist",
              "Annual cardiac evaluation", "No cardiac concerns.",
              "EKG normal sinus rhythm. Heart sounds normal. Exercise tolerance good.",
              "BP: 130/80, HR: 68",
              "Continue statin. Annual follow-up.",
-             today + timedelta(days=275), Decimal("60.00"),
-             None),
+             today + timedelta(days=275), Decimal("60.00"), None),
             (today - timedelta(days=14), "09:00", "Dr. Sarah Mitchell",
              "Pacific Primary Care", "follow_up",
              "Sinus infection", "Bacterial sinusitis diagnosed.",
              "Patient presented with 10 days of congestion, facial pain, purulent discharge.",
              "BP: 126/80, HR: 74, Temp: 99.1F",
              "10-day course of amoxicillin. Follow up if not improved.",
-             None, Decimal("40.00"),
-             None),
+             None, Decimal("40.00"), None),
         ]
         for (dt, time_str, prov_name, facility, vtype, reason, diagnosis,
              summary, vitals, followup, next_visit, copay, cond_name) in visit_data:
-            from datetime import time as time_type
             h, m = map(int, time_str.split(":"))
             v = Visit.objects.create(
                 date=dt, time=time_type(h, m),
@@ -1233,17 +1403,12 @@ class Command(BaseCommand):
             )
             hc_pks["visits"].append(v.pk)
 
-        # Advice
         advice_data = [
-            ("Reduce sodium intake", "Limit daily sodium to under 2,300mg.\n\n"
-             "Tips:\n- Read nutrition labels\n- Cook at home more\n- Use herbs/spices instead of salt\n"
-             "- Avoid processed foods\n- Choose low-sodium options when eating out",
+            ("Reduce sodium intake", "Limit daily sodium to under 2,300mg.\n\nTips:\n- Read nutrition labels\n- Cook at home more\n- Use herbs/spices instead of salt\n- Avoid processed foods\n- Choose low-sodium options when eating out",
              "diet", today - timedelta(days=30), "active",
              "Dr. Sarah Mitchell", None, "Essential Hypertension"),
             ("Regular cardiovascular exercise",
-             "30 minutes of moderate cardio exercise, 5 days per week.\n\n"
-             "Recommended activities:\n- Brisk walking\n- Swimming\n- Cycling\n- Elliptical\n\n"
-             "Avoid: Heavy weightlifting without proper warm-up. Monitor heart rate during exercise.",
+             "30 minutes of moderate cardio exercise, 5 days per week.\n\nRecommended activities:\n- Brisk walking\n- Swimming\n- Cycling\n- Elliptical\n\nAvoid: Heavy weightlifting without proper warm-up. Monitor heart rate during exercise.",
              "exercise", today - timedelta(days=90), "active",
              "Dr. James Wong", None, "Essential Hypertension"),
         ]
@@ -1256,35 +1421,27 @@ class Command(BaseCommand):
             )
             hc_pks["advice"].append(adv.pk)
 
-        # Appointments
         appt_data = [
             ("Annual Physical Exam", today + timedelta(days=60), "09:30", 60,
-             "Pacific Primary Care",
-             "1234 Market St, Suite 200, San Francisco, CA 94102",
-             "https://www.pacificprimarycare.com/patient-portal",
-             "routine",
+             "Pacific Primary Care", "1234 Market St, Suite 200, San Francisco, CA 94102",
+             "https://www.pacificprimarycare.com/patient-portal", "routine",
              "Annual comprehensive physical exam",
              "Fast for 12 hours before appointment for lab work.",
              "scheduled", "Dr. Sarah Mitchell", "Essential Hypertension"),
             ("Dental Cleaning", today + timedelta(days=14), "10:00", 60,
-             "Sunset Dental",
-             "5678 Sunset Blvd, San Francisco, CA 94122",
-             "",
-             "routine",
+             "Sunset Dental", "5678 Sunset Blvd, San Francisco, CA 94122",
+             "", "routine",
              "Biannual dental cleaning and exam", "",
              "confirmed", "Dr. Emily Chen", None),
             ("Dermatology Annual Skin Check", today + timedelta(days=45), "14:00", 30,
-             "Pham Dermatology",
-             "900 Hyde St, Floor 3, San Francisco, CA 94109",
-             "https://www.phamdermatology.com",
-             "specialist",
+             "Pham Dermatology", "900 Hyde St, Floor 3, San Francisco, CA 94109",
+             "https://www.phamdermatology.com", "specialist",
              "Annual full-body skin exam",
              "Avoid applying any lotions on the day of the appointment.",
              "scheduled", "Dr. Lisa Pham", None),
         ]
         for (title, dt, time_str, duration, facility, address, url,
              vtype, purpose, prep, status, prov_name, cond_name) in appt_data:
-            from datetime import time as time_type
             h, m = map(int, time_str.split(":"))
             appt = Appointment.objects.create(
                 title=title, date=dt, time=time_type(h, m),
@@ -1297,74 +1454,7 @@ class Command(BaseCommand):
             )
             hc_pks["appointments"].append(appt.pk)
 
-        # Build manifest of created PKs
-        manifest = {
-            "stakeholders.stakeholder": [s.pk for s in stakeholders.values()],
-            "stakeholders.relationship": list(
-                Relationship.objects.filter(
-                    from_stakeholder__in=stakeholders.values()
-                ).values_list("pk", flat=True)
-            ),
-            "stakeholders.contactlog": list(
-                ContactLog.objects.filter(
-                    stakeholder__in=stakeholders.values()
-                ).values_list("pk", flat=True)
-            ),
-            "assets.realestate": [p.pk for p in properties.values()],
-            "assets.investment": [i.pk for i in investments.values()],
-            "assets.loan": [ln.pk for ln in loans.values()],
-            "assets.propertyownership": list(
-                PropertyOwnership.objects.filter(
-                    property__in=properties.values()
-                ).values_list("pk", flat=True)
-            ),
-            "assets.investmentparticipant": list(
-                InvestmentParticipant.objects.filter(
-                    investment__in=investments.values()
-                ).values_list("pk", flat=True)
-            ),
-            "assets.loanparty": list(
-                LoanParty.objects.filter(
-                    loan__in=loans.values()
-                ).values_list("pk", flat=True)
-            ),
-            "assets.insurancepolicy": policy_pks,
-            "assets.policyholder": list(
-                PolicyHolder.objects.filter(
-                    policy__pk__in=policy_pks
-                ).values_list("pk", flat=True)
-            ),
-            "assets.vehicle": [v.pk for v in vehicles.values()],
-            "assets.vehicleowner": list(
-                VehicleOwner.objects.filter(
-                    vehicle__in=vehicles.values()
-                ).values_list("pk", flat=True)
-            ),
-            "assets.aircraft": [ac.pk for ac in aircraft_dict.values()],
-            "assets.aircraftowner": list(
-                AircraftOwner.objects.filter(
-                    aircraft__in=aircraft_dict.values()
-                ).values_list("pk", flat=True)
-            ),
-            "assets.lease": lease_pks,
-            "assets.leaseparty": lease_party_pks,
-            "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
-            "legal.evidence": list(
-                Evidence.objects.filter(
-                    legal_matter__in=legal_matters.values()
-                ).values_list("pk", flat=True)
-            ),
-            "legal.legalcommunication": comm_pks,
-            "tasks.task": [t.pk for t in tasks.values()],
-            "tasks.followup": list(
-                FollowUp.objects.filter(
-                    task__in=tasks.values()
-                ).values_list("pk", flat=True)
-            ),
-            "cashflow.cashflowentry": cashflow_pks,
-            "notes.tag": [t.pk for t in tags.values()],
-            "notes.folder": [f.pk for f in folders.values()],
-            "notes.note": note_pks,
+        return {
             "healthcare.provider": hc_pks["providers"],
             "healthcare.condition": hc_pks["conditions"],
             "healthcare.prescription": hc_pks["prescriptions"],
@@ -1374,41 +1464,3 @@ class Command(BaseCommand):
             "healthcare.advice": hc_pks["advice"],
             "healthcare.appointment": hc_pks["appointments"],
         }
-
-        # Save manifest to SampleDataStatus
-        sample_status.is_loaded = True
-        sample_status.manifest = manifest
-        sample_status.loaded_at = timezone.now()
-        sample_status.save()
-
-        # Print summary
-        self.stdout.write(self.style.SUCCESS(
-            f"\nSample data loaded successfully!\n"
-            f"  Stakeholders:   {len(manifest['stakeholders.stakeholder'])}\n"
-            f"  Relationships:  {len(manifest['stakeholders.relationship'])}\n"
-            f"  Contact Logs:   {len(manifest['stakeholders.contactlog'])}\n"
-            f"  Properties:     {len(manifest['assets.realestate'])}\n"
-            f"  Investments:    {len(manifest['assets.investment'])}\n"
-            f"  Loans:          {len(manifest['assets.loan'])}\n"
-            f"  Policies:       {len(manifest['assets.insurancepolicy'])}\n"
-            f"  Vehicles:       {len(manifest['assets.vehicle'])}\n"
-            f"  Aircraft:       {len(manifest['assets.aircraft'])}\n"
-            f"  Leases:         {len(manifest['assets.lease'])}\n"
-            f"  Legal Matters:  {len(manifest['legal.legalmatter'])}\n"
-            f"  Evidence:       {len(manifest['legal.evidence'])}\n"
-            f"  Communications: {len(manifest['legal.legalcommunication'])}\n"
-            f"  Tasks:          {len(manifest['tasks.task'])}\n"
-            f"  Follow-ups:     {len(manifest['tasks.followup'])}\n"
-            f"  Cash Flow:      {len(manifest['cashflow.cashflowentry'])}\n"
-            f"  Tags:           {len(manifest['notes.tag'])}\n"
-            f"  Folders:        {len(manifest['notes.folder'])}\n"
-            f"  Notes:          {len(manifest['notes.note'])}\n"
-            f"  HC Providers:   {len(manifest['healthcare.provider'])}\n"
-            f"  HC Conditions:  {len(manifest['healthcare.condition'])}\n"
-            f"  Prescriptions:  {len(manifest['healthcare.prescription'])}\n"
-            f"  Supplements:    {len(manifest['healthcare.supplement'])}\n"
-            f"  Test Results:   {len(manifest['healthcare.testresult'])}\n"
-            f"  Visits:         {len(manifest['healthcare.visit'])}\n"
-            f"  Advice:         {len(manifest['healthcare.advice'])}\n"
-            f"  Appointments:   {len(manifest['healthcare.appointment'])}"
-        ))

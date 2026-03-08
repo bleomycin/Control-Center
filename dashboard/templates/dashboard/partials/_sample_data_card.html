@@ -6,7 +6,7 @@
             </svg>
         </div>
         <h2 class="text-lg font-semibold text-white">Sample Data</h2>
-        {% if sample_status.is_loaded %}
+        {% if any_section_loaded %}
         <span class="ml-auto inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
             Loaded
         </span>
@@ -18,14 +18,7 @@
     </div>
 
     <p class="text-sm text-gray-400 mb-4">
-        {% if sample_status.is_loaded %}
-            Demo stakeholders, tasks, properties, and more are loaded.
-            {% if sample_status.loaded_at %}
-            <span class="block text-xs text-gray-500 mt-1">Loaded {{ sample_status.loaded_at|timesince }} ago</span>
-            {% endif %}
-        {% else %}
-            Load demo data to explore the app with realistic stakeholders, tasks, properties, investments, and more.
-        {% endif %}
+        Load or remove demo data per section. Your real data will not be affected.
     </p>
 
     {% if message %}
@@ -34,19 +27,65 @@
     </div>
     {% endif %}
 
-    <div class="flex gap-3">
-        {% if sample_status.is_loaded %}
+    <!-- Per-section rows -->
+    <div class="space-y-2 mb-4">
+        {% for sec in sample_sections %}
+        <div class="flex items-center justify-between py-2 px-3 rounded-md bg-gray-750 border border-gray-700">
+            <div class="flex items-center gap-2">
+                {% if sec.loaded %}
+                <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0"></span>
+                {% else %}
+                <span class="w-2 h-2 rounded-full bg-gray-600 flex-shrink-0"></span>
+                {% endif %}
+                <span class="text-sm text-gray-200">{{ sec.label }}</span>
+                {% if sec.loaded %}
+                <span class="text-xs text-gray-500">{{ sec.record_count }} records</span>
+                {% endif %}
+            </div>
+            <div>
+                {% if sec.loaded %}
+                <button hx-post="{% url 'dashboard:sample_data_remove_section' sec.key %}"
+                        hx-target="#sample-data-card"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove {{ sec.label }} sample data?"
+                        class="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-white bg-red-900/30 hover:bg-red-700 border border-red-800 rounded transition-colors">
+                    Remove
+                </button>
+                {% else %}
+                <button hx-post="{% url 'dashboard:sample_data_load_section' sec.key %}"
+                        hx-target="#sample-data-card"
+                        hx-swap="innerHTML"
+                        class="px-2.5 py-1 text-xs font-medium text-green-400 hover:text-white bg-green-900/30 hover:bg-green-700 border border-green-800 rounded transition-colors">
+                    Load
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Bulk actions -->
+    <div class="flex gap-3 pt-2 border-t border-gray-700">
+        {% if any_section_loaded %}
+        <button hx-post="{% url 'dashboard:sample_data_load' %}"
+                hx-target="#sample-data-card"
+                hx-swap="innerHTML"
+                hx-indicator="#sample-spinner"
+                class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1.5">
+            Load All Missing
+            <svg id="sample-spinner" class="htmx-indicator w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+        </button>
         <button hx-post="{% url 'dashboard:sample_data_remove' %}"
                 hx-target="#sample-data-card"
                 hx-swap="innerHTML"
-                hx-confirm="Remove all sample data? Your real data will not be affected."
-                hx-indicator="#sample-spinner"
-                class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-md transition-colors inline-flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-            </svg>
-            Remove Sample Data
-            <svg id="sample-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                hx-confirm="Remove ALL sample data? Your real data will not be affected."
+                hx-indicator="#sample-spinner-rm"
+                class="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1.5">
+            Remove All
+            <svg id="sample-spinner-rm" class="htmx-indicator w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
@@ -56,12 +95,9 @@
                 hx-target="#sample-data-card"
                 hx-swap="innerHTML"
                 hx-indicator="#sample-spinner"
-                class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-md transition-colors inline-flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
-            </svg>
-            Load Sample Data
-            <svg id="sample-spinner" class="htmx-indicator w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-medium rounded-md transition-colors inline-flex items-center gap-1.5">
+            Load All Sections
+            <svg id="sample-spinner" class="htmx-indicator w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>

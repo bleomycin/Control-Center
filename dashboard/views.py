@@ -1275,89 +1275,143 @@ def choice_move(request, pk, direction):
 
 
 def settings_hub(request):
+    from dashboard.management.commands.load_sample_data import SECTION_ORDER, SECTION_LABELS
     status = SampleDataStatus.load()
-    return render(request, "dashboard/settings_hub.html", {"sample_status": status})
+    # Build per-section status info
+    sections = []
+    for key in SECTION_ORDER:
+        sec_manifest = status.manifest.get(key, {})
+        record_count = sum(len(v) for v in sec_manifest.values()) if sec_manifest else 0
+        sections.append({
+            "key": key,
+            "label": SECTION_LABELS[key],
+            "loaded": bool(sec_manifest),
+            "record_count": record_count,
+        })
+    any_loaded = any(s["loaded"] for s in sections)
+    return render(request, "dashboard/settings_hub.html", {
+        "sample_status": status,
+        "sample_sections": sections,
+        "any_section_loaded": any_loaded,
+    })
 
 
 @require_POST
 def sample_data_load(request):
+    """Load all sample data sections."""
     from django.core.management import call_command
     from io import StringIO
 
     out = StringIO()
     call_command("load_sample_data", stdout=out)
-    status = SampleDataStatus.load()
-    return render(request, "dashboard/partials/_sample_data_card.html", {
-        "sample_status": status,
-        "message": out.getvalue().strip(),
-    })
+    return _sample_data_card_response(request, out.getvalue().strip())
 
 
 @require_POST
 def sample_data_remove(request):
-    from django.apps import apps
+    """Remove all sample data sections."""
+    from dashboard.management.commands.load_sample_data import SECTION_ORDER
+    status = SampleDataStatus.load()
+    if status.manifest:
+        for section in SECTION_ORDER:
+            _remove_section_data(status, section)
+    status.is_loaded = False
+    status.loaded_at = None
+    status.save()
+    return _sample_data_card_response(request)
+
+
+@require_POST
+def sample_data_load_section(request, section):
+    """Load a single sample data section."""
+    from django.core.management import call_command
+    from io import StringIO
+    from dashboard.management.commands.load_sample_data import SECTION_ORDER, SECTION_LABELS
+
+    if section not in SECTION_ORDER:
+        return _sample_data_card_response(request, f"Unknown section: {section}")
+
+    out = StringIO()
+    call_command("load_sample_data", "--sections", section, stdout=out)
+    return _sample_data_card_response(
+        request, f"{SECTION_LABELS[section]} loaded successfully."
+    )
+
+
+@require_POST
+def sample_data_remove_section(request, section):
+    """Remove a single sample data section."""
+    from dashboard.management.commands.load_sample_data import SECTION_ORDER, SECTION_LABELS
+
+    if section not in SECTION_ORDER:
+        return _sample_data_card_response(request, f"Unknown section: {section}")
 
     status = SampleDataStatus.load()
-    if not status.is_loaded or not status.manifest:
-        status.is_loaded = False
-        status.manifest = {}
+    _remove_section_data(status, section)
+    status.is_loaded = any(status.manifest.get(s) for s in SECTION_ORDER)
+    if not status.is_loaded:
         status.loaded_at = None
-        status.save()
-        return render(request, "dashboard/partials/_sample_data_card.html", {
-            "sample_status": status,
-        })
+    status.save()
+    return _sample_data_card_response(
+        request, f"{SECTION_LABELS[section]} removed."
+    )
 
-    # Delete in reverse-dependency order (children before parents)
-    deletion_order = [
-        "healthcare.appointment",
-        "healthcare.advice",
-        "healthcare.visit",
-        "healthcare.testresult",
-        "healthcare.supplement",
-        "healthcare.prescription",
-        "healthcare.condition",
-        "healthcare.provider",
-        "notes.note",
-        "notes.tag",
-        "notes.folder",
-        "cashflow.cashflowentry",
-        "tasks.followup",
-        "tasks.task",
-        "legal.legalcommunication",
-        "legal.evidence",
-        "legal.legalmatter",
-        "assets.leaseparty",
-        "assets.lease",
-        "assets.policyholder",
-        "assets.insurancepolicy",
-        "assets.aircraftowner",
-        "assets.vehicleowner",
-        "assets.loanparty",
-        "assets.investmentparticipant",
-        "assets.propertyownership",
-        "assets.aircraft",
-        "assets.vehicle",
-        "assets.loan",
-        "assets.investment",
-        "assets.realestate",
-        "stakeholders.contactlog",
-        "stakeholders.relationship",
-        "stakeholders.stakeholder",
-    ]
 
+def _remove_section_data(status, section):
+    """Delete all records for a single section from the DB and manifest."""
+    from django.apps import apps
+    from dashboard.management.commands.load_sample_data import SECTION_DELETION_ORDER
+
+    sec_manifest = status.manifest.get(section, {})
+    if not sec_manifest:
+        return
+
+    deletion_order = SECTION_DELETION_ORDER.get(section, [])
+    for model_label in deletion_order:
+        pks = sec_manifest.get(model_label, [])
+        if pks:
+            Model = apps.get_model(model_label)
+            Model.objects.filter(pk__in=pks).delete()
+
+    # Clean up extra stakeholders created by assets section
+    extra_pks = sec_manifest.get("_extra_stakeholder_pks", [])
+    if extra_pks:
+        from stakeholders.models import Stakeholder
+        Stakeholder.objects.filter(pk__in=extra_pks).delete()
+
+    # Also handle old flat-format manifests (backward compat)
     for model_label in deletion_order:
         pks = status.manifest.get(model_label, [])
         if pks:
             Model = apps.get_model(model_label)
             Model.objects.filter(pk__in=pks).delete()
+            del status.manifest[model_label]
 
-    status.is_loaded = False
-    status.manifest = {}
-    status.loaded_at = None
-    status.save()
+    if section in status.manifest:
+        del status.manifest[section]
 
+
+def _sample_data_card_response(request, message=None):
+    """Render the sample data card partial with current section status."""
+    from dashboard.management.commands.load_sample_data import SECTION_ORDER, SECTION_LABELS
+
+    status = SampleDataStatus.load()
+    sections = []
+    for key in SECTION_ORDER:
+        sec_manifest = status.manifest.get(key, {})
+        record_count = sum(len(v) for v in sec_manifest.values()) if sec_manifest else 0
+        sections.append({
+            "key": key,
+            "label": SECTION_LABELS[key],
+            "loaded": bool(sec_manifest),
+            "record_count": record_count,
+        })
+    any_loaded = any(s["loaded"] for s in sections)
     return render(request, "dashboard/partials/_sample_data_card.html", {
         "sample_status": status,
+        "sample_sections": sections,
+        "any_section_loaded": any_loaded,
+        "message": message,
     })
 
 

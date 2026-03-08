@@ -1069,8 +1069,9 @@ class SampleDataToggleTests(TestCase):
         status = SampleDataStatus.load()
         self.assertTrue(status.is_loaded)
         self.assertIsNotNone(status.loaded_at)
-        self.assertIn("stakeholders.stakeholder", status.manifest)
-        self.assertTrue(len(status.manifest["stakeholders.stakeholder"]) > 0)
+        self.assertIn("stakeholders", status.manifest)
+        self.assertIn("stakeholders.stakeholder", status.manifest["stakeholders"])
+        self.assertTrue(len(status.manifest["stakeholders"]["stakeholders.stakeholder"]) > 0)
         # Verify actual data was created
         self.assertTrue(Stakeholder.objects.exists())
 
