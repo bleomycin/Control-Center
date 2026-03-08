@@ -1365,16 +1365,16 @@ def sample_data_remove_section(request, section):
 
 @require_POST
 def sample_data_hard_reset(request):
-    """Nuclear option: delete ALL data from sample-data models, reset manifest."""
+    """Safe cleanup: remove only known sample data by name, preserving user data."""
     from django.core.management import call_command
     from io import StringIO
 
     try:
         out = StringIO()
-        call_command("load_sample_data", "--hard-reset", stdout=out)
-        return _sample_data_card_response(request, "Hard reset complete. All sample data models emptied.")
+        call_command("clean_sample_data", stdout=out)
+        return _sample_data_card_response(request, out.getvalue().strip())
     except Exception as e:
-        return _sample_data_card_response(request, f"Error during reset: {e}")
+        return _sample_data_card_response(request, f"Error during cleanup: {e}")
 
 
 def _remove_section_data(status, section):
