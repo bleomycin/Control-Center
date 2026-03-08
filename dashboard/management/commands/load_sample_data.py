@@ -72,6 +72,112 @@ SECTION_DELETION_ORDER = {
     ],
 }
 
+# ---------------------------------------------------------------------------
+# Known sample data identifiers — used by clean_sample_data for safe removal.
+# When adding new sample records, add their names/titles here too.
+# ---------------------------------------------------------------------------
+SAMPLE_NAMES = {
+    "stakeholders": {
+        "Marcus Reed", "Sandra Liu", "Tom Driscoll", "Janet Cobb",
+        "Derek Vasquez", "Karen Whitfield", "Ray Holston", "Nina Patel",
+        "Victor Huang", "Alicia Moreno", "James Calloway", "Dr. Helen Park",
+        "Armanino LLP", "Sarah Chen", "Michael Torres", "Lisa Park",
+        "National Property Ins",
+    },
+    "properties": {
+        "1200 Oak Avenue", "450 Elm Street", "3300 Magnolia Blvd",
+        "890 Cedar Lane", "15 Riverside Dr",
+        "7-Eleven - 509 Bates Ave", "7-Eleven - 10710 W Loop",
+        "Dollar Tree - 2100 Main St",
+    },
+    "investments": {
+        "Vanguard Total Market Index", "Schwab S&P 500 ETF",
+        "Municipal Bond Fund", "NP Investments LP - Fund II",
+        "Bitcoin Holdings",
+    },
+    "loans": {
+        "First National - Oak Ave Mortgage", "First National - Elm St Mortgage",
+        "Huang Bridge Loan - Magnolia", "Vehicle Loan - F-150",
+    },
+    "vehicles": {
+        "2023 Ford F-150 Lariat", "2021 Toyota Land Cruiser",
+        "2019 Harley-Davidson Road King", "2022 Sea Ray 250 SLX",
+    },
+    "aircraft": {
+        "N172SP — Cessna 172 Skyhawk", "N525BL — Cessna Citation CJ3+",
+        "N44RH — Robinson R44 Raven II",
+    },
+    "insurance": {
+        "Homeowners - 1200 Oak Ave", "Commercial Property - Magnolia Blvd",
+        "Umbrella Policy", "Auto Policy - Fleet",
+    },
+    "leases": {
+        "Oak Ave Residential Lease", "Elm St Unit A Lease",
+        "Elm St Unit B Lease", "Magnolia Commercial Lease",
+    },
+    "legal_matters": {
+        "Holston Eviction - 1200 Oak Ave", "Cedar Lane Boundary Dispute",
+        "Magnolia Blvd Acquisition - Due Diligence",
+        "Riverside Zoning Application", "Estate Plan Update",
+    },
+    "tasks": {
+        "Follow up with Marcus on Holston hearing date",
+        "Pay Oak Ave mortgage", "Pay Elm St mortgage",
+        "Schedule roof inspection - Elm St",
+        "Review Magnolia closing documents",
+        "Refinance Huang bridge loan",
+        "Prepare zoning hearing materials",
+        "Quarterly portfolio review follow-up",
+        "Send Holston back rent to collections",
+        "Oak Ave bathroom renovation check-in",
+        "Update estate plan documents",
+        "Review Q4 Elm St expense report",
+        "Pay Huang bridge loan interest",
+        "File property tax protest - Cedar Lane",
+        "Research Bitcoin exit strategy",
+        "Request Polaris Risk background report via Armanino",
+        "Request 2024 Elm St transaction review",
+        "Request Magnolia Blvd tax review",
+        "Schedule meeting with Michael Torres",
+        "Send Oak Ave receipts to Sarah",
+        "Contact Nina about entity formation",
+    },
+    "notes": {
+        "Holston eviction strategy call with Marcus",
+        "Magnolia Blvd walkthrough notes",
+        "Quarterly portfolio review with Derek",
+        "Cedar Lane mediation prep",
+        "Elm St roof concerns",
+        "Estate planning meeting notes",
+        "Huang bridge loan terms review",
+        "Riverside development feasibility",
+        "Call with Tom about Elm St expenses",
+        "Quick note - Bitcoin price alert",
+    },
+    "cashflow": {
+        "Oak Ave rent received", "Elm St Unit A rent", "Elm St Unit B rent",
+        "Oak Ave mortgage payment", "Elm St mortgage payment",
+        "Huang bridge loan interest", "Vehicle loan payment",
+        "Property insurance - Oak Ave", "Property insurance - Elm St",
+        "Reed & Associates retainer", "Calloway - Oak Ave renovation",
+        "Vanguard monthly investment", "Whitfield appraisal fee",
+        "Magnolia closing - down payment", "Magnolia closing - closing costs",
+        "Expected Oak Ave rent - March", "Expected Elm St rent - March",
+        "Oak Ave mortgage - March", "Elm St mortgage - March",
+        "Huang bridge interest - March",
+        "NP Investments annual distribution", "Property tax - all properties",
+    },
+    "tags": {"legal", "finance", "property", "meeting-notes", "action-item", "research"},
+    "folders": {"Legal", "Properties", "Investments", "Meetings", "Healthcare"},
+    "providers": {
+        "Dr. Sarah Mitchell", "Dr. James Wong", "Dr. Emily Chen",
+        "Dr. Michael Torres", "Dr. Lisa Pham",
+    },
+    "conditions": {"Essential Hypertension", "Seasonal Allergies"},
+    "prescriptions": {"Lisinopril", "Atorvastatin", "Amoxicillin"},
+    "supplements": {"Vitamin D3", "Fish Oil (Omega-3)", "Magnesium Glycinate"},
+}
+
 
 def _get_sample_stakeholders():
     """Return dict of sample stakeholders by name, or empty dict if none loaded."""
