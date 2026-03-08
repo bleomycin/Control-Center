@@ -21,7 +21,7 @@ endif
 
 TAILWIND_URL := https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_PLATFORM)
 
-.PHONY: tailwind-install tailwind-build tailwind-watch restic-install
+.PHONY: tailwind-install tailwind-build tailwind-watch restic-install test test-unit test-e2e
 
 tailwind-install:
 	mkdir -p bin
@@ -37,3 +37,15 @@ tailwind-watch:
 
 restic-install:
 	./backup.sh install
+
+# --- Testing ---
+# Unit tests run inside Docker (production-like, no browser needed)
+# E2e tests run locally (need Playwright + Chromium, use random port — never touches Docker on :8000)
+
+test: test-unit test-e2e
+
+test-unit:
+	docker compose exec web python manage.py test dashboard stakeholders assets legal tasks cashflow notes healthcare
+
+test-e2e:
+	. venv/bin/activate && python manage.py test e2e

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 1. **Docker**: ALWAYS use OrbStack Docker on port 8000. NEVER use `python manage.py runserver`. NEVER kill port 8000 with `lsof`. Use `docker compose down` / `docker compose up --build -d`. ALWAYS leave Docker running when done.
 2. **Git identity**: ALL commits MUST use `bleomycin <bleomycin@users.noreply.github.com>`. Verify with `git config user.name && git config user.email` before first commit.
-3. **Tests**: ALWAYS run `python manage.py test` and verify all tests pass before reporting any work complete.
+3. **Tests**: Run `make test` (or `make test-unit` + `make test-e2e` separately). Unit tests run in Docker; e2e Playwright tests run locally (random port, never touches Docker on :8000). NEVER run bare `python manage.py test` inside Docker — it fails on e2e imports. All tests must pass before reporting work complete.
 4. **Visual verification**: After ANY template/CSS/JS/HTMX change, take Playwright screenshots at mobile (375x812) and desktop (1280x800) against the Docker container. NEVER report UI work complete without visual verification.
 5. **HTMX safety**: After any HTMX partial swap, verify elements OUTSIDE the swap target (counters, progress bars, sort dropdowns, styling) are NOT broken.
 6. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`. UTC vs local mismatch causes wrong results.
