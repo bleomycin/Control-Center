@@ -159,4 +159,22 @@
         {% include "assets/partials/_asset_legal_list.html" with legal_matters=legal_matters unlink_url_name="assets:vehicle_legal_unlink" asset_pk=vehicle.pk %}
     </div>
 </div>
+
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <p class="text-xs text-gray-400 uppercase tracking-wide">Documents{% if entity_documents.count %} <span class="text-gray-400 text-xs font-normal">({{ entity_documents.count }})</span>{% endif %}</p>
+        <div class="flex items-center gap-3">
+            <button hx-get="{% url 'documents:vehicle_document_link' vehicle.pk %}"
+                    hx-target="#document-form-container"
+                    hx-swap="innerHTML"
+                    class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+            <a href="{% url 'documents:create' %}?vehicle={{ vehicle.pk }}"
+               class="text-xs text-blue-400 hover:text-blue-300">+ New Document</a>
+        </div>
+    </div>
+    <div id="document-form-container"></div>
+    <div id="document-list">
+        {% include "documents/partials/_document_list_section.html" with documents=entity_documents unlink_url_name="documents:vehicle_document_unlink" entity_pk=vehicle.pk %}
+    </div>
+</div>
 {% endblock %}

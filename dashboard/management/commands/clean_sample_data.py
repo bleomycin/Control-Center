@@ -32,6 +32,7 @@ class Command(BaseCommand):
         total_deleted = 0
 
         # Delete in reverse dependency order (children before parents)
+        total_deleted += self._clean_documents(dry_run)
         total_deleted += self._clean_healthcare(dry_run)
         total_deleted += self._clean_notes(dry_run)
         total_deleted += self._clean_cashflow(dry_run)
@@ -153,6 +154,15 @@ class Command(BaseCommand):
             folder = Folder.objects.filter(name=name).first()
             if folder and not folder.notes.exclude(title__in=note_names).exists():
                 total += self._delete(Folder.objects.filter(pk=folder.pk), f"folder '{name}'", dry_run)
+        return total
+
+    def _clean_documents(self, dry_run):
+        from documents.models import Document
+        self.stdout.write("Documents:")
+        total = 0
+        total += self._delete(
+            Document.objects.filter(title__in=SAMPLE_NAMES["documents"]),
+            "documents", dry_run)
         return total
 
     def _clean_healthcare(self, dry_run):

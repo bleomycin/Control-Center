@@ -708,6 +708,7 @@ class RealEstateDetailView(DetailView):
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:property_cashflow_delete"
         ctx["insurance_policies"] = obj.insurance_policies.all()
+        ctx["entity_documents"] = obj.documents.all()
         ctx["internal_notes_url"] = reverse("assets:property_internal_notes", args=[obj.pk])
         return ctx
 
@@ -812,6 +813,7 @@ class InvestmentDetailView(DetailView):
         ctx["cashflow_outflows"] = cf_totals["outflows"]
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:investment_cashflow_delete"
+        ctx["entity_documents"] = self.object.documents.all()
         ctx["internal_notes_url"] = reverse("assets:investment_internal_notes", args=[self.object.pk])
         return ctx
 
@@ -933,6 +935,7 @@ class LoanDetailView(DetailView):
         ctx["delete_url_name"] = "cashflow:loan_cashflow_delete"
         ctx["notes"] = self.object.notes.all()
         ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["entity_documents"] = self.object.documents.all()
         ctx["internal_notes_url"] = reverse("assets:loan_internal_notes", args=[self.object.pk])
         return ctx
 
@@ -1198,6 +1201,7 @@ class InsurancePolicyDetailView(DetailView):
         ctx["covered_aircraft"] = self.object.covered_aircraft.all()
         ctx["notes"] = self.object.notes.all()
         ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["entity_documents"] = self.object.documents.all()
         ctx["internal_notes_url"] = reverse("assets:policy_internal_notes", args=[self.object.pk])
         return ctx
 
@@ -1430,6 +1434,7 @@ class VehicleDetailView(DetailView):
         ctx["insurance_policies"] = self.object.insurance_policies.all()
         ctx["notes"] = self.object.notes.all()
         ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["entity_documents"] = self.object.documents.all()
         ctx["internal_notes_url"] = reverse("assets:vehicle_internal_notes", args=[self.object.pk])
         return ctx
 
@@ -1647,6 +1652,7 @@ class AircraftDetailView(DetailView):
         ctx["insurance_policies"] = self.object.insurance_policies.all()
         ctx["notes"] = self.object.notes.all()
         ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["entity_documents"] = self.object.documents.all()
         ctx["internal_notes_url"] = reverse("assets:aircraft_internal_notes", args=[self.object.pk])
         return ctx
 
@@ -2612,6 +2618,7 @@ class LeaseDetailView(DetailView):
         ctx = super().get_context_data(**kwargs)
         ctx["notes"] = self.object.notes.all()
         ctx["legal_matters"] = self.object.legal_matters.all()
+        ctx["entity_documents"] = self.object.documents.all()
         ctx["internal_notes_url"] = reverse("assets:lease_internal_notes", args=[self.object.pk])
         return ctx
 

@@ -223,6 +223,24 @@
 
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Documents{% if entity_documents.count %} <span class="text-gray-400 text-xs font-normal">({{ entity_documents.count }})</span>{% endif %}</h2>
+            <div class="flex items-center gap-3">
+                <button hx-get="{% url 'documents:property_document_link' property.pk %}"
+                        hx-target="#document-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
+                <a href="{% url 'documents:create' %}?property={{ property.pk }}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New Document</a>
+            </div>
+        </div>
+        <div id="document-form-container"></div>
+        <div id="document-list">
+            {% include "documents/partials/_document_list_section.html" with documents=entity_documents unlink_url_name="documents:property_document_unlink" entity_pk=property.pk %}
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg border border-gray-700">
+        <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
             <div class="flex items-center gap-3">
                 <button hx-get="{% url 'assets:property_note_link' property.pk %}"

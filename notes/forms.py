@@ -130,7 +130,13 @@ class QuickNoteForm(TailwindFormMixin, forms.ModelForm):
 class AttachmentForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Attachment
-        fields = ["file", "description"]
+        fields = ["file", "gdrive_url", "description"]
+
+    def clean(self):
+        cleaned = super().clean()
+        if not cleaned.get("file") and not cleaned.get("gdrive_url"):
+            raise forms.ValidationError("Provide either a file or a Google Drive URL.")
+        return cleaned
 
 
 class LinkForm(TailwindFormMixin, forms.ModelForm):

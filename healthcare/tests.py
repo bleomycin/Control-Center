@@ -191,6 +191,18 @@ class TestResultModelTests(TestCase):
         tr = TestResult.objects.create(test_name="TSH", date=date.today())
         self.assertEqual(tr.get_absolute_url(), reverse("healthcare:testresult_detail", args=[tr.pk]))
 
+    def test_gdrive_url_field(self):
+        tr = TestResult.objects.create(
+            test_name="Drive Test",
+            date=date.today(),
+            gdrive_url="https://drive.google.com/file/d/abc/view",
+        )
+        self.assertTrue(tr.has_drive_link)
+
+    def test_has_drive_link_false(self):
+        tr = TestResult.objects.create(test_name="No Drive", date=date.today())
+        self.assertFalse(tr.has_drive_link)
+
 
 class VisitModelTests(TestCase):
 

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% load choice_labels %}
+
+{% block title %}Documents{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-white">Documents</h1>
+            <p class="text-sm text-gray-400 mt-1">
+                {{ total_count }} total{% if expiring_count %} &middot; <span class="text-amber-400">{{ expiring_count }} expiring soon</span>{% endif %}
+            </p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{% url 'documents:export_csv' %}"
+               class="hidden sm:inline-block px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-medium rounded-md transition-colors">
+                Export CSV
+            </a>
+            <a href="{% url 'documents:create' %}"
+               class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">
+                + New Document
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <details class="bg-gray-800 rounded-lg border border-gray-700 mb-4 group" open>
+        <summary class="px-4 py-3 cursor-pointer text-sm font-medium text-gray-300 flex items-center justify-between">
+            <span>Filters</span>
+            <svg class="w-4 h-4 text-gray-400 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </summary>
+        <form id="filter-form" class="px-4 pb-4 space-y-3">
+            <input type="hidden" name="sort" id="sort-field" value="{{ current_sort }}">
+            <input type="hidden" name="dir" id="dir-field" value="{{ current_dir }}">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <!-- Search -->
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Search</label>
+                    <input type="text" name="q" value="{{ search_query }}" placeholder="Title, description..."
+                           hx-get="{% url 'documents:list' %}" hx-target="#table-body" hx-swap="innerHTML"
+                           hx-trigger="keyup changed delay:300ms" hx-include="#filter-form"
+                           class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                </div>
+                <!-- Category -->
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Category</label>
+                    <select name="category"
+                            hx-get="{% url 'documents:list' %}" hx-target="#table-body" hx-swap="innerHTML"
+                            hx-trigger="change" hx-include="#filter-form"
+                            class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5">
+                        <option value="">All Categories</option>
+                        {% for val, label in category_choices %}
+                        <option value="{{ val }}" {% if val == selected_category %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <!-- Entity Type -->
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Linked To</label>
+                    <select name="entity_type"
+                            hx-get="{% url 'documents:list' %}" hx-target="#table-body" hx-swap="innerHTML"
+                            hx-trigger="change" hx-include="#filter-form"
+                            class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5">
+                        <option value="">All</option>
+                        <option value="property" {% if selected_entity_type == "property" %}selected{% endif %}>Properties</option>
+                        <option value="investment" {% if selected_entity_type == "investment" %}selected{% endif %}>Investments</option>
+                        <option value="loan" {% if selected_entity_type == "loan" %}selected{% endif %}>Loans</option>
+                        <option value="lease" {% if selected_entity_type == "lease" %}selected{% endif %}>Leases</option>
+                        <option value="policy" {% if selected_entity_type == "policy" %}selected{% endif %}>Policies</option>
+                        <option value="vehicle" {% if selected_entity_type == "vehicle" %}selected{% endif %}>Vehicles</option>
+                        <option value="aircraft" {% if selected_entity_type == "aircraft" %}selected{% endif %}>Aircraft</option>
+                        <option value="stakeholder" {% if selected_entity_type == "stakeholder" %}selected{% endif %}>Stakeholders</option>
+                        <option value="legal" {% if selected_entity_type == "legal" %}selected{% endif %}>Legal Matters</option>
+                        <option value="unlinked" {% if selected_entity_type == "unlinked" %}selected{% endif %}>Unlinked</option>
+                    </select>
+                </div>
+                <!-- Expiration -->
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Expiration</label>
+                    <select name="expiring"
+                            hx-get="{% url 'documents:list' %}" hx-target="#table-body" hx-swap="innerHTML"
+                            hx-trigger="change" hx-include="#filter-form"
+                            class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5">
+                        <option value="">All</option>
+                        <option value="soon" {% if selected_expiring == "soon" %}selected{% endif %}>Expiring &le; 90 days</option>
+                        <option value="expired" {% if selected_expiring == "expired" %}selected{% endif %}>Expired</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Date From</label>
+                    <input type="date" name="date_from" value="{{ date_from }}"
+                           hx-get="{% url 'documents:list' %}" hx-target="#table-body" hx-swap="innerHTML"
+                           hx-trigger="change" hx-include="#filter-form"
+                           class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Date To</label>
+                    <input type="date" name="date_to" value="{{ date_to }}"
+                           hx-get="{% url 'documents:list' %}" hx-target="#table-body" hx-swap="innerHTML"
+                           hx-trigger="change" hx-include="#filter-form"
+                           class="block w-full rounded-md border-gray-600 bg-gray-700 text-gray-100 text-sm px-3 py-1.5">
+                </div>
+            </div>
+        </form>
+    </details>
+
+    <!-- Bulk Actions Bar -->
+    <div id="bulk-bar" class="hidden sticky top-0 z-10 bg-gray-800 border border-blue-700 rounded-lg px-4 py-2 mb-3 flex items-center gap-3">
+        <span class="text-sm text-gray-300"><span id="bulk-count">0</span> selected</span>
+        <form method="post" action="{% url 'documents:bulk_delete' %}" id="bulk-delete-form" class="inline">
+            {% csrf_token %}
+            <button type="submit" onclick="return confirm('Delete selected documents?')"
+                    class="px-2.5 py-1 text-xs font-medium text-red-400 hover:text-white bg-red-900/30 hover:bg-red-700 border border-red-800 rounded transition-colors">
+                Delete
+            </button>
+        </form>
+        <form method="post" action="{% url 'documents:bulk_export_csv' %}" id="bulk-export-form" class="inline">
+            {% csrf_token %}
+            <button type="submit"
+                    class="px-2.5 py-1 text-xs font-medium text-purple-400 hover:text-white bg-purple-900/30 hover:bg-purple-700 border border-purple-800 rounded transition-colors">
+                Export CSV
+            </button>
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-700">
+            <thead class="bg-gray-750">
+                <tr>
+                    <th class="px-4 py-3 w-8">
+                        <input type="checkbox" id="select-all" class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 h-4 w-4">
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        <a href="#" onclick="docSort('title'); return false;" class="hover:text-white" data-sort-col="title">
+                            Title <span class="sort-arrow" data-col="title">{% if current_sort == "title" %}{% if current_dir == "asc" %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span>
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell">
+                        <a href="#" onclick="docSort('category'); return false;" class="hover:text-white" data-sort-col="category">
+                            Category <span class="sort-arrow" data-col="category">{% if current_sort == "category" %}{% if current_dir == "asc" %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span>
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider hidden sm:table-cell">
+                        <a href="#" onclick="docSort('date'); return false;" class="hover:text-white" data-sort-col="date">
+                            Date <span class="sort-arrow" data-col="date">{% if current_sort == "date" %}{% if current_dir == "asc" %}&uarr;{% else %}&darr;{% endif %}{% endif %}</span>
+                        </a>
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell">Expiration</th>
+                    <th class="px-4 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider hidden md:table-cell w-16">Source</th>
+                </tr>
+            </thead>
+            <tbody id="table-body" class="divide-y divide-gray-700">
+                {% include "documents/partials/_document_table.html" %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <div class="mt-4">
+        {% include "partials/_pagination.html" %}
+    </div>
+    {% endif %}
+</div>
+<script>
+function docSort(col) {
+    var sf = document.getElementById('sort-field');
+    var df = document.getElementById('dir-field');
+    if (sf.value === col) {
+        df.value = df.value === 'asc' ? 'desc' : 'asc';
+    } else {
+        sf.value = col;
+        df.value = 'desc';
+    }
+    // Update arrows
+    document.querySelectorAll('.sort-arrow').forEach(function(el) {
+        if (el.dataset.col === col) {
+            el.innerHTML = df.value === 'asc' ? '\u2191' : '\u2193';
+        } else {
+            el.innerHTML = '';
+        }
+    });
+    // Fire HTMX request with all filter form values
+    var form = document.getElementById('filter-form');
+    var params = new URLSearchParams(new FormData(form));
+    htmx.ajax('GET', '{% url "documents:list" %}?' + params.toString(), {target: '#table-body', swap: 'innerHTML'});
+}
+</script>
+{% endblock %}

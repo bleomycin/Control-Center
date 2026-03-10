@@ -197,6 +197,10 @@ def global_search(request):
         )[:limit]
         from assets.models import Lease
         context["leases"] = Lease.objects.filter(name__icontains=q).select_related("related_property")[:limit]
+        from documents.models import Document as DocumentModel
+        context["documents"] = DocumentModel.objects.filter(
+            Q(title__icontains=q) | Q(description__icontains=q) | Q(category__icontains=q)
+        )[:limit]
         from healthcare.models import Provider, Prescription, Appointment
         context["hc_providers"] = Provider.objects.filter(
             Q(name__icontains=q) | Q(specialty__icontains=q) | Q(practice_name__icontains=q)
@@ -217,6 +221,7 @@ def global_search(request):
             context["loans"],
             context["cashflow_entries"],
             context["leases"],
+            context["documents"],
             context["hc_providers"],
             context["hc_prescriptions"],
             context["hc_appointments"],

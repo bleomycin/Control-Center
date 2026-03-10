@@ -426,6 +426,12 @@ def attachment_add(request, pk):
             att.save()
             return render(request, "notes/partials/_attachment_list.html",
                           {"attachment_list": note.attachments.all(), "note": note})
+        # Validation error — retarget to replace the form itself, not the list
+        response = render(request, "notes/partials/_attachment_form.html",
+                          {"form": form, "note": note})
+        response["HX-Retarget"] = "closest form"
+        response["HX-Reswap"] = "outerHTML"
+        return response
     else:
         form = AttachmentForm()
     return render(request, "notes/partials/_attachment_form.html",

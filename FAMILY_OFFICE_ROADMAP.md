@@ -99,26 +99,105 @@ These field additions are needed by multiple roadmap features and should be addr
 **Implementation notes:** Most data already exists — this is primarily aggregation expansion and Chart.js visualization. The dashboard view in `dashboard/views.py` (lines 63-80) already does basic `Sum` queries. Extend with computed metrics and chart endpoints similar to `cashflow/views.py` chart_data pattern.
 
 ### 1.3 Document Management & Report Intake
-- [ ] **Not started** | Size: XL
+- [ ] **In progress — 5 of 6 milestones complete (M6: calendar alerts remaining)** | Size: XL
 
 **Problem:** Evidence model handles legal documents only. No general-purpose document storage for leases, deeds, surveys, appraisals, tax returns, entity formation docs, insurance certificates, closing packages. More critically, there's no structured way to track the **inflow of periodic reports** from property managers, investment managers, and partners — the primary daily workflow of the family office.
 
 **Storage strategy: Google Drive as file store, Control Center as metadata/intelligence layer** (see Architectural Considerations: Google Drive Integration for full analysis). Google Drive handles what it's good at — storage, sharing, collaboration, Google Workspace editing, mobile access. Control Center handles what Drive can't — categorization by entity, expiration alerts, report schedules, deadline tracking, and cross-entity search. Files live in Google Drive; the app stores references (Drive file IDs/URLs) plus rich metadata.
 
-**What's needed — document metadata model:**
-- [ ] New `Document` model: title, `gdrive_file_id` (CharField), `gdrive_url` (URLField), `gdrive_folder_id` (CharField), category, description, date, expiration_date. Optional `file` (FileField) as fallback for files not in Drive.
-- [ ] Polymorphic linking to any entity: property, investment, loan, lease, legal matter, stakeholder, entity (nullable FKs to each, like CashFlowEntry pattern)
-- [ ] Expiration alerts for time-sensitive documents (insurance certs, permits, licenses) — integrate with calendar events
-- [ ] Document category as DB-backed ChoiceOption for extensibility
-- [ ] Category filtering, search, date range filtering
-- [ ] Migrate existing FileField models (Evidence, LegalCommunication, Attachment, TestResult) to support `gdrive_url` as an alternative to local file storage
+**Detailed implementation plan:** See `GDRIVE_INTEGRATION_PLAN.md` for milestone-by-milestone checklist, architecture diagram, failure mode matrix, and **Usage Guide** with step-by-step instructions.
 
-**What's needed — Google Drive integration (phased):**
-- [ ] **Phase A (link-based)**: Document model stores Google Drive URLs. User pastes Drive links when creating records. No API needed. Immediate value.
-- [ ] **Phase B (Google Picker + API)**: Add `google-api-python-client`. OAuth2 flow for Drive access. Embed Google Picker widget in document forms (browse Drive, select file, auto-populate metadata). App retrieves file name/size/MIME type from API.
-- [ ] **Phase C (managed folders)**: App creates/maintains folder structure in Google Drive (see folder structure in Architectural Considerations). Upload through app pushes to correct Drive folder. Monitor designated folders for new files via polling. Auto-suggest categorization.
+#### How to Use (Quick Reference)
 
-**What's needed — periodic report tracking:**
+- **Documents page** → Sidebar → **Documents** (`/documents/`)
+  - Search, filter by category/entity/expiration/date, sort columns, bulk select, CSV/PDF export
+  - Click `+ New Document` to create, or click any row to view detail
+- **Google Drive Setup** → Settings → **Google Drive** (`/documents/gdrive/settings/`)
+  - Enter OAuth2 credentials → Connect → Picker becomes available on document forms
+- **Google Picker** → On document create/edit form, click green **Pick from Google Drive** button
+  - Selects a file → auto-fills URL, title, and metadata; manual URL paste always works as fallback
+- **Entity linking** → On any entity detail page (Property, Investment, etc.), scroll to **Documents** section
+  - `+ Add` links an existing document; `New Document` creates one pre-linked to that entity
+- **Drive URLs on evidence/attachments** → Legal evidence, communications, note attachments, and healthcare test results all have optional "Google Drive URL" fields alongside their file uploads
+
+#### Completed Milestones
+
+**Milestone 1 — Documents app foundation (no Google):** ✅ **COMPLETE** (2026-03-09)
+- [x] `Document` model with 20+ fields: title, category (DB-backed, 15 values), description, date, expiration_date, Drive metadata (`gdrive_file_id`, `gdrive_url`, `gdrive_mime_type`, `gdrive_file_name`), local `file` (FileField fallback), notes_text, 9 nullable entity FKs, timestamps
+- [x] Computed properties: `has_drive_link`, `has_file`, `file_url`, `linked_entities`, `is_expired`, `is_expiring_soon`
+- [x] Full CRUD: list (HTMX search/filter/sort), detail (Drive link, entity links, notes), create/edit (entity linking, Drive URL), delete
+- [x] Filters: search (title/description/filename), category, entity type (9 types + "unlinked"), expiration (soon/expired), date range, sortable columns
+- [x] Bulk actions: select-all + per-row checkboxes, bulk delete, bulk CSV export
+- [x] Exports: CSV (all + bulk, includes Drive columns), PDF (single doc reportlab)
+- [x] Expiration color coding: red=expired, amber=≤90 days. Mobile responsive layout.
+- [x] 10 sample documents, 15 document categories, sidebar nav link, 44 unit tests
+- [x] **Files:** 16 created, 7 modified
+
+**Milestone 2 — Google Drive Settings + OAuth2:** ✅ **COMPLETE** (2026-03-09)
+- [x] `documents/gdrive.py` — single abstraction layer for ALL Google API calls (10 public functions)
+- [x] Settings page (`/documents/gdrive/settings/`) with credential form, setup instructions, callback URL
+- [x] OAuth2 flow: Connect → Google consent screen → callback → store tokens + connected email
+- [x] Connection status banner (green=connected with email, gray=not connected)
+- [x] Disconnect (revokes tokens), Test Connection (verify endpoint), auto token refresh
+- [x] Settings hub card (emerald theme) linking to Drive settings
+- [x] Password masking: client_secret and api_key show "Leave blank to keep current" on re-visit
+- [x] 26 new unit tests
+- [x] **Files:** 2 created, 7 modified
+
+**Milestone 3 — Google Picker integration:** ✅ **COMPLETE** (2026-03-09)
+- [x] `static/js/gdrive-picker.js` — self-contained Picker wrapper (~180 lines, vanilla JS)
+- [x] Reusable `_gdrive_picker.html` partial: Picker button + selected file feedback + error display
+- [x] Picker token endpoint (`GET /documents/api/picker-token/`) — returns fresh access token JSON (403 when disconnected)
+- [x] `GDriveContextMixin` on Create/Update views — injects `drive_connected`, `drive_api_key`, `drive_client_id`
+- [x] Auto-populate: title (filename minus extension), URL, hidden metadata fields (file_id, mime_type, file_name)
+- [x] Conditional rendering: Picker visible only when Drive connected AND api_key set; manual URL always available
+- [x] Edit mode: existing Drive data auto-shows selected file feedback on page load
+- [x] Error handling: loading spinner → error message → button re-enabled with original text
+- [x] 13 new tests
+- [x] **Files:** 1 created, 6 modified
+
+**Milestone 4 — Existing model migration (gdrive_url on 4 models):** ✅ **COMPLETE** (2026-03-09)
+- [x] `gdrive_url` (URLField) + `has_drive_link` property added to: Evidence, LegalCommunication, Attachment, TestResult
+- [x] Notes Attachment `file` changed to `blank=True` — allows Drive-only attachments (form validates: file OR gdrive_url required)
+- [x] All 4 forms updated with gdrive_url field; 7 templates updated: green Drive links (cloud icon) alongside blue file links
+- [x] 3 migrations (`legal/0008`, `notes/0010`, `healthcare/0005`), 12 new unit tests
+- [x] Sample data: 5/9 evidence items + 3/5 communications have example Drive URLs
+- [x] **Files:** 3 created, 14 modified
+
+**Milestone 5 — Entity detail page integration:** ✅ **COMPLETE** (2026-03-09)
+- [x] "Documents (N)" section on all 9 entity detail pages: Property, Investment, Loan, Lease, Policy, Vehicle, Aircraft, Stakeholder, Legal Matter
+- [x] HTMX link/unlink: `+ Add` dropdown to link existing, `New Document` creates pre-linked, `×` to unlink (inline, no page reload)
+- [x] 2 reusable partials (`_document_link_form.html`, `_document_list_section.html`) + generic view helpers (`ENTITY_CONFIG` dict)
+- [x] 18 link/unlink URL patterns, 15 new unit tests
+- [x] **Files:** 2 created, 12 modified
+
+**Milestone 5b — Global search + UX polish:** ✅ **COMPLETE** (2026-03-09)
+- [x] Documents appear in global search (`/search/`) — matches title, description, category
+- [x] Search results: category label, date, Drive indicator (cloud icon), expiration badges
+- [x] Mobile unlink button: always visible on touch devices (was hover-only)
+- [x] 2 expiration sample docs, 2 new categories (15 total), 2 new unit tests
+
+#### Remaining
+
+**Milestone 6 — Expiration alerts + calendar:** ⬜ Not started
+- [ ] Document expiration events in calendar (`calendar_events()`)
+- [ ] Expiring documents in 30-day dashboard deadline widget
+- [ ] CalendarFeedSettings: add `documents` event type
+- [ ] ICS feed includes document expirations
+
+#### Pages Touched (Summary)
+
+New pages: Document list, detail, create/edit, delete confirm, CSV/PDF export, Drive settings, OAuth flow (4 endpoints), Picker token API, 18 link/unlink endpoints.
+
+Modified pages: Sidebar, Settings hub, Global search results, 9 entity detail pages (Property, Investment, Loan, Lease, Policy, Vehicle, Aircraft, Stakeholder, Legal Matter), 4 evidence/attachment form templates, 4 evidence/attachment list templates, 1 test result detail template.
+
+See `GDRIVE_INTEGRATION_PLAN.md` → "Pages & URLs Affected" for the complete URL table.
+
+#### Test Coverage
+- **1199 unit tests** + **140 e2e tests** — all passing (as of latest verification)
+- Documents app: ~100 unit tests covering model, views, forms, filters, exports, Drive settings, OAuth, Picker, entity linking
+
+**What's needed — periodic report tracking (future, post-Milestone 6):**
 - [ ] New `ReportSchedule` model: manager (FK to Stakeholder), report_type (operating_statement, investor_report, k1, capital_account_statement, rent_roll, budget, tax_return), frequency (monthly, quarterly, annually), expected_day (day of month/quarter typically received), related assets (M2M to properties/investments)
 - [ ] New `ReportReceipt` model (or extend Document): schedule FK, period_covered (date range), date_received, status (expected, received, overdue, reviewed), document FK (link to received file in Drive), key_figures (JSONField — store extracted numbers like NOI, occupancy, distributions for trend tracking)
 - [ ] **Overdue report alerts**: Flag when expected reports haven't been received by their due date + grace period. Calendar integration.

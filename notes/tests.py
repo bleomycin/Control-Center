@@ -91,6 +91,33 @@ class AttachmentModelTests(TestCase):
         self.note.delete()
         self.assertEqual(Attachment.objects.count(), 0)
 
+    def test_gdrive_url_field(self):
+        att = Attachment.objects.create(
+            note=self.note,
+            gdrive_url="https://drive.google.com/file/d/abc/view",
+            description="Drive doc",
+        )
+        self.assertTrue(att.has_drive_link)
+        self.assertEqual(str(att), "Drive doc")
+
+    def test_has_drive_link_false(self):
+        f = SimpleUploadedFile("f.txt", b"x", content_type="text/plain")
+        att = Attachment.objects.create(note=self.note, file=f)
+        self.assertFalse(att.has_drive_link)
+
+    def test_form_requires_file_or_gdrive(self):
+        from notes.forms import AttachmentForm
+        form = AttachmentForm(data={"description": "nothing"})
+        self.assertFalse(form.is_valid())
+
+    def test_form_valid_with_gdrive_only(self):
+        from notes.forms import AttachmentForm
+        form = AttachmentForm(data={
+            "gdrive_url": "https://drive.google.com/file/d/abc/view",
+            "description": "Drive attachment",
+        })
+        self.assertTrue(form.is_valid())
+
 
 class NoteViewTests(TestCase):
     @classmethod

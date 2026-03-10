@@ -122,6 +122,44 @@ class EvidenceModelTests(TestCase):
         self.assertTrue(ev.file)
         self.assertEqual(ev.url, "https://example.com/doc")
 
+    def test_gdrive_url_field(self):
+        ev = Evidence.objects.create(
+            legal_matter=self.matter,
+            title="Drive Evidence",
+            gdrive_url="https://drive.google.com/file/d/abc/view",
+        )
+        self.assertTrue(ev.has_drive_link)
+        self.assertEqual(ev.gdrive_url, "https://drive.google.com/file/d/abc/view")
+
+    def test_has_drive_link_false(self):
+        ev = Evidence.objects.create(legal_matter=self.matter, title="No Drive")
+        self.assertFalse(ev.has_drive_link)
+
+
+class LegalCommunicationGdriveTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Comm GDrive Case")
+
+    def test_gdrive_url_field(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            method="email",
+            summary="Test",
+            gdrive_url="https://drive.google.com/file/d/xyz/view",
+        )
+        self.assertTrue(comm.has_drive_link)
+
+    def test_has_drive_link_false(self):
+        comm = LegalCommunication.objects.create(
+            legal_matter=self.matter,
+            date=timezone.now(),
+            method="email",
+            summary="Test",
+        )
+        self.assertFalse(comm.has_drive_link)
+
 
 class LegalViewTests(TestCase):
     @classmethod

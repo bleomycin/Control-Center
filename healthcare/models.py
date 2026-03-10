@@ -247,6 +247,7 @@ class TestResult(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
     result_summary = models.TextField(blank=True)
     file = models.FileField(upload_to="test_results/", blank=True)
+    gdrive_url = models.URLField(max_length=500, blank=True, verbose_name="Google Drive URL")
     ordering_provider = models.ForeignKey(
         Provider, on_delete=models.SET_NULL,
         null=True, blank=True, related_name="ordered_tests",
@@ -263,6 +264,10 @@ class TestResult(models.Model):
     notes_text = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def has_drive_link(self):
+        return bool(self.gdrive_url)
 
     def __str__(self):
         return self.test_name

@@ -85,8 +85,13 @@ class Evidence(models.Model):
     evidence_type = models.CharField(max_length=100, blank=True)
     date_obtained = models.DateField(null=True, blank=True)
     file = models.FileField(upload_to="evidence/", blank=True)
+    gdrive_url = models.URLField(max_length=500, blank=True, verbose_name="Google Drive URL")
     url = models.URLField(max_length=500, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def has_drive_link(self):
+        return bool(self.gdrive_url)
 
     def __str__(self):
         return self.title
@@ -119,7 +124,12 @@ class LegalCommunication(models.Model):
     follow_up_completed = models.BooleanField(default=False)
     follow_up_completed_date = models.DateField(null=True, blank=True)
     file = models.FileField(upload_to="communications/", blank=True)
+    gdrive_url = models.URLField(max_length=500, blank=True, verbose_name="Google Drive URL")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def has_drive_link(self):
+        return bool(self.gdrive_url)
 
     def __str__(self):
         return f"{self.get_direction_display()} {self.method} — {self.date:%Y-%m-%d}"

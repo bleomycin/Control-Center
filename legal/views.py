@@ -202,6 +202,7 @@ class LegalMatterDetailView(DetailView):
             date__date__gte=thirty_days_ago
         ).count()
         ctx["related_entities"] = _build_entity_list(obj)
+        ctx["entity_documents"] = obj.documents.all()
         return ctx
 
 

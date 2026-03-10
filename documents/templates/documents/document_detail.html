@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% load humanize choice_labels %}
+
+{% block title %}{{ document.title }} - Documents{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Breadcrumb + Header -->
+    <div class="mb-6">
+        <nav class="flex items-center gap-2 text-sm text-gray-400 mb-2">
+            <a href="{% url 'dashboard:index' %}" class="hover:text-gray-300">Home</a>
+            <span class="text-gray-600">/</span>
+            <a href="{% url 'documents:list' %}" class="hover:text-gray-300">Documents</a>
+            <span class="text-gray-600">/</span>
+            <span class="text-gray-200">{{ document.title }}</span>
+        </nav>
+        <h1 class="text-2xl font-bold text-white mt-2">{{ document.title }}</h1>
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+            {% if document.category %}
+            <span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">{{ document.category|choice_label:"document_category" }}</span>
+            {% endif %}
+            {% if document.date %}
+            <span class="text-xs text-gray-400">{{ document.date|date:"M j, Y" }}</span>
+            {% endif %}
+        </div>
+        <div class="flex flex-wrap gap-2 mt-3">
+            <a href="{% url 'documents:export_pdf' document.pk %}"
+               class="px-3 py-1.5 bg-purple-900/50 hover:bg-purple-900 text-purple-300 text-sm rounded-md transition-colors whitespace-nowrap">PDF</a>
+            <a href="{% url 'documents:edit' document.pk %}"
+               class="px-3 py-1.5 bg-blue-900/50 hover:bg-blue-900 text-blue-300 text-sm rounded-md transition-colors whitespace-nowrap">Edit</a>
+            <a href="{% url 'documents:delete' document.pk %}"
+               class="px-3 py-1.5 bg-red-900/50 hover:bg-red-900 text-red-300 text-sm rounded-md transition-colors whitespace-nowrap">Delete</a>
+        </div>
+    </div>
+
+    <!-- Document Info -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Document Info</h2>
+        </div>
+        <dl class="divide-y divide-gray-700">
+            {% if document.description %}
+            <div class="px-4 py-3">
+                <dt class="text-xs text-gray-400 mb-1">Description</dt>
+                <dd class="text-sm text-gray-200">{{ document.description|linebreaksbr }}</dd>
+            </div>
+            {% endif %}
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 px-4 py-3">
+                <div>
+                    <dt class="text-xs text-gray-400 mb-1">Category</dt>
+                    <dd class="text-sm text-gray-200">{% if document.category %}{{ document.category|choice_label:"document_category" }}{% else %}<span class="text-gray-500">-</span>{% endif %}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-gray-400 mb-1">Date</dt>
+                    <dd class="text-sm text-gray-200">{% if document.date %}{{ document.date|date:"M j, Y" }}{% else %}<span class="text-gray-500">-</span>{% endif %}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-gray-400 mb-1">Expiration</dt>
+                    <dd class="text-sm {% if document.expiration_date %}text-gray-200{% else %}text-gray-500{% endif %}">
+                        {% if document.expiration_date %}{{ document.expiration_date|date:"M j, Y" }}{% else %}-{% endif %}
+                    </dd>
+                </div>
+            </div>
+        </dl>
+    </div>
+
+    <!-- File / Google Drive -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">File Source</h2>
+        </div>
+        <div class="px-4 py-3">
+            {% if document.has_drive_link %}
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-blue-400 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M7.71 3.5L1.15 15l4.58 7.5h13.54l4.58-7.5L17.29 3.5H7.71zm.58 1h8.42l5.83 10.5h-5.83l-4.21-7.3-4.21 7.3H2.46L8.29 4.5z"/></svg>
+                <div class="min-w-0">
+                    <a href="{{ document.gdrive_url }}" target="_blank" rel="noopener"
+                       class="text-sm text-blue-400 hover:text-blue-300 break-all">
+                        {% if document.gdrive_file_name %}{{ document.gdrive_file_name }}{% else %}Open in Google Drive{% endif %}
+                    </a>
+                    {% if document.gdrive_mime_type %}
+                    <p class="text-xs text-gray-500 mt-0.5">{{ document.gdrive_mime_type }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% elif document.has_file %}
+            <div class="flex items-center gap-3">
+                <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                <a href="{{ document.file.url }}" target="_blank"
+                   class="text-sm text-blue-400 hover:text-blue-300">{{ document.file.name|cut:"documents/" }}</a>
+            </div>
+            {% else %}
+            <p class="text-sm text-gray-500">No file attached. You can add a Google Drive link or upload a file by editing this document.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Linked Entities -->
+    {% with entities=document.linked_entities %}
+    {% if entities %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Linked Entities</h2>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% for label, obj in entities %}
+            <a href="{{ obj.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+                <span class="text-sm text-blue-400 hover:text-blue-300">{{ obj }}</span>
+                <span class="text-xs text-gray-500">{{ label }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    {% endwith %}
+
+    <!-- Notes -->
+    {% if document.notes_text %}
+    <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+        <div class="px-4 py-3 border-b border-gray-700">
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Notes</h2>
+        </div>
+        <div class="px-4 py-3 text-sm text-gray-300">
+            {{ document.notes_text|linebreaksbr }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Metadata -->
+    <div class="text-xs text-gray-500 mt-4">
+        Created {{ document.created_at|date:"M j, Y g:i A" }}
+        {% if document.updated_at != document.created_at %}
+        &middot; Updated {{ document.updated_at|date:"M j, Y g:i A" }}
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

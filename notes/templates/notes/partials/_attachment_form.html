@@ -2,12 +2,21 @@
       hx-encoding="multipart/form-data"
       class="px-4 py-4 border-b border-gray-700 bg-gray-750">
     {% csrf_token %}
+    {% if form.non_field_errors %}
+    <div class="mb-3 p-2 bg-red-900/30 border border-red-700 rounded text-sm text-red-300">
+        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+    </div>
+    {% endif %}
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
             <label for="{{ form.file.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">File</label>
             {{ form.file }}
         </div>
         <div>
+            <label for="{{ form.gdrive_url.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Google Drive URL</label>
+            {{ form.gdrive_url }}
+        </div>
+        <div class="sm:col-span-2">
             <label for="{{ form.description.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Description</label>
             {{ form.description }}
         </div>

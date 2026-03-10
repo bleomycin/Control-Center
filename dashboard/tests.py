@@ -104,6 +104,20 @@ class GlobalSearchTests(TestCase):
         resp = self.client.get(reverse("dashboard:search"), {"q": "Bulk Person"})
         self.assertTrue(len(resp.context["stakeholders"]) <= 10)
 
+    def test_finds_document_by_title(self):
+        from documents.models import Document
+        Document.objects.create(title="Searchable Deed")
+        resp = self.client.get(reverse("dashboard:search"), {"q": "Searchable Deed"})
+        self.assertTrue(resp.context["has_results"])
+        self.assertTrue(resp.context["documents"].exists())
+
+    def test_finds_document_by_description(self):
+        from documents.models import Document
+        Document.objects.create(title="X", description="Warranty deed for Oak Ave")
+        resp = self.client.get(reverse("dashboard:search"), {"q": "Warranty deed"})
+        self.assertTrue(resp.context["has_results"])
+        self.assertTrue(resp.context["documents"].exists())
+
 
 class ActivityTimelineTests(TestCase):
     def test_empty_returns_list(self):

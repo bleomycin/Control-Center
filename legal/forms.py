@@ -40,7 +40,7 @@ class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
 class EvidenceForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Evidence
-        fields = ["title", "description", "evidence_type", "date_obtained", "file", "url"]
+        fields = ["title", "description", "evidence_type", "date_obtained", "file", "gdrive_url", "url"]
         widgets = {
             "date_obtained": forms.DateInput(attrs={"type": "date"}),
             "description": forms.Textarea(attrs={"rows": 2}),
@@ -52,7 +52,7 @@ class LegalCommunicationForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = LegalCommunication
         fields = ["stakeholder", "date", "direction", "method", "subject", "summary",
-                  "follow_up_needed", "follow_up_date", "file"]
+                  "follow_up_needed", "follow_up_date", "file", "gdrive_url"]
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "follow_up_date": forms.DateInput(attrs={"type": "date"}),

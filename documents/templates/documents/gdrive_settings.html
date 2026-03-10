@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Google Drive Settings - Control Center{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <!-- Back link + heading -->
+    <div class="mb-6">
+        <a href="{% url 'dashboard:settings_hub' %}" class="text-sm text-gray-400 hover:text-gray-300 inline-flex items-center gap-1 mb-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            Settings
+        </a>
+        <h1 class="text-2xl font-bold text-white">Google Drive Settings</h1>
+        <p class="text-sm text-gray-400 mt-1">Connect Google Drive to browse and link files directly from the Picker widget.</p>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+    <div class="mb-4 space-y-2">
+        {% for message in messages %}
+        <div class="p-3 rounded-md text-sm {% if message.tags == 'success' %}bg-green-900/30 border border-green-700 text-green-300{% elif message.tags == 'error' %}bg-red-900/30 border border-red-700 text-red-300{% else %}bg-blue-900/30 border border-blue-700 text-blue-300{% endif %}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Connection Status Banner -->
+    <div class="mb-6 p-4 rounded-lg border {% if connected %}bg-green-900/20 border-green-700{% else %}bg-gray-800 border-gray-700{% endif %}">
+        <div class="flex items-center gap-3">
+            {% if connected %}
+            <div class="p-2 bg-green-900/50 rounded-full">
+                <svg class="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-medium text-green-300">Connected to Google Drive</p>
+                <p class="text-xs text-green-400/80">{{ connected_email }}</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="{% url 'documents:gdrive_verify' %}" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium rounded-md transition-colors">
+                    Test Connection
+                </a>
+                <form method="post" action="{% url 'documents:gdrive_disconnect' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="px-3 py-1.5 bg-red-900/50 hover:bg-red-800 text-red-300 text-xs font-medium rounded-md transition-colors border border-red-700"
+                            onclick="return confirm('Disconnect Google Drive? Existing Drive links will still work.')">
+                        Disconnect
+                    </button>
+                </form>
+            </div>
+            {% else %}
+            <div class="p-2 bg-gray-700/50 rounded-full">
+                <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-300">Not connected</p>
+                <p class="text-xs text-gray-500">Save your credentials below, then click "Connect Google Drive".</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Credentials Form -->
+    <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-6">
+        {% csrf_token %}
+
+        {% if form.non_field_errors %}
+        <div class="p-3 bg-red-900/30 border border-red-700 rounded-md text-sm text-red-300">
+            {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- OAuth2 Credentials Section -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">OAuth2 Credentials</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.client_id.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.client_id.label }}</label>
+                    {{ form.client_id }}
+                    {% if form.client_id.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.client_id.help_text }}</p>{% endif %}
+                    {% if form.client_id.errors %}<p class="mt-1 text-xs text-red-400">{{ form.client_id.errors.0 }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.client_secret.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.client_secret.label }}</label>
+                    {{ form.client_secret }}
+                    {% if form.client_secret.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.client_secret.help_text }}</p>{% endif %}
+                    {% if form.client_secret.errors %}<p class="mt-1 text-xs text-red-400">{{ form.client_secret.errors.0 }}</p>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- API Key Section -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">API Key</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.api_key.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.api_key.label }}</label>
+                    {{ form.api_key }}
+                    {% if form.api_key.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.api_key.help_text }}</p>{% endif %}
+                    {% if form.api_key.errors %}<p class="mt-1 text-xs text-red-400">{{ form.api_key.errors.0 }}</p>{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Setup Instructions -->
+        <div class="bg-gray-900/50 border border-gray-700 rounded-md p-4">
+            <h3 class="text-sm font-medium text-gray-300 mb-2">Setup Instructions</h3>
+            <ol class="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
+                <li>Go to the <strong class="text-gray-400">Google Cloud Console</strong> and create or select a project.</li>
+                <li>Enable the <strong class="text-gray-400">Google Drive API</strong> and <strong class="text-gray-400">Google Picker API</strong>.</li>
+                <li>Go to <strong class="text-gray-400">APIs &amp; Services &rarr; Credentials</strong>.</li>
+                <li>Create an <strong class="text-gray-400">OAuth 2.0 Client ID</strong> (Web application type).</li>
+                <li>Add your callback URL as an authorized redirect URI:<br>
+                    <code class="text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded mt-1 inline-block">{{ request.scheme }}://{{ request.get_host }}{% url 'documents:gdrive_callback' %}</code>
+                </li>
+                <li>Copy the <strong class="text-gray-400">Client ID</strong> and <strong class="text-gray-400">Client Secret</strong> into the fields above.</li>
+                <li>Create an <strong class="text-gray-400">API Key</strong> and restrict it to the Picker API (optional for now).</li>
+            </ol>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex flex-wrap gap-3 pt-2">
+            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
+                Save Credentials
+            </button>
+            {% if settings_obj.client_id and settings_obj.client_secret and not connected %}
+            <a href="{% url 'documents:gdrive_authorize' %}" class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-md transition-colors inline-flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                Connect Google Drive
+            </a>
+            {% endif %}
+            <a href="{% url 'dashboard:settings_hub' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

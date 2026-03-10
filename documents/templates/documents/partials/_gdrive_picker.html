@@ -1,0 +1,32 @@
+{% if drive_connected %}
+<div id="gdrive-picker-section" class="border border-gray-700 rounded-lg p-4 bg-gray-800/50">
+    <div class="flex items-center justify-between mb-2">
+        <label class="block text-sm font-medium text-gray-300">Google Drive File</label>
+        <button type="button" id="gdrive-picker-btn"
+                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-md transition-colors inline-flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+            </svg>
+            <span>Pick from Google Drive</span>
+        </button>
+    </div>
+    <!-- Selected file feedback -->
+    <div id="gdrive-selected-file" class="hidden mt-2 p-3 bg-gray-700/50 rounded-md">
+        <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span id="gdrive-selected-name" class="text-sm text-gray-200 truncate"></span>
+        </div>
+        <p id="gdrive-selected-type" class="text-xs text-gray-500 mt-1 ml-6"></p>
+        <button type="button" id="gdrive-clear-btn" class="text-xs text-red-400 hover:text-red-300 mt-1 ml-6">Clear selection</button>
+    </div>
+    <!-- Error feedback -->
+    <div id="gdrive-picker-error" class="hidden mt-2 p-2 bg-red-900/30 border border-red-700 rounded-md text-sm text-red-300"></div>
+</div>
+{% endif %}
+
+<!-- Hidden fields for Drive metadata (always rendered so form.save() works) -->
+{{ form.gdrive_file_id }}
+{{ form.gdrive_mime_type }}
+{{ form.gdrive_file_name }}

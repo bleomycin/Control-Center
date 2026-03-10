@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'cashflow',
     'notes',
     'healthcare',
+    'documents',
     'dashboard',
 ]
 

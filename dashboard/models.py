@@ -15,6 +15,7 @@ CATEGORY_CHOICES = [
     ("lease_type", "Lease Type"),
     ("provider_type", "Provider Type"),
     ("test_type", "Test Type"),
+    ("document_category", "Document Category"),
 ]
 
 

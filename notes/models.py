@@ -127,12 +127,17 @@ class Note(models.Model):
 
 class Attachment(models.Model):
     note = models.ForeignKey(Note, on_delete=models.CASCADE, related_name="attachments")
-    file = models.FileField(upload_to="attachments/")
+    file = models.FileField(upload_to="attachments/", blank=True)
+    gdrive_url = models.URLField(max_length=500, blank=True, verbose_name="Google Drive URL")
     description = models.CharField(max_length=255, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def has_drive_link(self):
+        return bool(self.gdrive_url)
+
     def __str__(self):
-        return self.description or self.file.name
+        return self.description or (self.file.name if self.file else self.gdrive_url)
 
     def get_absolute_url(self):
         return reverse("notes:detail", kwargs={"pk": self.note.pk})

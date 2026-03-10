@@ -1,0 +1,43 @@
+from django.urls import path
+from . import views
+
+app_name = "documents"
+
+urlpatterns = [
+    path("", views.DocumentListView.as_view(), name="list"),
+    path("export/", views.export_csv, name="export_csv"),
+    path("create/", views.DocumentCreateView.as_view(), name="create"),
+    path("<int:pk>/", views.DocumentDetailView.as_view(), name="detail"),
+    path("<int:pk>/pdf/", views.export_pdf_detail, name="export_pdf"),
+    path("<int:pk>/edit/", views.DocumentUpdateView.as_view(), name="edit"),
+    path("<int:pk>/delete/", views.DocumentDeleteView.as_view(), name="delete"),
+    path("bulk/delete/", views.bulk_delete, name="bulk_delete"),
+    path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
+    # Entity document link/unlink
+    path("link/property/<int:pk>/", views.property_document_link, name="property_document_link"),
+    path("unlink/property/<int:pk>/<int:doc_pk>/", views.property_document_unlink, name="property_document_unlink"),
+    path("link/investment/<int:pk>/", views.investment_document_link, name="investment_document_link"),
+    path("unlink/investment/<int:pk>/<int:doc_pk>/", views.investment_document_unlink, name="investment_document_unlink"),
+    path("link/loan/<int:pk>/", views.loan_document_link, name="loan_document_link"),
+    path("unlink/loan/<int:pk>/<int:doc_pk>/", views.loan_document_unlink, name="loan_document_unlink"),
+    path("link/lease/<int:pk>/", views.lease_document_link, name="lease_document_link"),
+    path("unlink/lease/<int:pk>/<int:doc_pk>/", views.lease_document_unlink, name="lease_document_unlink"),
+    path("link/policy/<int:pk>/", views.policy_document_link, name="policy_document_link"),
+    path("unlink/policy/<int:pk>/<int:doc_pk>/", views.policy_document_unlink, name="policy_document_unlink"),
+    path("link/vehicle/<int:pk>/", views.vehicle_document_link, name="vehicle_document_link"),
+    path("unlink/vehicle/<int:pk>/<int:doc_pk>/", views.vehicle_document_unlink, name="vehicle_document_unlink"),
+    path("link/aircraft/<int:pk>/", views.aircraft_document_link, name="aircraft_document_link"),
+    path("unlink/aircraft/<int:pk>/<int:doc_pk>/", views.aircraft_document_unlink, name="aircraft_document_unlink"),
+    path("link/stakeholder/<int:pk>/", views.stakeholder_document_link, name="stakeholder_document_link"),
+    path("unlink/stakeholder/<int:pk>/<int:doc_pk>/", views.stakeholder_document_unlink, name="stakeholder_document_unlink"),
+    path("link/legal-matter/<int:pk>/", views.legal_matter_document_link, name="legal_matter_document_link"),
+    path("unlink/legal-matter/<int:pk>/<int:doc_pk>/", views.legal_matter_document_unlink, name="legal_matter_document_unlink"),
+    # Google Drive settings & OAuth2
+    path("gdrive/settings/", views.gdrive_settings, name="gdrive_settings"),
+    path("gdrive/authorize/", views.gdrive_authorize, name="gdrive_authorize"),
+    path("gdrive/callback/", views.gdrive_callback, name="gdrive_callback"),
+    path("gdrive/disconnect/", views.gdrive_disconnect, name="gdrive_disconnect"),
+    path("gdrive/verify/", views.gdrive_verify, name="gdrive_verify"),
+    path("api/picker-token/", views.picker_token, name="picker_token"),
+    path("api/gdrive-search/", views.gdrive_search, name="gdrive_search"),
+]

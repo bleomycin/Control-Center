@@ -117,7 +117,7 @@ class TestResultForm(TailwindFormMixin, forms.ModelForm):
         model = TestResult
         fields = ["test_name", "test_type", "date", "facility",
                   "result_value", "reference_range", "unit", "status",
-                  "result_summary", "file", "ordering_provider",
+                  "result_summary", "file", "gdrive_url", "ordering_provider",
                   "related_condition", "health_insurance", "notes_text"]
         widgets = {
             "test_type": forms.Select(),

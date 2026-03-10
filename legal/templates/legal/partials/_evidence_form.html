@@ -4,7 +4,7 @@
     {% csrf_token %}
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         {% for field in form %}
-        {% if field.name != "description" and field.name != "file" %}
+        {% if field.name != "description" and field.name != "file" and field.name != "gdrive_url" %}
         <div>
             <label for="{{ field.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">{{ field.label }}</label>
             {{ field }}
@@ -23,6 +23,10 @@
             </div>
             {% endif %}
             {{ form.file }}
+        </div>
+        <div>
+            <label for="{{ form.gdrive_url.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Google Drive URL</label>
+            {{ form.gdrive_url }}
         </div>
     </div>
     <div class="mb-3">

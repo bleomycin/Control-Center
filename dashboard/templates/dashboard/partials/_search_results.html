@@ -85,6 +85,30 @@
 </div>
 {% endif %}
 
+{% if documents %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Documents ({{ documents|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for doc in documents %}
+        <a href="{{ doc.get_absolute_url }}" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ doc.title }}</p>
+                <p class="text-xs text-gray-400">{% if doc.category %}{{ doc.category|choice_label:"document_category" }}{% endif %}{% if doc.date %} · {{ doc.date|date:"M j, Y" }}{% endif %}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                {% if doc.has_drive_link %}<span class="text-xs text-green-400">Drive</span>{% endif %}
+                {% if doc.is_expired %}<span class="text-xs px-2 py-0.5 rounded-full bg-red-900/50 text-red-300">Expired</span>
+                {% elif doc.is_expiring_soon %}<span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300">Expiring</span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if properties %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
     <div class="px-4 py-3 border-b border-gray-700">

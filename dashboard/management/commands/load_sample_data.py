@@ -21,11 +21,13 @@ from healthcare.models import (
     Provider, Condition, Prescription, Supplement, TestResult,
     Visit, Advice, Appointment,
 )
+from documents.models import Document
 
 
 # Canonical section order and labels
 SECTION_ORDER = [
     "stakeholders", "assets", "legal", "tasks", "cashflow", "notes", "healthcare",
+    "documents",
 ]
 SECTION_LABELS = {
     "stakeholders": "Stakeholders",
@@ -35,6 +37,7 @@ SECTION_LABELS = {
     "cashflow": "Cash Flow",
     "notes": "Notes",
     "healthcare": "Healthcare",
+    "documents": "Documents",
 }
 
 # Which sections depend on which others (for loading)
@@ -46,6 +49,7 @@ SECTION_DEPS = {
     "cashflow": ["stakeholders"],
     "notes": [],
     "healthcare": [],
+    "documents": ["stakeholders", "assets", "legal"],
 }
 
 # Deletion order per section (children before parents within each section)
@@ -70,6 +74,7 @@ SECTION_DELETION_ORDER = {
         "stakeholders.contactlog", "stakeholders.relationship",
         "stakeholders.stakeholder",
     ],
+    "documents": ["documents.document"],
 }
 
 # ---------------------------------------------------------------------------
@@ -176,6 +181,16 @@ SAMPLE_NAMES = {
     "conditions": {"Essential Hypertension", "Seasonal Allergies"},
     "prescriptions": {"Lisinopril", "Atorvastatin", "Amoxicillin"},
     "supplements": {"Vitamin D3", "Fish Oil (Omega-3)", "Magnesium Glycinate"},
+    "documents": {
+        "Oak Ave Property Deed", "Elm St Property Deed",
+        "2024 Federal Tax Return", "2024 State Tax Return",
+        "Oak Ave Homeowners Insurance Certificate",
+        "NP Investments LP - Operating Agreement",
+        "Magnolia Blvd Appraisal Report",
+        "Q4 2024 Elm St Operating Statement",
+        "Elm St Business License",
+        "Magnolia Blvd Phase I ESA Report",
+    },
 }
 
 
@@ -311,6 +326,9 @@ class Command(BaseCommand):
             loader = getattr(self, f"_load_{section}")
             manifest = loader(today, now)
             sample_status.manifest[section] = manifest
+            # Save after each section so cross-section helpers (e.g.
+            # _get_sample_stakeholders) see the latest manifest from DB.
+            sample_status.save()
             self.stdout.write(self.style.SUCCESS(f"  Loaded {SECTION_LABELS[section]}"))
 
         sample_status.is_loaded = any(sample_status.manifest.get(s) for s in SECTION_ORDER)
@@ -941,60 +959,63 @@ class Command(BaseCommand):
                 legal_matters["Holston Eviction - 1200 Oak Ave"].related_leases.add(leases[lease_name])
 
         self.stdout.write("Creating evidence...")
+        # (title, description, evidence_type, date_obtained, gdrive_url)
         evidence_data = [
             ("Holston Eviction - 1200 Oak Ave", [
-                ("Lease Agreement - Holston", "Original signed lease with Ray Holston", "Document", today - timedelta(days=400)),
-                ("Demand Letter - 30 Day Notice", "Certified mail demand letter sent to Holston", "Correspondence", today - timedelta(days=60)),
-                ("Rent Ledger", "Payment history showing 3 months delinquent", "Financial Record", today - timedelta(days=45)),
+                ("Lease Agreement - Holston", "Original signed lease with Ray Holston", "Document", today - timedelta(days=400), "https://drive.google.com/file/d/ev_lease01/view"),
+                ("Demand Letter - 30 Day Notice", "Certified mail demand letter sent to Holston", "Correspondence", today - timedelta(days=60), ""),
+                ("Rent Ledger", "Payment history showing 3 months delinquent", "Financial Record", today - timedelta(days=45), "https://drive.google.com/file/d/ev_ledger01/view"),
             ]),
             ("Cedar Lane Boundary Dispute", [
-                ("Property Survey - 2024", "Licensed surveyor report showing fence placement", "Survey", today - timedelta(days=180)),
-                ("Original Deed - 890 Cedar", "Deed with metes and bounds description", "Document", today - timedelta(days=200)),
-                ("Neighbor Communications", "Email thread with neighbor's initial complaint", "Correspondence", today - timedelta(days=220)),
+                ("Property Survey - 2024", "Licensed surveyor report showing fence placement", "Survey", today - timedelta(days=180), "https://drive.google.com/file/d/ev_survey01/view"),
+                ("Original Deed - 890 Cedar", "Deed with metes and bounds description", "Document", today - timedelta(days=200), ""),
+                ("Neighbor Communications", "Email thread with neighbor's initial complaint", "Correspondence", today - timedelta(days=220), ""),
             ]),
             ("Magnolia Blvd Acquisition - Due Diligence", [
-                ("Phase I Environmental Report", "Clean environmental assessment", "Report", today - timedelta(days=20)),
-                ("Title Search Results", "Clear title, no liens or encumbrances", "Document", today - timedelta(days=15)),
-                ("Property Inspection Report", "Structural and mechanical inspection findings", "Report", today - timedelta(days=18)),
+                ("Phase I Environmental Report", "Clean environmental assessment", "Report", today - timedelta(days=20), "https://drive.google.com/file/d/ev_env01/view"),
+                ("Title Search Results", "Clear title, no liens or encumbrances", "Document", today - timedelta(days=15), "https://drive.google.com/file/d/ev_title01/view"),
+                ("Property Inspection Report", "Structural and mechanical inspection findings", "Report", today - timedelta(days=18), ""),
             ]),
         ]
         for lm_title, items in evidence_data:
             if lm_title in legal_matters:
-                for title, desc, etype, dt in items:
+                for title, desc, etype, dt, gdrive in items:
                     Evidence.objects.create(
                         legal_matter=legal_matters[lm_title],
                         title=title, description=desc, evidence_type=etype, date_obtained=dt,
+                        gdrive_url=gdrive,
                     )
 
         self.stdout.write("Creating legal communications...")
         comm_pks = []
+        # (lm_title, sh_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed, gdrive_url)
         comm_data = [
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -14, "outbound", "email",
              "Case summary and evidence",
              "Sent initial case summary and evidence of missed payments to Marcus for review.",
-             False, None, False),
+             False, None, False, "https://drive.google.com/file/d/comm_case01/view"),
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -10, "inbound", "call",
              "Filing timeline confirmation",
              "Marcus confirmed filing timeline. Expects hearing in 3-4 weeks. Discussed strategy — "
              "going for default judgment if Holston doesn't respond.",
-             True, 7, False),
+             True, 7, False, ""),
             ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", -5, "outbound", "email",
              "Bank statements and property photos",
              "Forwarded bank statements showing bounced checks and 3 months of non-payment. "
              "Also sent photos of property condition from last inspection.",
-             False, None, False),
+             False, None, False, "https://drive.google.com/file/d/comm_bank01/view"),
             ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", -12, "outbound", "call",
              "Title search results review",
              "Discussed title search results with Sandra. One old mechanics lien found — "
              "she says it should clear before closing.",
-             True, -3, True),
+             True, -3, True, ""),
             ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", -7, "inbound", "email",
              "Phase I environmental report",
              "Sandra sent Phase I environmental report summary. Property is clean — "
              "no remediation needed. Recommends proceeding to closing.",
-             True, 5, False),
+             True, 5, False, "https://drive.google.com/file/d/comm_env01/view"),
         ]
-        for lm_title, sh_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed in comm_data:
+        for lm_title, sh_name, days_ago, direction, method, subject, summary, followup, fu_days, fu_completed, gdrive in comm_data:
             if lm_title in legal_matters and sh_name in stakeholders:
                 comm = LegalCommunication.objects.create(
                     legal_matter=legal_matters[lm_title],
@@ -1006,6 +1027,7 @@ class Command(BaseCommand):
                     follow_up_date=today + timedelta(days=fu_days) if fu_days else None,
                     follow_up_completed=fu_completed,
                     follow_up_completed_date=today if fu_completed else None,
+                    gdrive_url=gdrive,
                 )
                 comm_pks.append(comm.pk)
 
@@ -1605,4 +1627,104 @@ class Command(BaseCommand):
             "healthcare.visit": hc_pks["visits"],
             "healthcare.advice": hc_pks["advice"],
             "healthcare.appointment": hc_pks["appointments"],
+        }
+
+    # -----------------------------------------------------------------------
+    # DOCUMENTS
+    # -----------------------------------------------------------------------
+    def _load_documents(self, today, now):
+        properties = _get_sample_properties()
+        investments = _get_sample_investments()
+        insurance = _get_sample_insurance()
+        legal_matters = _get_sample_legal_matters()
+        stakeholders = _get_sample_stakeholders()
+
+        self.stdout.write("Creating documents...")
+        doc_pks = []
+
+        doc_data = [
+            # (title, category, date, expiration_date, description, gdrive_url,
+            #  property_name, investment_name, policy_name, legal_name, stakeholder_name, notes)
+            ("Oak Ave Property Deed", "deed",
+             today - timedelta(days=1825), None,
+             "Warranty deed for 1200 Oak Avenue residential property.",
+             "https://drive.google.com/file/d/1abc123/view",
+             "1200 Oak Avenue", None, None, None, None,
+             "Recorded at county recorder's office."),
+            ("Elm St Property Deed", "deed",
+             today - timedelta(days=1460), None,
+             "Warranty deed for 450 Elm Street duplex property.",
+             "",
+             "450 Elm Street", None, None, None, None, ""),
+            ("2024 Federal Tax Return", "tax_return",
+             today - timedelta(days=60), None,
+             "2024 Federal income tax return (Form 1040) and all schedules.",
+             "https://drive.google.com/file/d/2def456/view",
+             None, None, None, None, None,
+             "Filed electronically via CPA."),
+            ("2024 State Tax Return", "tax_return",
+             today - timedelta(days=55), None,
+             "2024 California state income tax return (Form 540).",
+             "https://drive.google.com/file/d/3ghi789/view",
+             None, None, None, None, None, ""),
+            ("Oak Ave Homeowners Insurance Certificate", "insurance_cert",
+             today - timedelta(days=90), today + timedelta(days=275),
+             "Certificate of insurance for 1200 Oak Avenue homeowners policy.",
+             "",
+             "1200 Oak Avenue", None, "Homeowners - 1200 Oak Ave", None, None, ""),
+            ("NP Investments LP - Operating Agreement", "operating_agreement",
+             today - timedelta(days=365), None,
+             "Limited partnership operating agreement for NP Investments LP Fund II.",
+             "https://drive.google.com/file/d/4jkl012/view",
+             None, "NP Investments LP - Fund II", None, None, None,
+             "Executed copy. Amendment 1 pending review."),
+            ("Magnolia Blvd Appraisal Report", "appraisal",
+             today - timedelta(days=120), None,
+             "Full appraisal report for 3300 Magnolia Blvd commercial property.",
+             "https://drive.google.com/file/d/5mno345/view",
+             "3300 Magnolia Blvd", None, None,
+             "Magnolia Blvd Acquisition - Due Diligence", "Karen Whitfield",
+             "MAI appraisal by Karen Whitfield. Value: $2.8M"),
+            ("Q4 2024 Elm St Operating Statement", "operating_statement",
+             today - timedelta(days=45), None,
+             "Q4 2024 operating statement from property manager for 450 Elm Street.",
+             "https://drive.google.com/file/d/6pqr678/view",
+             "450 Elm Street", None, None, None, "Tom Driscoll",
+             "Shows $12,500 gross income, $4,200 expenses."),
+            ("Elm St Business License", "license",
+             today - timedelta(days=180), today + timedelta(days=45),
+             "City of LA business license for 450 Elm Street rental operation.",
+             "",
+             "450 Elm Street", None, None, None, None,
+             "Renewal application submitted. Awaiting approval."),
+            ("Magnolia Blvd Phase I ESA Report", "environmental",
+             today - timedelta(days=400), today - timedelta(days=35),
+             "Phase I Environmental Site Assessment for 3300 Magnolia Blvd.",
+             "https://drive.google.com/file/d/7stu901/view",
+             "3300 Magnolia Blvd", None, None,
+             "Magnolia Blvd Acquisition - Due Diligence", None,
+             "Clean report. No RECs identified. Expired — new assessment needed."),
+        ]
+
+        for (title, category, dt, exp_date, desc, gdrive_url,
+             prop_name, inv_name, pol_name, legal_name, sh_name, notes) in doc_data:
+            doc = Document.objects.create(
+                title=title,
+                category=category,
+                date=dt,
+                expiration_date=exp_date,
+                description=desc,
+                gdrive_url=gdrive_url,
+                gdrive_file_name=title if gdrive_url else "",
+                related_property=properties.get(prop_name),
+                related_investment=investments.get(inv_name),
+                related_policy=insurance.get(pol_name),
+                related_legal_matter=legal_matters.get(legal_name),
+                related_stakeholder=stakeholders.get(sh_name),
+                notes_text=notes,
+            )
+            doc_pks.append(doc.pk)
+
+        return {
+            "documents.document": doc_pks,
         }
