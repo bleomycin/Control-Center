@@ -733,16 +733,26 @@ class PickerTokenEndpointTest(TestCase):
         self.assertIn("error", data)
 
     @patch("documents.gdrive.is_connected", return_value=True)
-    @patch("documents.gdrive.get_picker_access_token", return_value="mock-token-123")
-    def test_success(self, mock_token, mock_connected):
+    @patch("documents.gdrive.get_credentials")
+    def test_success(self, mock_creds, mock_connected):
+        creds = mock_creds.return_value
+        creds.token = "mock-token-123"
+        creds.scopes = {"openid", "https://www.googleapis.com/auth/drive.readonly"}
+        creds.expired = False
+        creds.expiry = None
+        GoogleDriveSettings.objects.create(
+            pk=1, is_connected=True, refresh_token="tok",
+            client_id="123-abc.apps.googleusercontent.com",
+            client_secret="sec", project_number="123",
+        )
         resp = self.client.get(reverse("documents:picker_token"))
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["access_token"], "mock-token-123")
 
     @patch("documents.gdrive.is_connected", return_value=True)
-    @patch("documents.gdrive.get_picker_access_token", return_value=None)
-    def test_token_refresh_failure(self, mock_token, mock_connected):
+    @patch("documents.gdrive.get_credentials", return_value=None)
+    def test_token_refresh_failure(self, mock_creds, mock_connected):
         resp = self.client.get(reverse("documents:picker_token"))
         self.assertEqual(resp.status_code, 500)
         data = resp.json()

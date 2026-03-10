@@ -498,10 +498,19 @@ def picker_token(request):
     from . import gdrive
     if not gdrive.is_connected():
         return JsonResponse({"error": "Not connected"}, status=403)
-    token = gdrive.get_picker_access_token()
-    if not token:
+    creds = gdrive.get_credentials()
+    if not creds or not creds.token:
         return JsonResponse({"error": "Failed to get access token"}, status=500)
-    return JsonResponse({"access_token": token})
+    # Return token plus diagnostic info for debug panel
+    settings = GoogleDriveSettings.load()
+    return JsonResponse({
+        "access_token": creds.token,
+        "scopes": list(creds.scopes) if creds.scopes else [],
+        "expired": creds.expired if hasattr(creds, 'expired') else None,
+        "expiry": str(creds.expiry) if creds.expiry else None,
+        "project_number": settings.project_number,
+        "client_id_prefix": settings.client_id.split("-")[0] if settings.client_id else "",
+    })
 
 
 def gdrive_search(request):
