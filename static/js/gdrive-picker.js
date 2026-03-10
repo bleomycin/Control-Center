@@ -3,7 +3,6 @@
  *
  * Config via #gdrive-config data attributes:
  *   data-api-key     — Google API key (for Picker quota)
- *   data-client-id   — OAuth2 client ID
  *   data-token-url   — Backend endpoint returning {access_token: "..."}
  *
  * DOM elements (IDs):
@@ -24,10 +23,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!config) return;
 
     var API_KEY = config.dataset.apiKey;
-    var CLIENT_ID = config.dataset.clientId;
     var TOKEN_URL = config.dataset.tokenUrl;
-    // Extract numeric project number from client ID (e.g. "209074347755-xxx.apps..." → "209074347755")
-    var APP_ID = CLIENT_ID ? CLIENT_ID.split('-')[0] : '';
 
     var pickerBtn = document.getElementById('gdrive-picker-btn');
     var clearBtn = document.getElementById('gdrive-clear-btn');
@@ -90,9 +86,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (API_KEY) {
             builder.setDeveloperKey(API_KEY);
-        }
-        if (APP_ID) {
-            builder.setAppId(APP_ID);
         }
 
         builder.build().setVisible(true);
