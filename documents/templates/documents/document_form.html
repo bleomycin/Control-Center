@@ -146,9 +146,21 @@
 <div class="max-w-2xl mx-auto mt-4">
     <button type="button" onclick="var p=document.getElementById('gdrive-debug-wrap');p.classList.toggle('hidden')"
             class="text-xs text-gray-500 hover:text-gray-400">Toggle Picker Debug Log</button>
-    <div id="gdrive-debug-wrap" class="hidden mt-1">
+    <div id="gdrive-debug-wrap" class="hidden mt-1 space-y-2">
+        <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="_gdriveDebug.testDriveApi()"
+                    class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">Test Drive API</button>
+            <button type="button" onclick="_gdriveDebug.testPickerWithAppId()"
+                    class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">Picker: +appId +origin</button>
+            <button type="button" onclick="_gdriveDebug.testPickerAppIdOnly()"
+                    class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">Picker: +appId -origin</button>
+            <button type="button" onclick="_gdriveDebug.testPickerOriginOnly()"
+                    class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">Picker: -appId +origin</button>
+            <button type="button" onclick="_gdriveDebug.testPickerNoDevKey()"
+                    class="px-2 py-1 bg-red-800 hover:bg-red-700 text-red-200 text-xs rounded">Picker: +appId -devKey</button>
+        </div>
         <div id="gdrive-debug"
-             class="bg-gray-900 border border-gray-700 rounded-md p-3 max-h-64 overflow-y-auto space-y-0.5 text-xs font-mono text-gray-400">
+             class="bg-gray-900 border border-gray-700 rounded-md p-3 max-h-80 overflow-y-auto space-y-0.5 text-xs font-mono text-gray-400">
         </div>
     </div>
 </div>
