@@ -2,8 +2,9 @@
  * Google Drive Picker integration for document forms.
  *
  * Config via #gdrive-config data attributes:
- *   data-api-key     — Google API key (for Picker quota)
- *   data-token-url   — Backend endpoint returning {access_token: "..."}
+ *   data-api-key            — Google API key (for Picker quota)
+ *   data-project-number     — Google Cloud project number (numeric, for setAppId)
+ *   data-token-url          — Backend endpoint returning {access_token: "..."}
  *
  * DOM elements (IDs):
  *   gdrive-picker-btn     — button to open the picker
@@ -23,6 +24,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!config) return;
 
     var API_KEY = config.dataset.apiKey;
+    var PROJECT_NUMBER = config.dataset.projectNumber;
     var TOKEN_URL = config.dataset.tokenUrl;
 
     var pickerBtn = document.getElementById('gdrive-picker-btn');
@@ -86,6 +88,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (API_KEY) {
             builder.setDeveloperKey(API_KEY);
+        }
+        if (PROJECT_NUMBER) {
+            builder.setAppId(PROJECT_NUMBER);
         }
 
         builder.build().setVisible(true);

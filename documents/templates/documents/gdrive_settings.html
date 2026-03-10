@@ -87,15 +87,21 @@
             </div>
         </div>
 
-        <!-- API Key Section -->
+        <!-- API Key & Project Section -->
         <div>
-            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">API Key</h2>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">Picker Configuration</h2>
             <div class="space-y-4">
                 <div>
                     <label for="{{ form.api_key.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.api_key.label }}</label>
                     {{ form.api_key }}
                     {% if form.api_key.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.api_key.help_text }}</p>{% endif %}
                     {% if form.api_key.errors %}<p class="mt-1 text-xs text-red-400">{{ form.api_key.errors.0 }}</p>{% endif %}
+                </div>
+                <div>
+                    <label for="{{ form.project_number.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.project_number.label }}</label>
+                    {{ form.project_number }}
+                    {% if form.project_number.help_text %}<p class="mt-1 text-xs text-gray-500">{{ form.project_number.help_text }}</p>{% endif %}
+                    {% if form.project_number.errors %}<p class="mt-1 text-xs text-red-400">{{ form.project_number.errors.0 }}</p>{% endif %}
                 </div>
             </div>
         </div>
@@ -112,7 +118,8 @@
                     <code class="text-gray-400 bg-gray-800 px-1.5 py-0.5 rounded mt-1 inline-block">{{ request.scheme }}://{{ request.get_host }}{% url 'documents:gdrive_callback' %}</code>
                 </li>
                 <li>Copy the <strong class="text-gray-400">Client ID</strong> and <strong class="text-gray-400">Client Secret</strong> into the fields above.</li>
-                <li>Create an <strong class="text-gray-400">API Key</strong> and restrict it to the Picker API (optional for now).</li>
+                <li>Create an <strong class="text-gray-400">API Key</strong> and restrict it to the Picker API.</li>
+                <li>Go to <strong class="text-gray-400">IAM &amp; Admin &rarr; Settings</strong> and copy the <strong class="text-gray-400">Project number</strong> (numeric).</li>
             </ol>
         </div>
 

@@ -140,6 +140,7 @@ class GoogleDriveSettings(models.Model):
     client_id = models.CharField(max_length=255, blank=True)
     client_secret = models.CharField(max_length=255, blank=True)
     api_key = models.CharField(max_length=255, blank=True)
+    project_number = models.CharField(max_length=50, blank=True)
     refresh_token = models.TextField(blank=True)
     access_token = models.TextField(blank=True)
     token_expiry = models.DateTimeField(null=True, blank=True)
