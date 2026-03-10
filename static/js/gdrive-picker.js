@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (PROJECT_NUMBER) {
             builder.setAppId(PROJECT_NUMBER);
         }
+        builder.setOrigin(window.location.protocol + '//' + window.location.host);
 
         builder.build().setVisible(true);
     }
