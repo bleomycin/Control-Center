@@ -437,6 +437,11 @@ pull_latest() {
 
     if [[ "$local_sha" == "$remote_sha" ]]; then
         success "Already up to date ($local_sha)"
+        # Restart container if it was stopped for backup
+        if ! docker compose ps --status running --format '{{.Name}}' 2>/dev/null | grep -q .; then
+            log "Restarting container (was stopped for pre-upgrade snapshot)..."
+            docker compose up -d 2>/dev/null || true
+        fi
         # Clean up lock and exit
         rm -f "$LOCK_FILE"
         exit 0
