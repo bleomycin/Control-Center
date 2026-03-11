@@ -81,24 +81,32 @@ class GoogleDriveSetupForm(TailwindFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Show placeholder when secrets already exist
-        if self.instance and self.instance.client_secret:
-            self.fields["client_secret"].widget.attrs["placeholder"] = "Leave blank to keep current"
-        if self.instance and self.instance.api_key:
-            self.fields["api_key"].widget.attrs["placeholder"] = "Leave blank to keep current"
+        for field_name in ("client_id", "client_secret", "api_key", "project_number"):
+            if self.instance and getattr(self.instance, field_name, ""):
+                self.fields[field_name].widget.attrs["placeholder"] = "Leave blank to keep current"
+        self.fields["client_id"].required = False
         self.fields["client_secret"].required = False
         self.fields["api_key"].required = False
+        self.fields["project_number"].required = False
+
+    def _keep_existing(self, field_name):
+        """If submitted empty and instance has a value, keep the existing value."""
+        val = self.cleaned_data.get(field_name)
+        if not val and self.instance:
+            return getattr(self.instance, field_name, "")
+        return val
+
+    def clean_client_id(self):
+        return self._keep_existing("client_id")
 
     def clean_client_secret(self):
-        val = self.cleaned_data.get("client_secret")
-        if not val and self.instance:
-            return self.instance.client_secret
-        return val
+        return self._keep_existing("client_secret")
 
     def clean_api_key(self):
-        val = self.cleaned_data.get("api_key")
-        if not val and self.instance:
-            return self.instance.api_key
-        return val
+        return self._keep_existing("api_key")
+
+    def clean_project_number(self):
+        return self._keep_existing("project_number")
 
 
 class DocumentLinkForm(TailwindFormMixin, forms.Form):
