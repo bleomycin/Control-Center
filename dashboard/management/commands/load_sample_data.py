@@ -13,7 +13,7 @@ from assets.models import (
     Aircraft, AircraftOwner, InsurancePolicy, Investment, Lease, LeaseParty,
     Loan, PolicyHolder, RealEstate, Vehicle, VehicleOwner,
 )
-from legal.models import LegalCommunication, LegalMatter, Evidence
+from legal.models import LegalChecklistItem, LegalCommunication, LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
 from notes.models import Folder, Note, Tag
@@ -1031,12 +1031,56 @@ class Command(BaseCommand):
                 )
                 comm_pks.append(comm.pk)
 
+        self.stdout.write("Creating legal checklists...")
+        checklist_data = [
+            ("Holston Eviction - 1200 Oak Ave", [
+                ("Gather rent ledger and bounced check evidence", True),
+                ("Obtain certified copy of lease agreement", True),
+                ("File unlawful detainer complaint", True),
+                ("Serve tenant with court summons", False),
+                ("Prepare witness list for hearing", False),
+                ("Review default judgment requirements", False),
+            ]),
+            ("Cedar Lane Boundary Dispute", [
+                ("Commission independent boundary survey", True),
+                ("Obtain original deed with metes and bounds", True),
+                ("Document fence installation date with photos", False),
+                ("Research adverse possession requirements", False),
+                ("Prepare mediation position statement", False),
+            ]),
+            ("Magnolia Blvd Acquisition - Due Diligence", [
+                ("Order Phase I environmental report", True),
+                ("Complete title search", True),
+                ("Review zoning compliance", True),
+                ("Obtain property inspection report", True),
+                ("Verify seller disclosures", False),
+                ("Review closing documents", False),
+                ("Confirm financing terms", False),
+            ]),
+            ("Estate Plan Update", [
+                ("Review current trust provisions", True),
+                ("Update beneficiary designations", False),
+                ("Draft power of attorney updates", False),
+                ("Schedule signing appointment", False),
+            ]),
+        ]
+        checklist_pks = []
+        for lm_title, items in checklist_data:
+            if lm_title in legal_matters:
+                for i, (title, completed) in enumerate(items):
+                    cl = LegalChecklistItem.objects.create(
+                        legal_matter=legal_matters[lm_title],
+                        title=title, is_completed=completed, sort_order=i,
+                    )
+                    checklist_pks.append(cl.pk)
+
         return {
             "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
             "legal.evidence": list(
                 Evidence.objects.filter(legal_matter__in=legal_matters.values()).values_list("pk", flat=True)
             ),
             "legal.legalcommunication": comm_pks,
+            "legal.legalchecklistitem": checklist_pks,
         }
 
     # -----------------------------------------------------------------------

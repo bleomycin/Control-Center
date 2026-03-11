@@ -9,7 +9,7 @@ from django.utils import timezone
 from assets.models import RealEstate
 from stakeholders.models import Stakeholder
 
-from .models import Evidence, LegalCommunication, LegalMatter
+from .models import Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
 class LegalMatterModelTests(TestCase):
@@ -769,3 +769,143 @@ class LegalNotificationTests(TestCase):
             self.assertFalse(
                 Notification.objects.filter(message__icontains="Completed FU").exists()
             )
+
+
+class LegalChecklistModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Checklist Matter")
+
+    def test_create(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Review docs",
+        )
+        self.assertEqual(item.legal_matter, self.matter)
+        self.assertFalse(item.is_completed)
+
+    def test_str(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="File motion",
+        )
+        self.assertEqual(str(item), "File motion")
+
+    def test_ordering(self):
+        LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Second", sort_order=1,
+        )
+        LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="First", sort_order=0,
+        )
+        items = list(self.matter.checklist_items.values_list("title", flat=True))
+        self.assertEqual(items[0], "First")
+        self.assertEqual(items[1], "Second")
+
+    def test_cascade_on_matter_delete(self):
+        matter = LegalMatter.objects.create(title="Cascade CL")
+        LegalChecklistItem.objects.create(legal_matter=matter, title="Gone")
+        matter.delete()
+        self.assertFalse(LegalChecklistItem.objects.filter(title="Gone").exists())
+
+
+class LegalChecklistViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(
+            title="Checklist View Matter", status="active",
+        )
+
+    def test_detail_has_checklist_context(self):
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertIn("checklist_items", resp.context)
+        self.assertIn("checklist_form", resp.context)
+        self.assertIn("checklist_count", resp.context)
+        self.assertIn("checklist_done", resp.context)
+
+    def test_checklist_add(self):
+        resp = self.client.post(
+            reverse("legal:checklist_add", args=[self.matter.pk]),
+            {"title": "New item"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(LegalChecklistItem.objects.filter(title="New item").exists())
+
+    def test_checklist_toggle(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Toggle me",
+        )
+        resp = self.client.post(reverse("legal:checklist_toggle", args=[item.pk]))
+        self.assertEqual(resp.status_code, 200)
+        item.refresh_from_db()
+        self.assertTrue(item.is_completed)
+        # Toggle back
+        self.client.post(reverse("legal:checklist_toggle", args=[item.pk]))
+        item.refresh_from_db()
+        self.assertFalse(item.is_completed)
+
+    def test_checklist_edit_get(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Edit me",
+        )
+        resp = self.client.get(reverse("legal:checklist_edit", args=[item.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Edit me")
+
+    def test_checklist_edit_post(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Old title",
+        )
+        resp = self.client.post(
+            reverse("legal:checklist_edit", args=[item.pk]),
+            {"title": "New title"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.title, "New title")
+
+    def test_checklist_edit_cancel(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Cancel test",
+        )
+        resp = self.client.get(
+            reverse("legal:checklist_edit", args=[item.pk]) + "?cancel=1"
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_checklist_delete(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Delete me",
+        )
+        resp = self.client.post(reverse("legal:checklist_delete", args=[item.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(LegalChecklistItem.objects.filter(pk=item.pk).exists())
+
+    def test_checklist_delete_get_not_allowed(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="No GET",
+        )
+        resp = self.client.get(reverse("legal:checklist_delete", args=[item.pk]))
+        self.assertEqual(resp.status_code, 405)
+
+    def test_checklist_toggle_get_not_allowed(self):
+        item = LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="No GET toggle",
+        )
+        resp = self.client.get(reverse("legal:checklist_toggle", args=[item.pk]))
+        self.assertEqual(resp.status_code, 405)
+
+    def test_checklist_progress_in_detail(self):
+        LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Done", is_completed=True,
+        )
+        LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="Pending",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "1/2")
+
+    def test_checklist_in_pdf(self):
+        LegalChecklistItem.objects.create(
+            legal_matter=self.matter, title="PDF item", is_completed=True,
+        )
+        resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")

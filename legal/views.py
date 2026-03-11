@@ -8,8 +8,8 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
-from .forms import EvidenceForm, LegalCommunicationForm, LegalMatterForm
-from .models import Evidence, LegalCommunication, LegalMatter
+from .forms import EvidenceForm, LegalChecklistForm, LegalCommunicationForm, LegalMatterForm
+from .models import Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
 COMM_PAGE_SIZE = 20
@@ -181,6 +181,11 @@ class LegalMatterDetailView(DetailView):
         ctx["comm_method_choices"] = get_choices("contact_method")
         ctx["evidence_list"] = obj.evidence.all()
         ctx["evidence_form"] = EvidenceForm()
+        checklist_items = obj.checklist_items.all()
+        ctx["checklist_items"] = checklist_items
+        ctx["checklist_form"] = LegalChecklistForm()
+        ctx["checklist_count"] = checklist_items.count()
+        ctx["checklist_done"] = checklist_items.filter(is_completed=True).count()
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
         ctx["notes"] = obj.notes.all()[:5]
         # Activity summary stats
@@ -285,6 +290,11 @@ def export_pdf_detail(request, pk):
                                    c.follow_up_date.strftime("%b %d, %Y") if c.follow_up_date else "-",
                                    c.file.name.split("/")[-1] if c.file else "-"]
                                   for c in comms]})
+    checklist = m.checklist_items.all()
+    if checklist:
+        sections.append({"heading": "Checklist", "type": "table",
+                         "headers": ["Item", "Status"],
+                         "rows": [[c.title, "Done" if c.is_completed else "Pending"] for c in checklist]})
     evidence = m.evidence.all()
     if evidence:
         sections.append({"heading": "Evidence", "type": "table",
@@ -531,6 +541,62 @@ def related_entity_unlink(request, pk):
         except Model.DoesNotExist:
             pass
     return _related_entities_response(request, matter)
+
+
+# ---------------------------------------------------------------------------
+# Checklists (exact copy of tasks subtask pattern)
+# ---------------------------------------------------------------------------
+
+def _checklist_context(matter):
+    items = matter.checklist_items.all()
+    return {
+        "checklist_items": items,
+        "matter": matter,
+        "checklist_form": LegalChecklistForm(),
+        "checklist_count": items.count(),
+        "checklist_done": items.filter(is_completed=True).count(),
+    }
+
+
+def checklist_add(request, pk):
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    if request.method == "POST":
+        form = LegalChecklistForm(request.POST)
+        if form.is_valid():
+            item = form.save(commit=False)
+            item.legal_matter = matter
+            item.sort_order = matter.checklist_items.count()
+            item.save()
+    return render(request, "legal/partials/_checklist_list.html", _checklist_context(matter))
+
+
+@require_POST
+def checklist_toggle(request, pk):
+    item = get_object_or_404(LegalChecklistItem, pk=pk)
+    item.is_completed = not item.is_completed
+    item.save()
+    return render(request, "legal/partials/_checklist_list.html", _checklist_context(item.legal_matter))
+
+
+def checklist_edit(request, pk):
+    item = get_object_or_404(LegalChecklistItem, pk=pk)
+    if request.method == "POST":
+        title = request.POST.get("title", "").strip()
+        if title:
+            item.title = title
+            item.save()
+        return render(request, "legal/partials/_checklist_list.html", _checklist_context(item.legal_matter))
+    if request.GET.get("cancel"):
+        return render(request, "legal/partials/_checklist_list.html", _checklist_context(item.legal_matter))
+    return render(request, "legal/partials/_checklist_edit_form.html", {"item": item})
+
+
+@require_POST
+def checklist_delete(request, pk):
+    item = get_object_or_404(LegalChecklistItem, pk=pk)
+    matter = item.legal_matter
+    item.delete()
+    return render(request, "legal/partials/_checklist_list.html", _checklist_context(matter))
 
 
 def related_entity_options(request, pk):

@@ -139,3 +139,17 @@ class LegalCommunication(models.Model):
 
     class Meta:
         ordering = ["-date"]
+
+
+class LegalChecklistItem(models.Model):
+    legal_matter = models.ForeignKey(LegalMatter, on_delete=models.CASCADE, related_name="checklist_items")
+    title = models.CharField(max_length=255)
+    is_completed = models.BooleanField(default=False)
+    sort_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "created_at"]
+
+    def __str__(self):
+        return self.title
