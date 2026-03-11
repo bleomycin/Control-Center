@@ -264,5 +264,66 @@ document.addEventListener('DOMContentLoaded', function () {
             debugLog('TEST', 'Opening Picker WITHOUT appId, WITH origin...');
             createPicker(cachedToken, { appId: false, origin: true, devKey: true });
         },
+        // --- View configuration tests ---
+        testDocsOnly: function () {
+            if (!cachedToken || !pickerApiLoaded) { debugLog('TEST', 'Click Pick first'); return; }
+            debugLog('TEST', 'DocsView ONLY (no Recent tab), +appId');
+            var view = new google.picker.DocsView()
+                .setIncludeFolders(true)
+                .setSelectFolderEnabled(false);
+            var b = new google.picker.PickerBuilder()
+                .addView(view)
+                .setOAuthToken(cachedToken)
+                .setCallback(pickerCallback)
+                .setMaxItems(1);
+            if (API_KEY) b.setDeveloperKey(API_KEY);
+            if (PROJECT_NUMBER) b.setAppId(PROJECT_NUMBER);
+            b.build().setVisible(true);
+        },
+        testDocsRootParent: function () {
+            if (!cachedToken || !pickerApiLoaded) { debugLog('TEST', 'Click Pick first'); return; }
+            debugLog('TEST', 'DocsView with setParent("root"), +appId');
+            var view = new google.picker.DocsView()
+                .setIncludeFolders(true)
+                .setSelectFolderEnabled(false)
+                .setParent('root');
+            var b = new google.picker.PickerBuilder()
+                .addView(view)
+                .setOAuthToken(cachedToken)
+                .setCallback(pickerCallback)
+                .setMaxItems(1);
+            if (API_KEY) b.setDeveloperKey(API_KEY);
+            if (PROJECT_NUMBER) b.setAppId(PROJECT_NUMBER);
+            b.build().setVisible(true);
+        },
+        testDocsListMode: function () {
+            if (!cachedToken || !pickerApiLoaded) { debugLog('TEST', 'Click Pick first'); return; }
+            debugLog('TEST', 'DocsView LIST mode + setParent("root"), +appId');
+            var view = new google.picker.DocsView()
+                .setIncludeFolders(true)
+                .setSelectFolderEnabled(false)
+                .setParent('root')
+                .setMode(google.picker.DocsViewMode.LIST);
+            var b = new google.picker.PickerBuilder()
+                .addView(view)
+                .setOAuthToken(cachedToken)
+                .setCallback(pickerCallback)
+                .setMaxItems(1);
+            if (API_KEY) b.setDeveloperKey(API_KEY);
+            if (PROJECT_NUMBER) b.setAppId(PROJECT_NUMBER);
+            b.build().setVisible(true);
+        },
+        testViewIdDocs: function () {
+            if (!cachedToken || !pickerApiLoaded) { debugLog('TEST', 'Click Pick first'); return; }
+            debugLog('TEST', 'ViewId.DOCS directly (not DocsView object), +appId');
+            var b = new google.picker.PickerBuilder()
+                .addView(google.picker.ViewId.DOCS)
+                .setOAuthToken(cachedToken)
+                .setCallback(pickerCallback)
+                .setMaxItems(1);
+            if (API_KEY) b.setDeveloperKey(API_KEY);
+            if (PROJECT_NUMBER) b.setAppId(PROJECT_NUMBER);
+            b.build().setVisible(true);
+        },
     };
 });

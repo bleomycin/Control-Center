@@ -141,14 +141,21 @@
             <div class="flex flex-wrap gap-2">
                 <button type="button" onclick="_gdriveDebug.testDriveApi()"
                         class="px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs rounded">Test Drive API</button>
-                <button type="button" onclick="_gdriveDebug.testPickerWithAppId()"
-                        class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">+appId +origin</button>
                 <button type="button" onclick="_gdriveDebug.testPickerAppIdOnly()"
                         class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">+appId -origin</button>
-                <button type="button" onclick="_gdriveDebug.testPickerOriginOnly()"
-                        class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">-appId +origin</button>
-                <button type="button" onclick="_gdriveDebug.testPickerNoDevKey()"
-                        class="px-2 py-1 bg-red-800 hover:bg-red-700 text-red-200 text-xs rounded">+appId -devKey</button>
+                <button type="button" onclick="_gdriveDebug.testPickerWithAppId()"
+                        class="px-2 py-1 bg-yellow-800 hover:bg-yellow-700 text-yellow-200 text-xs rounded">+appId +origin</button>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <span class="text-xs text-gray-500 self-center">View tests:</span>
+                <button type="button" onclick="_gdriveDebug.testDocsOnly()"
+                        class="px-2 py-1 bg-indigo-800 hover:bg-indigo-700 text-indigo-200 text-xs rounded">DocsView only</button>
+                <button type="button" onclick="_gdriveDebug.testDocsRootParent()"
+                        class="px-2 py-1 bg-indigo-800 hover:bg-indigo-700 text-indigo-200 text-xs rounded">DocsView+root</button>
+                <button type="button" onclick="_gdriveDebug.testDocsListMode()"
+                        class="px-2 py-1 bg-indigo-800 hover:bg-indigo-700 text-indigo-200 text-xs rounded">DocsView+root+LIST</button>
+                <button type="button" onclick="_gdriveDebug.testViewIdDocs()"
+                        class="px-2 py-1 bg-indigo-800 hover:bg-indigo-700 text-indigo-200 text-xs rounded">ViewId.DOCS raw</button>
             </div>
             <div id="gdrive-debug"
                  class="bg-gray-900 border border-gray-700 rounded-md p-3 max-h-80 overflow-y-auto space-y-0.5 text-xs font-mono text-gray-400">
