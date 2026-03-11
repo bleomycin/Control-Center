@@ -27,6 +27,7 @@ class GDriveContextMixin:
         ctx["drive_api_key"] = settings.api_key if connected else ""
         ctx["drive_client_id"] = settings.client_id if connected else ""
         ctx["drive_project_number"] = settings.project_number if connected else ""
+        ctx["picker_debug"] = settings.picker_debug if connected else False
         return ctx
 
 

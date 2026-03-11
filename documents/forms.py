@@ -58,7 +58,7 @@ class GoogleDriveSetupForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         from .models import GoogleDriveSettings
         model = GoogleDriveSettings
-        fields = ["client_id", "client_secret", "api_key", "project_number"]
+        fields = ["client_id", "client_secret", "api_key", "project_number", "picker_debug"]
         widgets = {
             "client_secret": forms.PasswordInput(attrs={"autocomplete": "off"}),
             "api_key": forms.PasswordInput(attrs={"autocomplete": "off"}),
@@ -68,12 +68,14 @@ class GoogleDriveSetupForm(TailwindFormMixin, forms.ModelForm):
             "client_secret": "Client Secret",
             "api_key": "API Key (for Picker)",
             "project_number": "Project Number",
+            "picker_debug": "Enable Picker Debug Panel",
         }
         help_texts = {
             "client_id": "From Google Cloud Console → APIs & Services → Credentials → OAuth 2.0 Client ID",
             "client_secret": "The corresponding client secret",
             "api_key": "API key with Google Picker API enabled (optional — needed for Picker)",
             "project_number": "From Google Cloud Console → IAM & Admin → Settings → Project number (numeric)",
+            "picker_debug": "Show diagnostic debug panel and test buttons on the document form",
         }
 
     def __init__(self, *args, **kwargs):
