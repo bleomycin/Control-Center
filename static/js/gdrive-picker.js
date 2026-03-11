@@ -120,7 +120,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var docsView = new google.picker.DocsView()
             .setIncludeFolders(true)
-            .setSelectFolderEnabled(false);
+            .setSelectFolderEnabled(false)
+            .setParent('root');
 
         var configDesc = {
             devKey: useDevKey,
@@ -131,7 +132,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var builder = new google.picker.PickerBuilder()
             .addView(docsView)
-            .addView(google.picker.ViewId.RECENTLY_PICKED)
             .setOAuthToken(accessToken)
             .setCallback(pickerCallback)
             .setTitle('Select a file from Google Drive')
