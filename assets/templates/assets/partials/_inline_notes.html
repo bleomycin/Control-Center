@@ -1,7 +1,9 @@
 <div id="{{ notes_id }}">
-{% if notes %}
-<div class="flex items-center gap-1.5 mt-0.5">
-    <p class="text-xs text-gray-500 italic">{{ notes }}</p>
+{% if notes or role or ownership_percentage %}
+<div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+    {% if role %}<span class="text-xs text-gray-400">({{ role }})</span>{% endif %}
+    {% if ownership_percentage %}<span class="text-xs font-medium text-green-400">{{ ownership_percentage }}%</span>{% endif %}
+    {% if notes %}<p class="text-xs text-gray-500 italic">{{ notes }}</p>{% endif %}
     <button hx-get="{{ edit_url }}"
             hx-target="#{{ notes_id }}"
             hx-swap="outerHTML"
@@ -11,6 +13,6 @@
 <button hx-get="{{ edit_url }}"
         hx-target="#{{ notes_id }}"
         hx-swap="outerHTML"
-        class="text-xs text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100 mt-0.5">+ note</button>
+        class="text-xs text-gray-600 hover:text-gray-400 opacity-0 group-hover:opacity-100 mt-0.5">+ details</button>
 {% endif %}
 </div>

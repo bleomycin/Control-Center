@@ -1812,14 +1812,25 @@ def aircraft_owner_delete(request, pk):
 
 def _notes_response(request, obj, notes_id, url):
     """Shared handler: GET → edit form, POST → save & display, GET?display=1 → display."""
+    has_percentage = hasattr(obj, "ownership_percentage")
     if request.method == "POST":
+        obj.role = request.POST.get("role", "").strip()
+        if has_percentage:
+            pct = request.POST.get("ownership_percentage", "").strip()
+            obj.ownership_percentage = pct if pct else None
         obj.notes = request.POST.get("notes", "").strip()
         obj.save()
+    ctx = {
+        "notes": obj.notes, "role": obj.role,
+        "has_percentage": has_percentage,
+        "ownership_percentage": obj.ownership_percentage if has_percentage else None,
+        "notes_id": notes_id,
+    }
     if request.method == "POST" or request.GET.get("display"):
-        return render(request, "assets/partials/_inline_notes.html",
-                      {"notes": obj.notes, "edit_url": url, "notes_id": notes_id})
-    return render(request, "assets/partials/_inline_notes_form.html",
-                  {"notes": obj.notes, "save_url": url, "notes_id": notes_id})
+        ctx["edit_url"] = url
+        return render(request, "assets/partials/_inline_notes.html", ctx)
+    ctx["save_url"] = url
+    return render(request, "assets/partials/_inline_notes_form.html", ctx)
 
 
 def ownership_notes(request, pk):

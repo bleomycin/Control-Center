@@ -3,10 +3,7 @@
     {% for holder in policyholder_roles %}
     <div class="px-4 py-3 group">
         <div class="flex items-center justify-between">
-            <div>
-                <a href="{{ holder.policy.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ holder.policy.name }}</a>
-                {% if holder.role %}<span class="text-xs text-gray-400 ml-2">({{ holder.role }})</span>{% endif %}
-            </div>
+            <a href="{{ holder.policy.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ holder.policy.name }}</a>
             <div class="flex items-center gap-3">
                 {% if holder.policy.premium_amount %}
                 <span class="text-sm font-medium text-green-400">${{ holder.policy.premium_amount|floatformat:0|intcomma }}</span>
@@ -21,7 +18,7 @@
                 </button>
             </div>
         </div>
-        {% include "assets/partials/_inline_notes.html" with notes=holder.notes edit_url=holder.get_notes_url notes_id=holder.get_notes_id %}
+        {% include "assets/partials/_inline_notes.html" with notes=holder.notes role=holder.role edit_url=holder.get_notes_url notes_id=holder.get_notes_id %}
     </div>
     {% endfor %}
     {% for pol in policies_as_carrier %}
