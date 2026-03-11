@@ -145,7 +145,12 @@ def get_credentials():
         token_uri="https://oauth2.googleapis.com/token",
         client_id=s.client_id,
         client_secret=s.client_secret,
+        scopes=SCOPES,
     )
+    # Set expiry so the library knows when to refresh.  Without this,
+    # creds.expired is always False and stale tokens are never refreshed.
+    if s.token_expiry:
+        creds.expiry = s.token_expiry.replace(tzinfo=None)  # google-auth uses naive UTC
 
     if creds.expired or not creds.valid:
         try:

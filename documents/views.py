@@ -501,8 +501,18 @@ def picker_token(request):
     creds = gdrive.get_credentials()
     if not creds or not creds.token:
         return JsonResponse({"error": "Failed to get access token"}, status=500)
-    # Return token plus diagnostic info for debug panel
-    settings = GoogleDriveSettings.load()
+    # Force refresh to guarantee a fresh token for the Picker
+    try:
+        from google.auth.transport.requests import Request
+        creds.refresh(Request())
+        settings = GoogleDriveSettings.load()
+        settings.access_token = creds.token
+        if creds.expiry:
+            settings.token_expiry = creds.expiry
+        settings.save()
+    except Exception:
+        # If refresh fails, return whatever token we have
+        settings = GoogleDriveSettings.load()
     return JsonResponse({
         "access_token": creds.token,
         "scopes": list(creds.scopes) if creds.scopes else [],
