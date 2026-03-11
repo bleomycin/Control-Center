@@ -191,6 +191,7 @@
             <option value="notes">Notes ({{ counts.notes }})</option>
             <option value="cashflow">Cash Flow ({{ counts.cashflow }})</option>
             <option value="healthcare">Healthcare ({{ counts.healthcare }})</option>
+            <option value="caselogs">Case Logs ({{ counts.case_logs }})</option>
         </select>
     </div>
     <!-- Tab Navigation: Desktop buttons -->
@@ -233,6 +234,9 @@
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="healthcare">
             Healthcare <span class="text-xs opacity-70">({{ counts.healthcare }})</span>
+        </button>
+        <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="caselogs">
+            Case Logs <span class="text-xs opacity-70">({{ counts.case_logs }})</span>
         </button>
     </div>
 
@@ -467,6 +471,30 @@
             {% if not healthcare_providers and not healthcare_appointments %}
             <p class="px-4 py-6 text-sm text-gray-500 text-center">No healthcare connections</p>
             {% endif %}
+        </div>
+    </div>
+
+    <div class="tab-content hidden" id="tab-caselogs">
+        <div class="px-4 py-2 border-b border-gray-700">
+            <span class="text-xs text-gray-400">Case log entries from this stakeholder across all legal matters</span>
+        </div>
+        <div class="divide-y divide-gray-700">
+            {% regroup stakeholder_case_logs by legal_matter as logs_by_matter %}
+            {% for group in logs_by_matter %}
+            <div class="px-4 py-3">
+                <h3 class="text-xs font-semibold text-gray-400 uppercase mb-2">
+                    <a href="{{ group.grouper.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ group.grouper.title }}</a>
+                </h3>
+                {% for log in group.list %}
+                <div class="flex items-start gap-2 py-1.5">
+                    <span class="text-xs text-gray-500 whitespace-nowrap mt-0.5">{{ log.created_at|date:"M j, g:i A" }}</span>
+                    <p class="text-sm text-gray-200 whitespace-pre-wrap">{{ log.text }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% empty %}
+            <p class="px-4 py-6 text-sm text-gray-500 text-center">No case log entries</p>
+            {% endfor %}
         </div>
     </div>
 </div>

@@ -8,11 +8,12 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
-from .forms import EvidenceForm, LegalChecklistForm, LegalCommunicationForm, LegalMatterForm
-from .models import Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
+from .forms import CaseLogForm, EvidenceForm, LegalChecklistForm, LegalCommunicationForm, LegalMatterForm
+from .models import CaseLog, Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
 COMM_PAGE_SIZE = 20
+CASE_LOG_PAGE_SIZE = 20
 
 
 def _comm_list_context(matter, request=None, page=1):
@@ -75,6 +76,50 @@ def _comm_list_context(matter, request=None, page=1):
         "next_page": page + 1,
         "total_count": total_count,
         "today": timezone.localdate(),
+    }
+
+
+def _case_log_list_context(matter, request=None, page=1):
+    """Build filtered, paginated case log list context."""
+    qs = matter.case_logs.select_related("stakeholder").all()
+
+    if request:
+        q = request.GET.get("cl_q", "").strip()
+        if q:
+            qs = qs.filter(
+                Q(text__icontains=q)
+                | Q(source_name__icontains=q)
+                | Q(stakeholder__name__icontains=q)
+            )
+
+        stakeholder_pk = request.GET.get("cl_stakeholder")
+        if stakeholder_pk:
+            qs = qs.filter(stakeholder_id=stakeholder_pk)
+
+        date_from = request.GET.get("cl_date_from")
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+        date_to = request.GET.get("cl_date_to")
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        page_param = request.GET.get("cl_page")
+        if page_param:
+            try:
+                page = int(page_param)
+            except (ValueError, TypeError):
+                page = 1
+
+    total_count = qs.count()
+    limit = page * CASE_LOG_PAGE_SIZE
+    has_more = total_count > limit
+
+    return {
+        "case_log_list": qs[:limit],
+        "matter": matter,
+        "cl_has_more": has_more,
+        "cl_next_page": page + 1,
+        "cl_total_count": total_count,
     }
 
 
@@ -179,6 +224,11 @@ class LegalMatterDetailView(DetailView):
             legal_communications__legal_matter=obj
         ).distinct().order_by("name")
         ctx["comm_method_choices"] = get_choices("contact_method")
+        ctx.update(_case_log_list_context(obj))
+        ctx["case_log_form"] = CaseLogForm()
+        ctx["cl_stakeholders"] = Stakeholder.objects.filter(
+            case_logs__legal_matter=obj
+        ).distinct().order_by("name")
         ctx["evidence_list"] = obj.evidence.all()
         ctx["evidence_form"] = EvidenceForm()
         checklist_items = obj.checklist_items.all()
@@ -295,6 +345,13 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Checklist", "type": "table",
                          "headers": ["Item", "Status"],
                          "rows": [[c.title, "Done" if c.is_completed else "Pending"] for c in checklist]})
+    case_logs = m.case_logs.select_related("stakeholder").all()
+    if case_logs:
+        sections.append({"heading": "Case Log", "type": "table",
+                         "headers": ["Date", "Source", "Entry"],
+                         "rows": [[cl.created_at.strftime("%b %d, %Y %I:%M %p"),
+                                   cl.display_source or "-",
+                                   cl.text] for cl in case_logs]})
     evidence = m.evidence.all()
     if evidence:
         sections.append({"heading": "Evidence", "type": "table",
@@ -597,6 +654,42 @@ def checklist_delete(request, pk):
     matter = item.legal_matter
     item.delete()
     return render(request, "legal/partials/_checklist_list.html", _checklist_context(matter))
+
+
+# ---------------------------------------------------------------------------
+# Case Log
+# ---------------------------------------------------------------------------
+
+def case_log_list(request, pk):
+    """HTMX endpoint: filtered, paginated case log list."""
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    ctx = _case_log_list_context(matter, request)
+    return render(request, "legal/partials/_case_log_list.html", ctx)
+
+
+def case_log_add(request, pk):
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    if request.method == "POST":
+        form = CaseLogForm(request.POST)
+        if form.is_valid():
+            log = form.save(commit=False)
+            log.legal_matter = matter
+            log.save()
+            ctx = _case_log_list_context(matter)
+            return render(request, "legal/partials/_case_log_list.html", ctx)
+    else:
+        form = CaseLogForm()
+    return render(request, "legal/partials/_case_log_form.html",
+                  {"form": form, "matter": matter})
+
+
+@require_POST
+def case_log_delete(request, pk):
+    log = get_object_or_404(CaseLog, pk=pk)
+    matter = log.legal_matter
+    log.delete()
+    ctx = _case_log_list_context(matter)
+    return render(request, "legal/partials/_case_log_list.html", ctx)
 
 
 def related_entity_options(request, pk):

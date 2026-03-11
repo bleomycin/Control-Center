@@ -290,6 +290,10 @@ class StakeholderDetailView(DetailView):
         ctx["healthcare_appointments"] = HcAppt.objects.filter(
             provider__stakeholder=obj,
         ).exclude(status__in=["completed", "cancelled"]).order_by("date", "time")
+        from legal.models import CaseLog
+        ctx["stakeholder_case_logs"] = CaseLog.objects.filter(
+            stakeholder=obj,
+        ).select_related("legal_matter").order_by("legal_matter__title", "-created_at")
 
         cf_qs = CashFlowEntry.objects.filter(related_stakeholder=obj)
         cf_totals = cf_qs.aggregate(
@@ -331,6 +335,7 @@ class StakeholderDetailView(DetailView):
             "cashflow": ctx["all_cashflow"].count(),
             "employees": employee_count,
             "healthcare": ctx["healthcare_providers"].count() + ctx["healthcare_appointments"].count(),
+            "case_logs": ctx["stakeholder_case_logs"].count(),
         }
 
         return ctx

@@ -9,7 +9,7 @@ from django.utils import timezone
 from assets.models import RealEstate
 from stakeholders.models import Stakeholder
 
-from .models import Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
+from .models import CaseLog, Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
 class LegalMatterModelTests(TestCase):
@@ -909,3 +909,158 @@ class LegalChecklistViewTests(TestCase):
         )
         resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class CaseLogModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Log Matter")
+        cls.stakeholder = Stakeholder.objects.create(name="Agent Smith", entity_type="individual")
+
+    def test_str_truncation(self):
+        log = CaseLog.objects.create(legal_matter=self.matter, text="A" * 100)
+        self.assertEqual(len(str(log)), 80)
+
+    def test_display_source_stakeholder(self):
+        log = CaseLog.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder, text="test",
+        )
+        self.assertEqual(log.display_source, "Agent Smith")
+
+    def test_display_source_name(self):
+        log = CaseLog.objects.create(
+            legal_matter=self.matter, source_name="Jim Neighbor", text="test",
+        )
+        self.assertEqual(log.display_source, "Jim Neighbor")
+
+    def test_display_source_empty(self):
+        log = CaseLog.objects.create(legal_matter=self.matter, text="anon")
+        self.assertEqual(log.display_source, "")
+
+    def test_get_absolute_url(self):
+        log = CaseLog.objects.create(legal_matter=self.matter, text="url test")
+        self.assertEqual(
+            log.get_absolute_url(),
+            reverse("legal:detail", kwargs={"pk": self.matter.pk}),
+        )
+
+    def test_ordering(self):
+        CaseLog.objects.create(legal_matter=self.matter, text="first")
+        latest = CaseLog.objects.create(legal_matter=self.matter, text="second")
+        self.assertEqual(CaseLog.objects.first(), latest)
+
+    def test_cascade_delete(self):
+        CaseLog.objects.create(legal_matter=self.matter, text="will be deleted")
+        pk = self.matter.pk
+        self.matter.delete()
+        self.assertFalse(CaseLog.objects.filter(legal_matter_id=pk).exists())
+
+    def test_stakeholder_set_null(self):
+        log = CaseLog.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder, text="set null",
+        )
+        self.stakeholder.delete()
+        log.refresh_from_db()
+        self.assertIsNone(log.stakeholder)
+
+
+class CaseLogViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="View Test Matter")
+        cls.stakeholder = Stakeholder.objects.create(name="Test Source", entity_type="individual")
+
+    def test_case_log_in_detail(self):
+        CaseLog.objects.create(legal_matter=self.matter, text="Visible entry")
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, "Case Log")
+        self.assertContains(resp, "Visible entry")
+
+    def test_case_log_add_get(self):
+        resp = self.client.get(reverse("legal:case_log_add", args=[self.matter.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Add Entry")
+
+    def test_case_log_add_post(self):
+        resp = self.client.post(
+            reverse("legal:case_log_add", args=[self.matter.pk]),
+            {"text": "New log entry", "stakeholder": self.stakeholder.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(CaseLog.objects.filter(text="New log entry").exists())
+
+    def test_case_log_add_with_source_name(self):
+        resp = self.client.post(
+            reverse("legal:case_log_add", args=[self.matter.pk]),
+            {"text": "From neighbor", "source_name": "Jim at 1204"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        log = CaseLog.objects.get(text="From neighbor")
+        self.assertEqual(log.source_name, "Jim at 1204")
+        self.assertIsNone(log.stakeholder)
+
+    def test_case_log_list(self):
+        CaseLog.objects.create(legal_matter=self.matter, text="List entry")
+        resp = self.client.get(reverse("legal:case_log_list", args=[self.matter.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "List entry")
+
+    def test_case_log_list_search(self):
+        CaseLog.objects.create(legal_matter=self.matter, text="Alpha entry")
+        CaseLog.objects.create(legal_matter=self.matter, text="Beta entry")
+        resp = self.client.get(
+            reverse("legal:case_log_list", args=[self.matter.pk]),
+            {"cl_q": "Alpha"},
+        )
+        self.assertContains(resp, "Alpha entry")
+        self.assertNotContains(resp, "Beta entry")
+
+    def test_case_log_list_filter_stakeholder(self):
+        CaseLog.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder, text="From source",
+        )
+        CaseLog.objects.create(legal_matter=self.matter, text="No source")
+        resp = self.client.get(
+            reverse("legal:case_log_list", args=[self.matter.pk]),
+            {"cl_stakeholder": self.stakeholder.pk},
+        )
+        self.assertContains(resp, "From source")
+        self.assertNotContains(resp, "No source")
+
+    def test_case_log_delete(self):
+        log = CaseLog.objects.create(legal_matter=self.matter, text="Delete me")
+        resp = self.client.post(reverse("legal:case_log_delete", args=[log.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(CaseLog.objects.filter(pk=log.pk).exists())
+
+    def test_case_log_delete_get_not_allowed(self):
+        log = CaseLog.objects.create(legal_matter=self.matter, text="No GET")
+        resp = self.client.get(reverse("legal:case_log_delete", args=[log.pk]))
+        self.assertEqual(resp.status_code, 405)
+
+    def test_case_log_in_pdf(self):
+        CaseLog.objects.create(
+            legal_matter=self.matter, text="PDF log entry",
+            stakeholder=self.stakeholder,
+        )
+        resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_case_log_stakeholder_link(self):
+        CaseLog.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            text="Linked entry",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertContains(resp, self.stakeholder.get_absolute_url())
+
+    def test_stakeholder_detail_case_logs_tab(self):
+        CaseLog.objects.create(
+            legal_matter=self.matter, stakeholder=self.stakeholder,
+            text="Stakeholder tab entry",
+        )
+        resp = self.client.get(
+            reverse("stakeholders:detail", args=[self.stakeholder.pk])
+        )
+        self.assertContains(resp, "Case Logs")
+        self.assertContains(resp, "Stakeholder tab entry")

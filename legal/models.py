@@ -153,3 +153,29 @@ class LegalChecklistItem(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class CaseLog(models.Model):
+    legal_matter = models.ForeignKey(LegalMatter, on_delete=models.CASCADE, related_name="case_logs")
+    stakeholder = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="case_logs",
+    )
+    source_name = models.CharField(max_length=255, blank=True)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def display_source(self):
+        if self.stakeholder:
+            return self.stakeholder.name
+        return self.source_name or ""
+
+    def __str__(self):
+        return self.text[:80]
+
+    def get_absolute_url(self):
+        return reverse("legal:detail", kwargs={"pk": self.legal_matter.pk})
+
+    class Meta:
+        ordering = ["-created_at"]

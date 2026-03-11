@@ -13,7 +13,7 @@ from assets.models import (
     Aircraft, AircraftOwner, InsurancePolicy, Investment, Lease, LeaseParty,
     Loan, PolicyHolder, RealEstate, Vehicle, VehicleOwner,
 )
-from legal.models import LegalChecklistItem, LegalCommunication, LegalMatter, Evidence
+from legal.models import CaseLog, LegalChecklistItem, LegalCommunication, LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
 from notes.models import Folder, Note, Tag
@@ -1074,6 +1074,44 @@ class Command(BaseCommand):
                     )
                     checklist_pks.append(cl.pk)
 
+        self.stdout.write("Creating case log entries...")
+        case_log_pks = []
+        # (lm_title, stakeholder_name_or_None, source_name, text, hours_ago)
+        case_log_data = [
+            ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", "",
+             "Called to confirm hearing date. Clerk says docket is backed up, may slip a week.", 72),
+            ("Holston Eviction - 1200 Oak Ave", None, "Neighbor (Jim at 1204 Oak)",
+             "Jim says Holston moved most of his stuff out over the weekend. Truck spotted Saturday AM.", 48),
+            ("Holston Eviction - 1200 Oak Ave", "Marcus Reed", "",
+             "Marcus reviewed photos of property condition. Recommends documenting any damage ASAP before hearing.", 36),
+            ("Holston Eviction - 1200 Oak Ave", None, "Property manager",
+             "Confirmed utilities still in Holston's name. Water bill is delinquent.", 24),
+            ("Holston Eviction - 1200 Oak Ave", "Ray Holston", "",
+             "Holston's voicemail says he will pay next week. No written commitment.", 12),
+            ("Cedar Lane Boundary Dispute", None, "Surveyor (Mike Torres)",
+             "Surveyor confirmed fence is 2.8 feet inside our property line. Will provide certified report by Friday.", 96),
+            ("Cedar Lane Boundary Dispute", "Marcus Reed", "",
+             "Marcus suggests we propose mediation with a shared-cost split. Neighbor may agree to avoid court.", 60),
+            ("Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu", "",
+             "Sandra says seller wants to accelerate closing by 10 days. Need to decide by tomorrow.", 8),
+            ("Magnolia Blvd Acquisition - Due Diligence", "Nina Patel", "",
+             "Nina confirmed she reviewed seller disclosures. One minor issue with roof warranty — not a dealbreaker.", 4),
+        ]
+        for lm_title, sh_name, source, text, hours_ago in case_log_data:
+            if lm_title in legal_matters:
+                sh = stakeholders.get(sh_name) if sh_name else None
+                cl = CaseLog.objects.create(
+                    legal_matter=legal_matters[lm_title],
+                    stakeholder=sh,
+                    source_name=source,
+                    text=text,
+                )
+                # Stagger timestamps (auto_now_add workaround)
+                CaseLog.objects.filter(pk=cl.pk).update(
+                    created_at=now - timedelta(hours=hours_ago)
+                )
+                case_log_pks.append(cl.pk)
+
         return {
             "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
             "legal.evidence": list(
@@ -1081,6 +1119,7 @@ class Command(BaseCommand):
             ),
             "legal.legalcommunication": comm_pks,
             "legal.legalchecklistitem": checklist_pks,
+            "legal.caselog": case_log_pks,
         }
 
     # -----------------------------------------------------------------------

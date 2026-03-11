@@ -139,6 +139,50 @@
     </div>
 </div>
 
+<!-- Case Log -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">
+            Case Log
+            <span class="text-xs text-gray-500 font-normal ml-1">({{ cl_total_count }})</span>
+        </h2>
+        <button hx-get="{% url 'legal:case_log_add' matter.pk %}" hx-target="#case-log-form-container" hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Add Entry</button>
+    </div>
+
+    {# Filter bar #}
+    <form id="cl-filter-form" class="px-4 py-3 border-b border-gray-700">
+        <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <input type="text" name="cl_q" placeholder="Search case log..."
+                   class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                   hx-get="{% url 'legal:case_log_list' matter.pk %}"
+                   hx-trigger="keyup changed delay:300ms"
+                   hx-target="#case-log-list"
+                   hx-swap="innerHTML"
+                   hx-include="#cl-filter-form">
+            {% if cl_stakeholders %}
+            <select name="cl_stakeholder"
+                    class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 focus:border-blue-500"
+                    hx-get="{% url 'legal:case_log_list' matter.pk %}"
+                    hx-trigger="change"
+                    hx-target="#case-log-list"
+                    hx-swap="innerHTML"
+                    hx-include="#cl-filter-form">
+                <option value="">All Sources</option>
+                {% for s in cl_stakeholders %}
+                <option value="{{ s.pk }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+        </div>
+    </form>
+
+    <div id="case-log-form-container"></div>
+    <div id="case-log-list">
+        {% include "legal/partials/_case_log_list.html" %}
+    </div>
+</div>
+
 <!-- Communications -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">

@@ -2,7 +2,7 @@ from django import forms
 from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from stakeholders.models import Stakeholder
-from .models import LegalMatter, Evidence, LegalCommunication, LegalChecklistItem
+from .models import CaseLog, LegalMatter, Evidence, LegalCommunication, LegalChecklistItem
 
 
 class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
@@ -72,3 +72,18 @@ class LegalChecklistForm(TailwindFormMixin, forms.ModelForm):
         model = LegalChecklistItem
         fields = ["title"]
         widgets = {"title": forms.TextInput(attrs={"placeholder": "Add a checklist item..."})}
+
+
+class CaseLogForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = CaseLog
+        fields = ["stakeholder", "source_name", "text"]
+        widgets = {
+            "text": forms.Textarea(attrs={"rows": 2, "placeholder": "What happened..."}),
+            "source_name": forms.TextInput(attrs={"placeholder": "Name (if not a stakeholder)"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["stakeholder"].queryset = Stakeholder.objects.order_by("name")
+        self.fields["stakeholder"].required = False
