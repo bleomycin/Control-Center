@@ -121,7 +121,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var docsView = new google.picker.DocsView()
             .setIncludeFolders(true)
             .setSelectFolderEnabled(false)
-            .setParent('root');
+            .setParent('root')
+            .setMode(google.picker.DocsViewMode.LIST);
 
         var configDesc = {
             devKey: useDevKey,
