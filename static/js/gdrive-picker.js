@@ -199,11 +199,11 @@ document.addEventListener('DOMContentLoaded', function () {
         pickerBtn.disabled = true;
         pickerBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg><span>Loading...</span>';
 
-        debugLog('CLICK', 'Pick from Google Drive (default config: no appId, no origin)');
+        debugLog('CLICK', 'Pick from Google Drive (appId + devKey, no origin)');
 
         Promise.all([loadPickerApi(), fetchToken()])
             .then(function (results) {
-                createPicker(results[1], { appId: false, origin: false, devKey: true });
+                createPicker(results[1], { appId: true, origin: false, devKey: true });
             })
             .catch(function (err) { showError('Could not open Picker: ' + err.message); })
             .finally(function () { pickerBtn.disabled = false; pickerBtn.innerHTML = btnOriginalHTML; });
