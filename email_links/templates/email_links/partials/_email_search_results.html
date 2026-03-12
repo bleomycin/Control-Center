@@ -3,6 +3,7 @@
     {{ error }}
 </div>
 {% elif results %}
+{% if browsing %}<p class="text-xs text-gray-500 mb-1 px-1">Recent emails</p>{% endif %}
 <div class="max-h-64 overflow-y-auto border border-gray-600 rounded-md divide-y divide-gray-700">
     {% for msg in results %}
     <form method="post" action="{{ link_url }}" class="hover:bg-gray-700/50 transition-colors">
@@ -19,8 +20,18 @@
                 class="w-full text-left px-3 py-2">
             <div class="flex items-center justify-between">
                 <div class="min-w-0 flex-1">
-                    <p class="text-sm text-gray-200 truncate">{{ msg.subject|default:"(no subject)" }}</p>
-                    <p class="text-xs text-gray-400 truncate">{{ msg.from_name|default:msg.from_email }}{% if msg.date %} &middot; {{ msg.date }}{% endif %}</p>
+                    <p class="text-sm text-gray-200 truncate">
+                        {{ msg.subject|default:"(no subject)" }}
+                        {% if msg.message_count > 1 %}<span class="text-xs text-gray-500 ml-1">({{ msg.message_count }})</span>{% endif %}
+                    </p>
+                    <p class="text-xs text-gray-400 truncate">
+                        {% if msg.message_count > 1 %}
+                            {{ msg.participants|join:", " }}
+                        {% else %}
+                            {{ msg.from_name|default:msg.from_email }}
+                        {% endif %}
+                        {% if msg.date %} &middot; {{ msg.date }}{% endif %}
+                    </p>
                     {% if msg.snippet %}<p class="text-xs text-gray-500 truncate mt-0.5">{{ msg.snippet|truncatechars:80 }}</p>{% endif %}
                 </div>
                 <span class="text-xs text-blue-400 hover:text-blue-300 ml-2 flex-shrink-0">Link</span>

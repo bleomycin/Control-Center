@@ -1,9 +1,17 @@
-{% if body %}
-<div class="pb-3 pt-1">
-    <div class="bg-gray-900/50 border border-gray-700 rounded-md p-3 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">{{ body }}</div>
+{% if thread_messages %}
+<div class="pb-3 pt-1 space-y-2">
+    {% for msg in thread_messages %}
+    <div class="bg-gray-900/50 border border-gray-700 rounded-md p-3">
+        <div class="flex items-center justify-between mb-1.5">
+            <span class="text-xs font-medium text-gray-300">{{ msg.from_name|default:msg.from_email }}</span>
+            <span class="text-xs text-gray-500">{{ msg.date }}</span>
+        </div>
+        <div class="text-xs text-gray-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ msg.body }}</div>
+    </div>
+    {% endfor %}
 </div>
 {% else %}
 <div class="pb-3 pt-1">
-    <p class="text-xs text-gray-500 italic">Unable to load email body{% if not gmail_available %} — Gmail not connected{% endif %}</p>
+    <p class="text-xs text-gray-500 italic">Unable to load email body{% if not gmail_available %} &mdash; Gmail not connected{% endif %}</p>
 </div>
 {% endif %}

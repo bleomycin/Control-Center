@@ -1,10 +1,9 @@
-from datetime import timedelta
-
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import EmailLink
+from .views import _parse_email_date
 
 
 class EmailLinkModelTest(TestCase):
@@ -28,6 +27,17 @@ class EmailLinkModelTest(TestCase):
     def test_linked_entities_empty(self):
         el = EmailLink(message_id="x")
         self.assertEqual(el.linked_entities, [])
+
+    def test_parse_rfc2822_date(self):
+        dt = _parse_email_date("Thu, 12 Mar 2026 12:22:20 +0000")
+        self.assertIsNotNone(dt)
+        self.assertEqual(dt.year, 2026)
+        self.assertEqual(dt.month, 3)
+        self.assertEqual(dt.day, 12)
+
+    def test_parse_empty_date(self):
+        self.assertIsNone(_parse_email_date(""))
+        self.assertIsNone(_parse_email_date(None))
 
 
 class EmailLinkViewTest(TestCase):

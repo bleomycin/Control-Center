@@ -48,62 +48,99 @@ def _get_service():
         return None
 
 
-def search_messages(query="", max_results=15):
+def search_threads(query="", max_results=15):
     """
-    Search Gmail using the same query syntax as the Gmail search bar.
-    Returns a list of dicts: {id, subject, from_name, from_email, date, snippet}.
+    Search Gmail threads (conversations).
+    When query is empty, returns the most recent threads (browse mode).
+    Returns list of dicts: {id, subject, from_name, from_email, date,
+                            snippet, message_count, participants}.
     Returns None on failure.
     """
     service = _get_service()
     if not service:
         return None
     try:
-        result = service.users().messages().list(
-            userId="me", q=query, maxResults=max_results,
-        ).execute()
-        message_ids = result.get("messages", [])
-        if not message_ids:
+        params = {"userId": "me", "maxResults": max_results}
+        if query:
+            params["q"] = query
+        result = service.users().threads().list(**params).execute()
+        thread_stubs = result.get("threads", [])
+        if not thread_stubs:
             return []
 
-        messages = []
-        for msg_stub in message_ids:
-            msg = service.users().messages().get(
-                userId="me", id=msg_stub["id"], format="metadata",
+        threads = []
+        for stub in thread_stubs:
+            thread = service.users().threads().get(
+                userId="me", id=stub["id"], format="metadata",
                 metadataHeaders=["Subject", "From", "Date"],
             ).execute()
-            headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
-            from_raw = headers.get("From", "")
-            from_name, from_email = _parse_from(from_raw)
-            messages.append({
-                "id": msg["id"],
-                "subject": headers.get("Subject", "(no subject)"),
+            messages = thread.get("messages", [])
+            if not messages:
+                continue
+            # Subject from first message, date/from from last
+            first_headers = _msg_headers(messages[0])
+            last_headers = _msg_headers(messages[-1])
+            from_name, from_email = _parse_from(last_headers.get("From", ""))
+
+            # Collect unique participant names
+            participants = []
+            seen = set()
+            for msg in messages:
+                h = _msg_headers(msg)
+                name, email = _parse_from(h.get("From", ""))
+                display = name or email
+                if display and display not in seen:
+                    seen.add(display)
+                    participants.append(display)
+
+            threads.append({
+                "id": thread["id"],
+                "subject": first_headers.get("Subject", "(no subject)"),
                 "from_name": from_name,
                 "from_email": from_email,
-                "date": headers.get("Date", ""),
-                "snippet": msg.get("snippet", ""),
+                "date": last_headers.get("Date", ""),
+                "snippet": thread.get("snippet", ""),
+                "message_count": len(messages),
+                "participants": participants,
             })
-        return messages
+        return threads
     except Exception:
-        logger.exception("Failed to search Gmail messages")
+        logger.exception("Failed to search Gmail threads")
         return None
 
 
-def get_plain_text_body(message_id):
+def get_thread_messages(thread_id):
     """
-    Fetch the plain text body of a single Gmail message.
-    Returns the text string, or None on failure.
+    Fetch all messages in a Gmail thread.
+    Returns list of dicts: [{from_name, from_email, date, body}], or None.
     """
     service = _get_service()
     if not service:
         return None
     try:
-        msg = service.users().messages().get(
-            userId="me", id=message_id, format="full",
+        thread = service.users().threads().get(
+            userId="me", id=thread_id, format="full",
         ).execute()
-        return _extract_plain_text(msg.get("payload", {}))
+        result = []
+        for msg in thread.get("messages", []):
+            headers = _msg_headers(msg)
+            from_name, from_email = _parse_from(headers.get("From", ""))
+            body = _extract_plain_text(msg.get("payload", {}))
+            result.append({
+                "from_name": from_name,
+                "from_email": from_email,
+                "date": headers.get("Date", ""),
+                "body": body or "(no text content)",
+            })
+        return result
     except Exception:
-        logger.exception("Failed to fetch Gmail message body for %s", message_id)
+        logger.exception("Failed to fetch Gmail thread %s", thread_id)
         return None
+
+
+def _msg_headers(msg):
+    """Extract headers dict from a Gmail message resource."""
+    return {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
 
 
 def _extract_plain_text(payload):

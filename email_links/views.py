@@ -18,6 +18,17 @@ ENTITY_CONFIG = {
 }
 
 
+def _parse_email_date(date_str):
+    """Parse an RFC 2822 date (from Gmail) into a datetime, or None."""
+    if not date_str:
+        return None
+    from email.utils import parsedate_to_datetime
+    try:
+        return parsedate_to_datetime(date_str)
+    except (ValueError, TypeError):
+        return None
+
+
 def _email_list_ctx(entity, fk_field, unlink_url_name, entity_pk):
     return {
         "email_links": EmailLink.objects.filter(**{fk_field: entity}),
@@ -38,14 +49,13 @@ def _email_link(request, entity_type, pk):
     if request.method == "POST":
         message_id = request.POST.get("message_id", "").strip()
         if message_id:
-            from django.utils.dateparse import parse_datetime
             email_link, _created = EmailLink.objects.get_or_create(
                 message_id=message_id,
                 defaults={
                     "subject": request.POST.get("subject", ""),
                     "from_name": request.POST.get("from_name", ""),
                     "from_email": request.POST.get("from_email", ""),
-                    "date": parse_datetime(request.POST.get("date", "")) or None,
+                    "date": _parse_email_date(request.POST.get("date", "")),
                     "provider": "gmail",
                 },
             )
@@ -155,19 +165,14 @@ def legal_matter_email_unlink(request, pk, email_pk):
 # ---- Gmail search API ----
 
 def gmail_search_html(request):
-    """Return Gmail search results as HTML partial for the HTMX picker."""
+    """Return Gmail search/browse results as HTML partial for the HTMX picker."""
     link_url = request.GET.get("link_url", "")
     if not gmail.is_available():
         return render(request, "email_links/partials/_email_search_results.html", {
             "error": "Gmail is not connected. Please reconnect Google Drive with Gmail permissions.",
         })
     query = request.GET.get("q", "").strip()
-    if not query:
-        return render(request, "email_links/partials/_email_search_results.html", {
-            "results": [],
-            "link_url": link_url,
-        })
-    results = gmail.search_messages(query=query)
+    results = gmail.search_threads(query=query, max_results=15)
     if results is None:
         return render(request, "email_links/partials/_email_search_results.html", {
             "error": "Failed to search Gmail. Please try again.",
@@ -175,16 +180,17 @@ def gmail_search_html(request):
     return render(request, "email_links/partials/_email_search_results.html", {
         "results": results,
         "link_url": link_url,
+        "browsing": not query,
     })
 
 
 # ---- Email body expansion ----
 
 def email_body(request, pk):
-    """Fetch and return the plain text body of a linked email."""
+    """Fetch and return the thread messages for a linked email."""
     email_link = get_object_or_404(EmailLink, pk=pk)
-    body = gmail.get_plain_text_body(email_link.message_id)
+    thread_messages = gmail.get_thread_messages(email_link.message_id)
     return render(request, "email_links/partials/_email_body.html", {
-        "body": body,
+        "thread_messages": thread_messages,
         "email_link": email_link,
     })

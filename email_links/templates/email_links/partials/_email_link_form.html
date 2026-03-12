@@ -7,16 +7,20 @@
     <div class="mb-3">
         <label class="block text-xs font-medium text-gray-400 mb-1">Search Gmail</label>
         <input type="hidden" name="link_url" value="{{ link_url }}">
-        <input type="text" name="q" placeholder="Search emails..."
+        <input type="text" name="q" placeholder="Search or browse recent emails..."
                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                hx-get="{% url 'email_links:gmail_search' %}"
-               hx-trigger="keyup changed delay:400ms"
+               hx-trigger="load{% if gmail_available %}, keyup changed delay:400ms{% endif %}"
                hx-target="#email-search-results"
                hx-swap="innerHTML"
                hx-include="[name=link_url]"
                {% if not gmail_available %}disabled{% endif %}>
     </div>
-    <div id="email-search-results"></div>
+    <div id="email-search-results">
+        {% if gmail_available %}
+        <p class="text-xs text-gray-500 py-2 text-center">Loading recent emails...</p>
+        {% endif %}
+    </div>
     <div class="mt-2">
         <button type="button" onclick="this.closest('.bg-gray-750').remove()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium rounded-md transition-colors">Cancel</button>
     </div>
