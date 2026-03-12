@@ -308,9 +308,9 @@ class LegalViewTests(TestCase):
         resp = self.client.get(reverse("legal:list"))
         self.assertContains(resp, "Hearing")
 
-    def test_detail_has_communication_context(self):
+    def test_detail_has_activity_context(self):
         resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
-        self.assertIn("communication_list", resp.context)
+        self.assertIn("activity_list", resp.context)
         self.assertIn("communication_form", resp.context)
 
     def test_communication_add_get(self):
@@ -485,7 +485,7 @@ class CommunicationSubjectTests(TestCase):
 
 
 class CommunicationListFilterTests(TestCase):
-    """Tests for the communication_list HTMX endpoint with filters."""
+    """Tests for the activity_list HTMX endpoint with comm filters."""
 
     @classmethod
     def setUpTestData(cls):
@@ -514,7 +514,7 @@ class CommunicationListFilterTests(TestCase):
         )
 
     def _url(self):
-        return reverse("legal:communication_list", args=[self.matter.pk])
+        return reverse("legal:activity_list", args=[self.matter.pk])
 
     def test_basic_list(self):
         resp = self.client.get(self._url())
@@ -523,39 +523,39 @@ class CommunicationListFilterTests(TestCase):
         self.assertContains(resp, "Case update")
 
     def test_filter_by_stakeholder(self):
-        resp = self.client.get(self._url(), {"comm_stakeholder": self.s1.pk})
+        resp = self.client.get(self._url(), {"act_stakeholder": self.s1.pk})
         self.assertContains(resp, "Retainer agreement")
         self.assertContains(resp, "Evidence package")
         self.assertNotContains(resp, "Bob called")
 
     def test_filter_by_direction(self):
-        resp = self.client.get(self._url(), {"comm_direction": "inbound"})
+        resp = self.client.get(self._url(), {"act_direction": "inbound"})
         self.assertContains(resp, "Case update")
         self.assertNotContains(resp, "Retainer agreement")
 
     def test_search_subject(self):
-        resp = self.client.get(self._url(), {"comm_q": "retainer"})
+        resp = self.client.get(self._url(), {"act_q": "retainer"})
         self.assertContains(resp, "Retainer agreement")
         self.assertNotContains(resp, "Case update")
 
     def test_search_summary(self):
-        resp = self.client.get(self._url(), {"comm_q": "evidence documents"})
+        resp = self.client.get(self._url(), {"act_q": "evidence documents"})
         self.assertContains(resp, "Evidence package")
         self.assertNotContains(resp, "Case update")
 
     def test_filter_by_method(self):
-        resp = self.client.get(self._url(), {"comm_method": "call"})
+        resp = self.client.get(self._url(), {"act_method": "call"})
         self.assertContains(resp, "Case update")
         self.assertNotContains(resp, "Retainer agreement")
 
     def test_filter_follow_up(self):
-        resp = self.client.get(self._url(), {"comm_follow_up": "1"})
+        resp = self.client.get(self._url(), {"act_follow_up": "1"})
         self.assertContains(resp, "Retainer agreement")
         self.assertNotContains(resp, "Case update")
 
     def test_filter_date_range(self):
         from_date = (date.today() - timedelta(days=6)).isoformat()
-        resp = self.client.get(self._url(), {"comm_date_from": from_date})
+        resp = self.client.get(self._url(), {"act_date_from": from_date})
         self.assertContains(resp, "Case update")
         self.assertContains(resp, "Evidence package")
         self.assertNotContains(resp, "Retainer agreement")
@@ -570,7 +570,7 @@ class CommunicationListFilterTests(TestCase):
                 subject=f"Bulk comm {i}", summary=f"Bulk {i}",
             )
         # Total is 25 (3 from setUp + 22). Page 1 = first 20 items.
-        resp = self.client.get(self._url())
+        resp = self.client.get(self._url(), {"act_type": "comm"})
         self.assertContains(resp, "Show more")
 
     def test_pagination_page_2(self):
@@ -582,18 +582,18 @@ class CommunicationListFilterTests(TestCase):
                 direction="outbound", method="email",
                 summary=f"Bulk {i}",
             )
-        resp = self.client.get(self._url(), {"comm_page": "2"})
+        resp = self.client.get(self._url(), {"act_page": "2", "act_type": "comm"})
         self.assertNotContains(resp, "Show more")
 
-    def test_detail_page_has_total_count(self):
+    def test_detail_page_has_act_total_count(self):
         resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
-        self.assertIn("total_count", resp.context)
-        self.assertEqual(resp.context["total_count"], 3)
+        self.assertIn("act_total_count", resp.context)
+        self.assertEqual(resp.context["act_total_count"], 3)
 
-    def test_detail_page_has_comm_stakeholders(self):
+    def test_detail_page_has_activity_stakeholders(self):
         resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
-        self.assertIn("comm_stakeholders", resp.context)
-        names = [s.name for s in resp.context["comm_stakeholders"]]
+        self.assertIn("activity_stakeholders", resp.context)
+        names = [s.name for s in resp.context["activity_stakeholders"]]
         self.assertIn("Alice Attorney", names)
         self.assertIn("Bob Barrister", names)
 
@@ -973,7 +973,7 @@ class CaseLogViewTests(TestCase):
     def test_case_log_in_detail(self):
         CaseLog.objects.create(legal_matter=self.matter, text="Visible entry")
         resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
-        self.assertContains(resp, "Case Log")
+        self.assertContains(resp, "Activity")
         self.assertContains(resp, "Visible entry")
 
     def test_case_log_add_get(self):
@@ -999,30 +999,30 @@ class CaseLogViewTests(TestCase):
         self.assertEqual(log.source_name, "Jim at 1204")
         self.assertIsNone(log.stakeholder)
 
-    def test_case_log_list(self):
+    def test_case_log_in_activity_list(self):
         CaseLog.objects.create(legal_matter=self.matter, text="List entry")
-        resp = self.client.get(reverse("legal:case_log_list", args=[self.matter.pk]))
+        resp = self.client.get(reverse("legal:activity_list", args=[self.matter.pk]))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "List entry")
 
-    def test_case_log_list_search(self):
+    def test_case_log_search_via_activity(self):
         CaseLog.objects.create(legal_matter=self.matter, text="Alpha entry")
         CaseLog.objects.create(legal_matter=self.matter, text="Beta entry")
         resp = self.client.get(
-            reverse("legal:case_log_list", args=[self.matter.pk]),
-            {"cl_q": "Alpha"},
+            reverse("legal:activity_list", args=[self.matter.pk]),
+            {"act_q": "Alpha", "act_type": "log"},
         )
         self.assertContains(resp, "Alpha entry")
         self.assertNotContains(resp, "Beta entry")
 
-    def test_case_log_list_filter_stakeholder(self):
+    def test_case_log_filter_stakeholder_via_activity(self):
         CaseLog.objects.create(
             legal_matter=self.matter, stakeholder=self.stakeholder, text="From source",
         )
         CaseLog.objects.create(legal_matter=self.matter, text="No source")
         resp = self.client.get(
-            reverse("legal:case_log_list", args=[self.matter.pk]),
-            {"cl_stakeholder": self.stakeholder.pk},
+            reverse("legal:activity_list", args=[self.matter.pk]),
+            {"act_stakeholder": self.stakeholder.pk, "act_type": "log"},
         )
         self.assertContains(resp, "From source")
         self.assertNotContains(resp, "No source")
@@ -1064,3 +1064,108 @@ class CaseLogViewTests(TestCase):
         )
         self.assertContains(resp, "Case Logs")
         self.assertContains(resp, "Stakeholder tab entry")
+
+
+class ActivityListTests(TestCase):
+    """Tests for the unified activity timeline."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Activity Test Matter")
+        cls.s1 = Stakeholder.objects.create(name="Alice")
+        cls.s2 = Stakeholder.objects.create(name="Bob")
+        cls.comm1 = LegalCommunication.objects.create(
+            legal_matter=cls.matter, stakeholder=cls.s1,
+            date=timezone.now() - timedelta(days=3),
+            direction="outbound", method="email",
+            subject="Email to Alice", summary="Sent docs.",
+        )
+        cls.comm2 = LegalCommunication.objects.create(
+            legal_matter=cls.matter, stakeholder=cls.s2,
+            date=timezone.now() - timedelta(days=1),
+            direction="inbound", method="call",
+            subject="Call from Bob", summary="Bob called.",
+        )
+        cls.log1 = CaseLog.objects.create(
+            legal_matter=cls.matter, stakeholder=cls.s1,
+            text="Log entry by Alice",
+        )
+        cls.log2 = CaseLog.objects.create(
+            legal_matter=cls.matter,
+            text="General log entry", source_name="Jim",
+        )
+
+    def _url(self):
+        return reverse("legal:activity_list", args=[self.matter.pk])
+
+    def test_unified_list_shows_both_types(self):
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Email to Alice")
+        self.assertContains(resp, "Log entry by Alice")
+
+    def test_type_filter_log(self):
+        resp = self.client.get(self._url(), {"act_type": "log"})
+        self.assertContains(resp, "Log entry by Alice")
+        self.assertContains(resp, "General log entry")
+        self.assertNotContains(resp, "Email to Alice")
+
+    def test_type_filter_comm(self):
+        resp = self.client.get(self._url(), {"act_type": "comm"})
+        self.assertContains(resp, "Email to Alice")
+        self.assertNotContains(resp, "Log entry by Alice")
+
+    def test_unified_search(self):
+        resp = self.client.get(self._url(), {"act_q": "Bob"})
+        self.assertContains(resp, "Call from Bob")
+        self.assertNotContains(resp, "Email to Alice")
+
+    def test_unified_search_matches_log_text(self):
+        resp = self.client.get(self._url(), {"act_q": "General"})
+        self.assertContains(resp, "General log entry")
+        self.assertNotContains(resp, "Email to Alice")
+
+    def test_stakeholder_filter(self):
+        resp = self.client.get(self._url(), {"act_stakeholder": self.s1.pk})
+        self.assertContains(resp, "Email to Alice")
+        self.assertContains(resp, "Log entry by Alice")
+        self.assertNotContains(resp, "Call from Bob")
+        self.assertNotContains(resp, "General log entry")
+
+    def test_chronological_ordering(self):
+        """Most recent items should appear first."""
+        resp = self.client.get(self._url())
+        content = resp.content.decode()
+        # log2 and log1 are most recent (auto_now_add), then comm2, then comm1
+        pos_log2 = content.find("General log entry")
+        pos_comm1 = content.find("Email to Alice")
+        self.assertLess(pos_log2, pos_comm1)
+
+    def test_comm_specific_filters_skip_logs(self):
+        """Direction/method filters only affect comms, logs still appear."""
+        resp = self.client.get(self._url(), {"act_direction": "inbound"})
+        self.assertContains(resp, "Call from Bob")
+        self.assertNotContains(resp, "Email to Alice")
+        # Logs are unaffected by direction
+        self.assertContains(resp, "Log entry by Alice")
+
+    def test_detail_page_context(self):
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertIn("activity_list", resp.context)
+        self.assertIn("act_total_count", resp.context)
+        self.assertEqual(resp.context["act_total_count"], 4)
+        self.assertEqual(resp.context["act_comm_count"], 2)
+        self.assertEqual(resp.context["act_log_count"], 2)
+
+    def test_pagination_mixed_types(self):
+        """Create enough items to trigger pagination."""
+        for i in range(19):
+            LegalCommunication.objects.create(
+                legal_matter=self.matter,
+                date=timezone.now() - timedelta(hours=i + 10),
+                direction="outbound", method="email",
+                summary=f"Bulk comm {i}",
+            )
+        # 2 comms + 19 = 21 comms + 2 logs = 23 total, page 1 limit = 20
+        resp = self.client.get(self._url())
+        self.assertContains(resp, "Show more")

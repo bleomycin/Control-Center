@@ -1,0 +1,25 @@
+{% load choice_labels %}
+<div class="divide-y divide-gray-700">
+    {% for item in activity_list %}
+        {% if item.type == "comm" %}
+            {% include "legal/partials/_communication_row.html" with comm=item.obj %}
+        {% else %}
+            {% include "legal/partials/_activity_log_row.html" with log=item.obj %}
+        {% endif %}
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No activity found</p>
+    {% endfor %}
+</div>
+{% if act_has_more %}
+<div class="px-4 py-3 border-t border-gray-700 text-center">
+    <button hx-get="{% url 'legal:activity_list' matter.pk %}"
+            hx-target="#activity-list"
+            hx-swap="innerHTML"
+            hx-include="#activity-filter-form"
+            hx-vals='{"act_page": "{{ act_next_page }}"}'
+            class="text-sm text-blue-400 hover:text-blue-300 transition-colors">
+        Show more ({{ act_total_count }} total)
+    </button>
+</div>
+{% endif %}
+<div id="activity-form-container" hx-swap-oob="innerHTML:#activity-form-container"></div>

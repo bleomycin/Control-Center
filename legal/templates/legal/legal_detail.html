@@ -139,125 +139,120 @@
     </div>
 </div>
 
-<!-- Case Log -->
+<!-- Activity -->
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">
-            Case Log
-            <span class="text-xs text-gray-500 font-normal ml-1">({{ cl_total_count }})</span>
+            Activity
+            <span class="text-xs text-gray-500 font-normal ml-1">({{ act_total_count }})</span>
         </h2>
-        <button hx-get="{% url 'legal:case_log_add' matter.pk %}" hx-target="#case-log-form-container" hx-swap="innerHTML"
-                class="text-xs text-blue-400 hover:text-blue-300">+ Add Entry</button>
-    </div>
-
-    {# Filter bar #}
-    <form id="cl-filter-form" class="px-4 py-3 border-b border-gray-700">
-        <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <input type="text" name="cl_q" placeholder="Search case log..."
-                   class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                   hx-get="{% url 'legal:case_log_list' matter.pk %}"
-                   hx-trigger="keyup changed delay:300ms"
-                   hx-target="#case-log-list"
-                   hx-swap="innerHTML"
-                   hx-include="#cl-filter-form">
-            {% if cl_stakeholders %}
-            <select name="cl_stakeholder"
-                    class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 focus:border-blue-500"
-                    hx-get="{% url 'legal:case_log_list' matter.pk %}"
-                    hx-trigger="change"
-                    hx-target="#case-log-list"
-                    hx-swap="innerHTML"
-                    hx-include="#cl-filter-form">
-                <option value="">All Sources</option>
-                {% for s in cl_stakeholders %}
-                <option value="{{ s.pk }}">{{ s.name }}</option>
-                {% endfor %}
-            </select>
-            {% endif %}
+        <div class="flex items-center gap-3">
+            <span class="relative group/tip">
+                <button hx-get="{% url 'legal:case_log_add' matter.pk %}" hx-target="#activity-form-container" hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Log Entry</button>
+                <span class="hidden sm:group-hover/tip:block absolute right-0 top-full mt-1.5 w-64 px-3 py-2 rounded-md bg-gray-900 border border-gray-700 shadow-lg text-xs text-gray-300 leading-relaxed z-50 pointer-events-none">
+                    Quick journal notes — calls, observations, status changes.<br>
+                    <span class="text-gray-500 italic">e.g. "Tenant agreed to vacate by Friday"</span>
+                </span>
+            </span>
+            <span class="relative group/tip">
+                <button hx-get="{% url 'legal:communication_add' matter.pk %}" hx-target="#activity-form-container" hx-swap="innerHTML"
+                        class="text-xs text-blue-400 hover:text-blue-300">+ Communication</button>
+                <span class="hidden sm:group-hover/tip:block absolute right-0 top-full mt-1.5 w-72 px-3 py-2 rounded-md bg-gray-900 border border-gray-700 shadow-lg text-xs text-gray-300 leading-relaxed z-50 pointer-events-none">
+                    Structured records with contact, direction, method &amp; follow-up tracking.<br>
+                    <span class="text-gray-500 italic">e.g. "Sent retainer agreement to attorney via email"</span>
+                </span>
+            </span>
         </div>
-    </form>
-
-    <div id="case-log-form-container"></div>
-    <div id="case-log-list">
-        {% include "legal/partials/_case_log_list.html" %}
-    </div>
-</div>
-
-<!-- Communications -->
-<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
-    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
-        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">
-            Communications
-            <span class="text-xs text-gray-500 font-normal ml-1">({{ total_count }})</span>
-        </h2>
-        <button hx-get="{% url 'legal:communication_add' matter.pk %}" hx-target="#communication-form-container" hx-swap="innerHTML"
-                class="text-xs text-blue-400 hover:text-blue-300">+ Add</button>
     </div>
 
     {# Filter bar #}
-    <form id="comm-filter-form" class="px-4 py-3 border-b border-gray-700 space-y-2">
+    <form id="activity-filter-form" class="px-4 py-3 border-b border-gray-700 space-y-2">
         <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
-            <input type="text" name="comm_q" placeholder="Search communications..."
+            <input type="text" name="act_q" placeholder="Search activity..."
                    class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                   hx-get="{% url 'legal:communication_list' matter.pk %}"
+                   hx-get="{% url 'legal:activity_list' matter.pk %}"
                    hx-trigger="keyup changed delay:300ms"
-                   hx-target="#communication-list"
+                   hx-target="#activity-list"
                    hx-swap="innerHTML"
-                   hx-include="#comm-filter-form">
-            {% if comm_stakeholders %}
-            <select name="comm_stakeholder"
-                    class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 focus:border-blue-500"
-                    hx-get="{% url 'legal:communication_list' matter.pk %}"
-                    hx-trigger="change"
-                    hx-target="#communication-list"
-                    hx-swap="innerHTML"
-                    hx-include="#comm-filter-form">
-                <option value="">All Contacts</option>
-                {% for s in comm_stakeholders %}
-                <option value="{{ s.pk }}">{{ s.name }}</option>
-                {% endfor %}
-            </select>
-            {% endif %}
+                   hx-include="#activity-filter-form">
             <div class="flex items-center gap-1">
                 <label class="cursor-pointer">
-                    <input type="radio" name="comm_direction" value="" checked class="sr-only peer"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
-                    <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-blue-600/30 peer-checked:border-blue-500 peer-checked:text-blue-300 transition-colors">All</span>
+                    <input type="radio" name="act_type" value="" checked class="sr-only peer"
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
+                    <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-blue-600/30 peer-checked:border-blue-500 peer-checked:text-blue-300 transition-colors">All <span class="text-gray-500">{{ act_total_count }}</span></span>
                 </label>
                 <label class="cursor-pointer">
-                    <input type="radio" name="comm_direction" value="outbound" class="sr-only peer"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
-                    <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-cyan-600/30 peer-checked:border-cyan-500 peer-checked:text-cyan-300 transition-colors">↗ Out</span>
+                    <input type="radio" name="act_type" value="log" class="sr-only peer"
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
+                    <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-gray-600/50 peer-checked:border-gray-500 peer-checked:text-gray-200 transition-colors">Logs <span class="text-gray-500">{{ act_log_count }}</span></span>
                 </label>
                 <label class="cursor-pointer">
-                    <input type="radio" name="comm_direction" value="inbound" class="sr-only peer"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
-                    <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-amber-600/30 peer-checked:border-amber-500 peer-checked:text-amber-300 transition-colors">↙ In</span>
+                    <input type="radio" name="act_type" value="comm" class="sr-only peer"
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
+                    <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-purple-600/30 peer-checked:border-purple-500 peer-checked:text-purple-300 transition-colors">Comms <span class="text-gray-500">{{ act_comm_count }}</span></span>
                 </label>
             </div>
-            <button type="button" onclick="toggleCommFilters()"
+            {% if activity_stakeholders %}
+            <select name="act_stakeholder"
+                    class="bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 focus:border-blue-500"
+                    hx-get="{% url 'legal:activity_list' matter.pk %}"
+                    hx-trigger="change"
+                    hx-target="#activity-list"
+                    hx-swap="innerHTML"
+                    hx-include="#activity-filter-form">
+                <option value="">All Contacts</option>
+                {% for s in activity_stakeholders %}
+                <option value="{{ s.pk }}">{{ s.name }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+            <button type="button" onclick="toggleActivityFilters()"
                     class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md bg-gray-700 border border-gray-600 text-gray-300 hover:bg-gray-600 transition-colors">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
                 More
             </button>
         </div>
-        {# Collapsible extra filters #}
-        <div id="comm-filter-panel" class="hidden bg-gray-750 rounded-lg border border-gray-700 p-3">
+        {# Collapsible extra filters (comm-specific + shared date range) #}
+        <div id="activity-filter-panel" class="hidden bg-gray-750 rounded-lg border border-gray-700 p-3">
             <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:gap-x-4 sm:gap-y-3 sm:items-end">
+                <div class="flex items-center gap-1">
+                    <label class="cursor-pointer">
+                        <input type="radio" name="act_direction" value="" checked class="sr-only peer"
+                               hx-get="{% url 'legal:activity_list' matter.pk %}"
+                               hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                               hx-include="#activity-filter-form">
+                        <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-blue-600/30 peer-checked:border-blue-500 peer-checked:text-blue-300 transition-colors">All</span>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="act_direction" value="outbound" class="sr-only peer"
+                               hx-get="{% url 'legal:activity_list' matter.pk %}"
+                               hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                               hx-include="#activity-filter-form">
+                        <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-cyan-600/30 peer-checked:border-cyan-500 peer-checked:text-cyan-300 transition-colors">↗ Out</span>
+                    </label>
+                    <label class="cursor-pointer">
+                        <input type="radio" name="act_direction" value="inbound" class="sr-only peer"
+                               hx-get="{% url 'legal:activity_list' matter.pk %}"
+                               hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                               hx-include="#activity-filter-form">
+                        <span class="px-2.5 py-1 text-xs rounded-md border border-gray-600 text-gray-300 peer-checked:bg-amber-600/30 peer-checked:border-amber-500 peer-checked:text-amber-300 transition-colors">↙ In</span>
+                    </label>
+                </div>
                 {% if comm_method_choices %}
                 <div>
                     <label class="block text-xs text-gray-400 mb-1">Method</label>
-                    <select name="comm_method"
+                    <select name="act_method"
                             class="bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-200 focus:border-blue-500"
-                            hx-get="{% url 'legal:communication_list' matter.pk %}"
-                            hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                            hx-include="#comm-filter-form">
+                            hx-get="{% url 'legal:activity_list' matter.pk %}"
+                            hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                            hx-include="#activity-filter-form">
                         <option value="">All Methods</option>
                         {% for val, label in comm_method_choices %}
                         <option value="{{ val }}">{{ label }}</option>
@@ -267,58 +262,58 @@
                 {% endif %}
                 <div>
                     <label class="block text-xs text-gray-400 mb-1">From</label>
-                    <input type="date" name="comm_date_from"
+                    <input type="date" name="act_date_from"
                            class="bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-200 focus:border-blue-500"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
                 </div>
                 <div>
                     <label class="block text-xs text-gray-400 mb-1">To</label>
-                    <input type="date" name="comm_date_to"
+                    <input type="date" name="act_date_to"
                            class="bg-gray-700 border border-gray-600 rounded-md px-2 py-1 text-xs text-gray-200 focus:border-blue-500"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
                 </div>
                 <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" name="comm_has_file" value="1"
+                    <input type="checkbox" name="act_has_file" value="1"
                            class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
                     <span class="text-xs text-gray-300">Has attachment</span>
                 </label>
                 <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" name="comm_follow_up" value="1"
+                    <input type="checkbox" name="act_follow_up" value="1"
                            class="rounded border-gray-600 bg-gray-700 text-yellow-500 focus:ring-yellow-500"
-                           hx-get="{% url 'legal:communication_list' matter.pk %}"
-                           hx-trigger="change" hx-target="#communication-list" hx-swap="innerHTML"
-                           hx-include="#comm-filter-form">
+                           hx-get="{% url 'legal:activity_list' matter.pk %}"
+                           hx-trigger="change" hx-target="#activity-list" hx-swap="innerHTML"
+                           hx-include="#activity-filter-form">
                     <span class="text-xs text-gray-300">Follow-up needed</span>
                 </label>
-                <button type="button" onclick="clearCommFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2">Clear</button>
+                <button type="button" onclick="clearActivityFilters()" class="text-xs text-gray-400 hover:text-white transition-colors underline underline-offset-2">Clear</button>
             </div>
         </div>
     </form>
 
-    <div id="communication-form-container"></div>
-    <div id="communication-list">
-        {% include "legal/partials/_communication_list.html" %}
+    <div id="activity-form-container"></div>
+    <div id="activity-list">
+        {% include "legal/partials/_activity_list.html" %}
     </div>
 </div>
 
 <script>
-function toggleCommFilters() {
-    document.getElementById('comm-filter-panel').classList.toggle('hidden');
+function toggleActivityFilters() {
+    document.getElementById('activity-filter-panel').classList.toggle('hidden');
 }
-function clearCommFilters() {
-    const form = document.getElementById('comm-filter-form');
+function clearActivityFilters() {
+    const form = document.getElementById('activity-filter-form');
     form.querySelectorAll('input[type="text"], input[type="date"]').forEach(el => el.value = '');
     form.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
     form.querySelectorAll('input[type="checkbox"]').forEach(el => el.checked = false);
     form.querySelectorAll('input[type="radio"][value=""]').forEach(el => el.checked = true);
-    htmx.trigger(form.querySelector('input[name="comm_q"]'), 'keyup');
+    htmx.trigger(form.querySelector('input[name="act_q"]'), 'keyup');
 }
 </script>
 

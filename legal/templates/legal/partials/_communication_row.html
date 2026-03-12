@@ -63,7 +63,7 @@
         </div>
         {% endif %}
     </div>
-    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-2">
+    <div class="flex items-center gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity shrink-0 ml-2">
         {% if comm.stakeholder %}
         <a href="{% url 'tasks:create' %}?legal={{ matter.pk }}&stakeholder={{ comm.stakeholder.pk }}&direction={% if comm.direction == 'inbound' %}outbound{% else %}inbound{% endif %}{% if comm.subject %}&title={{ comm.subject|urlencode }}{% endif %}"
            class="text-gray-500 hover:text-green-400 text-xs" title="Create task from this">task</a>
@@ -72,10 +72,10 @@
            class="text-gray-500 hover:text-green-400 text-xs" title="Create task from this">task</a>
         {% endif %}
         <button hx-get="{% url 'legal:communication_edit' comm.pk %}"
-                hx-target="#communication-form-container"
+                hx-target="#activity-form-container"
                 hx-swap="innerHTML"
                 class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
-        <button hx-post="{% url 'legal:communication_delete' comm.pk %}" hx-target="#communication-list" hx-swap="innerHTML"
+        <button hx-post="{% url 'legal:communication_delete' comm.pk %}" hx-target="#activity-list" hx-swap="innerHTML"
                 hx-confirm="Delete this communication?"
                 class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
     </div>

@@ -12,114 +12,105 @@ from .forms import CaseLogForm, EvidenceForm, LegalChecklistForm, LegalCommunica
 from .models import CaseLog, Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
-COMM_PAGE_SIZE = 20
-CASE_LOG_PAGE_SIZE = 20
+ACTIVITY_PAGE_SIZE = 20
 
 
-def _comm_list_context(matter, request=None, page=1):
-    """Build filtered, paginated communication list context for a legal matter."""
-    qs = matter.communications.select_related("stakeholder").all()
+def _activity_list_context(matter, request=None, page=1):
+    """Build filtered, paginated unified activity list (comms + case logs)."""
+    act_type = ""
+    q = ""
+    stakeholder_pk = ""
+    direction = ""
+    method = ""
+    date_from = ""
+    date_to = ""
+    has_file = False
+    follow_up = False
 
     if request:
-        # Search subject + summary
-        q = request.GET.get("comm_q", "").strip()
-        if q:
-            qs = qs.filter(Q(subject__icontains=q) | Q(summary__icontains=q))
-
-        # Stakeholder filter
-        stakeholder_pk = request.GET.get("comm_stakeholder")
-        if stakeholder_pk:
-            qs = qs.filter(stakeholder_id=stakeholder_pk)
-
-        # Direction filter
-        direction = request.GET.get("comm_direction")
-        if direction in ("outbound", "inbound"):
-            qs = qs.filter(direction=direction)
-
-        # Method filter
-        method = request.GET.get("comm_method")
-        if method:
-            qs = qs.filter(method=method)
-
-        # Date range
-        date_from = request.GET.get("comm_date_from")
-        if date_from:
-            qs = qs.filter(date__date__gte=date_from)
-        date_to = request.GET.get("comm_date_to")
-        if date_to:
-            qs = qs.filter(date__date__lte=date_to)
-
-        # Has attachment
-        if request.GET.get("comm_has_file"):
-            qs = qs.exclude(file="")
-
-        # Follow-up needed
-        if request.GET.get("comm_follow_up"):
-            qs = qs.filter(follow_up_needed=True)
-
-        # Page from request
-        page_param = request.GET.get("comm_page")
+        q = request.GET.get("act_q", "").strip()
+        act_type = request.GET.get("act_type", "")
+        stakeholder_pk = request.GET.get("act_stakeholder", "")
+        direction = request.GET.get("act_direction", "")
+        method = request.GET.get("act_method", "")
+        date_from = request.GET.get("act_date_from", "")
+        date_to = request.GET.get("act_date_to", "")
+        has_file = bool(request.GET.get("act_has_file"))
+        follow_up = bool(request.GET.get("act_follow_up"))
+        page_param = request.GET.get("act_page")
         if page_param:
             try:
                 page = int(page_param)
             except (ValueError, TypeError):
                 page = 1
 
-    total_count = qs.count()
-    limit = page * COMM_PAGE_SIZE
-    has_more = total_count > limit
+    limit = page * ACTIVITY_PAGE_SIZE
 
-    return {
-        "communication_list": qs[:limit],
-        "matter": matter,
-        "has_more": has_more,
-        "next_page": page + 1,
-        "total_count": total_count,
-        "today": timezone.localdate(),
-    }
-
-
-def _case_log_list_context(matter, request=None, page=1):
-    """Build filtered, paginated case log list context."""
-    qs = matter.case_logs.select_related("stakeholder").all()
-
-    if request:
-        q = request.GET.get("cl_q", "").strip()
+    # --- Communications queryset ---
+    comm_qs = matter.communications.select_related("stakeholder").all()
+    if act_type != "log":
         if q:
-            qs = qs.filter(
+            comm_qs = comm_qs.filter(Q(subject__icontains=q) | Q(summary__icontains=q))
+        if stakeholder_pk:
+            comm_qs = comm_qs.filter(stakeholder_id=stakeholder_pk)
+        if direction in ("outbound", "inbound"):
+            comm_qs = comm_qs.filter(direction=direction)
+        if method:
+            comm_qs = comm_qs.filter(method=method)
+        if date_from:
+            comm_qs = comm_qs.filter(date__date__gte=date_from)
+        if date_to:
+            comm_qs = comm_qs.filter(date__date__lte=date_to)
+        if has_file:
+            comm_qs = comm_qs.exclude(file="")
+        if follow_up:
+            comm_qs = comm_qs.filter(follow_up_needed=True)
+    else:
+        comm_qs = comm_qs.none()
+
+    # --- Case log queryset ---
+    log_qs = matter.case_logs.select_related("stakeholder").all()
+    if act_type != "comm":
+        if q:
+            log_qs = log_qs.filter(
                 Q(text__icontains=q)
                 | Q(source_name__icontains=q)
                 | Q(stakeholder__name__icontains=q)
             )
-
-        stakeholder_pk = request.GET.get("cl_stakeholder")
         if stakeholder_pk:
-            qs = qs.filter(stakeholder_id=stakeholder_pk)
-
-        date_from = request.GET.get("cl_date_from")
+            log_qs = log_qs.filter(stakeholder_id=stakeholder_pk)
         if date_from:
-            qs = qs.filter(created_at__date__gte=date_from)
-        date_to = request.GET.get("cl_date_to")
+            log_qs = log_qs.filter(created_at__date__gte=date_from)
         if date_to:
-            qs = qs.filter(created_at__date__lte=date_to)
+            log_qs = log_qs.filter(created_at__date__lte=date_to)
+    else:
+        log_qs = log_qs.none()
 
-        page_param = request.GET.get("cl_page")
-        if page_param:
-            try:
-                page = int(page_param)
-            except (ValueError, TypeError):
-                page = 1
+    # Counts (from filtered querysets, before pagination)
+    act_comm_count = comm_qs.count()
+    act_log_count = log_qs.count()
+    act_total_count = act_comm_count + act_log_count
 
-    total_count = qs.count()
-    limit = page * CASE_LOG_PAGE_SIZE
-    has_more = total_count > limit
+    # Merge: fetch `limit` from each, wrap, sort, slice
+    comm_items = [
+        {"type": "comm", "sort_date": c.date, "obj": c}
+        for c in comm_qs[:limit]
+    ]
+    log_items = [
+        {"type": "log", "sort_date": l.created_at, "obj": l}
+        for l in log_qs[:limit]
+    ]
+    merged = sorted(comm_items + log_items, key=lambda x: x["sort_date"], reverse=True)[:limit]
 
     return {
-        "case_log_list": qs[:limit],
+        "activity_list": merged,
+        "act_total_count": act_total_count,
+        "act_comm_count": act_comm_count,
+        "act_log_count": act_log_count,
+        "act_has_more": act_total_count > limit,
+        "act_next_page": page + 1,
         "matter": matter,
-        "cl_has_more": has_more,
-        "cl_next_page": page + 1,
-        "cl_total_count": total_count,
+        "today": timezone.localdate(),
     }
 
 
@@ -217,18 +208,13 @@ class LegalMatterDetailView(DetailView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         obj = self.object
-        ctx.update(_comm_list_context(obj))
+        ctx.update(_activity_list_context(obj))
         ctx["communication_form"] = LegalCommunicationForm()
-        # Distinct stakeholders who have comms on this matter (for filter dropdown)
-        ctx["comm_stakeholders"] = Stakeholder.objects.filter(
-            legal_communications__legal_matter=obj
+        ctx["case_log_form"] = CaseLogForm()
+        ctx["activity_stakeholders"] = Stakeholder.objects.filter(
+            Q(legal_communications__legal_matter=obj) | Q(case_logs__legal_matter=obj)
         ).distinct().order_by("name")
         ctx["comm_method_choices"] = get_choices("contact_method")
-        ctx.update(_case_log_list_context(obj))
-        ctx["case_log_form"] = CaseLogForm()
-        ctx["cl_stakeholders"] = Stakeholder.objects.filter(
-            case_logs__legal_matter=obj
-        ).distinct().order_by("name")
         ctx["evidence_list"] = obj.evidence.all()
         ctx["evidence_form"] = EvidenceForm()
         checklist_items = obj.checklist_items.all()
@@ -412,11 +398,11 @@ def evidence_delete(request, pk):
                   {"evidence_list": matter.evidence.all(), "matter": matter})
 
 
-def communication_list(request, pk):
-    """HTMX endpoint: filtered, paginated communication list."""
+def activity_list(request, pk):
+    """HTMX endpoint: filtered, paginated unified activity list."""
     matter = get_object_or_404(LegalMatter, pk=pk)
-    ctx = _comm_list_context(matter, request)
-    return render(request, "legal/partials/_communication_list.html", ctx)
+    ctx = _activity_list_context(matter, request)
+    return render(request, "legal/partials/_activity_list.html", ctx)
 
 
 def communication_add(request, pk):
@@ -427,8 +413,8 @@ def communication_add(request, pk):
             comm = form.save(commit=False)
             comm.legal_matter = matter
             comm.save()
-            ctx = _comm_list_context(matter)
-            return render(request, "legal/partials/_communication_list.html", ctx)
+            ctx = _activity_list_context(matter)
+            return render(request, "legal/partials/_activity_list.html", ctx)
     else:
         form = LegalCommunicationForm()
     return render(request, "legal/partials/_communication_form.html",
@@ -445,8 +431,8 @@ def communication_edit(request, pk):
             if request.POST.get("clear_file"):
                 obj.file = ""
             obj.save()
-            ctx = _comm_list_context(matter)
-            return render(request, "legal/partials/_communication_list.html", ctx)
+            ctx = _activity_list_context(matter)
+            return render(request, "legal/partials/_activity_list.html", ctx)
     else:
         form = LegalCommunicationForm(instance=comm)
     return render(request, "legal/partials/_communication_form.html",
@@ -458,8 +444,8 @@ def communication_delete(request, pk):
     matter = comm.legal_matter
     if request.method == "POST":
         comm.delete()
-    ctx = _comm_list_context(matter)
-    return render(request, "legal/partials/_communication_list.html", ctx)
+    ctx = _activity_list_context(matter)
+    return render(request, "legal/partials/_activity_list.html", ctx)
 
 
 @require_POST
@@ -660,13 +646,6 @@ def checklist_delete(request, pk):
 # Case Log
 # ---------------------------------------------------------------------------
 
-def case_log_list(request, pk):
-    """HTMX endpoint: filtered, paginated case log list."""
-    matter = get_object_or_404(LegalMatter, pk=pk)
-    ctx = _case_log_list_context(matter, request)
-    return render(request, "legal/partials/_case_log_list.html", ctx)
-
-
 def case_log_add(request, pk):
     matter = get_object_or_404(LegalMatter, pk=pk)
     if request.method == "POST":
@@ -675,8 +654,8 @@ def case_log_add(request, pk):
             log = form.save(commit=False)
             log.legal_matter = matter
             log.save()
-            ctx = _case_log_list_context(matter)
-            return render(request, "legal/partials/_case_log_list.html", ctx)
+            ctx = _activity_list_context(matter)
+            return render(request, "legal/partials/_activity_list.html", ctx)
     else:
         form = CaseLogForm()
     return render(request, "legal/partials/_case_log_form.html",
@@ -688,8 +667,8 @@ def case_log_delete(request, pk):
     log = get_object_or_404(CaseLog, pk=pk)
     matter = log.legal_matter
     log.delete()
-    ctx = _case_log_list_context(matter)
-    return render(request, "legal/partials/_case_log_list.html", ctx)
+    ctx = _activity_list_context(matter)
+    return render(request, "legal/partials/_activity_list.html", ctx)
 
 
 def related_entity_options(request, pk):
