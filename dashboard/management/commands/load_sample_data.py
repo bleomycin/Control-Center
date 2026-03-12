@@ -22,12 +22,13 @@ from healthcare.models import (
     Visit, Advice, Appointment,
 )
 from documents.models import Document
+from email_links.models import EmailLink
 
 
 # Canonical section order and labels
 SECTION_ORDER = [
     "stakeholders", "assets", "legal", "tasks", "cashflow", "notes", "healthcare",
-    "documents",
+    "documents", "email_links",
 ]
 SECTION_LABELS = {
     "stakeholders": "Stakeholders",
@@ -38,6 +39,7 @@ SECTION_LABELS = {
     "notes": "Notes",
     "healthcare": "Healthcare",
     "documents": "Documents",
+    "email_links": "Email Links",
 }
 
 # Which sections depend on which others (for loading)
@@ -50,6 +52,7 @@ SECTION_DEPS = {
     "notes": [],
     "healthcare": [],
     "documents": ["stakeholders", "assets", "legal"],
+    "email_links": ["stakeholders", "assets", "legal"],
 }
 
 # Deletion order per section (children before parents within each section)
@@ -75,6 +78,7 @@ SECTION_DELETION_ORDER = {
         "stakeholders.stakeholder",
     ],
     "documents": ["documents.document"],
+    "email_links": ["email_links.emaillink"],
 }
 
 # ---------------------------------------------------------------------------
@@ -190,6 +194,12 @@ SAMPLE_NAMES = {
         "Q4 2024 Elm St Operating Statement",
         "Elm St Business License",
         "Magnolia Blvd Phase I ESA Report",
+    },
+    "email_links": {
+        "sample_email_001", "sample_email_002", "sample_email_003",
+        "sample_email_004", "sample_email_005", "sample_email_006",
+        "sample_email_007", "sample_email_008", "sample_email_009",
+        "sample_email_010",
     },
 }
 
@@ -1810,4 +1820,71 @@ class Command(BaseCommand):
 
         return {
             "documents.document": doc_pks,
+        }
+
+    # -----------------------------------------------------------------------
+    # EMAIL LINKS
+    # -----------------------------------------------------------------------
+    def _load_email_links(self, today, now):
+        properties = _get_sample_properties()
+        legal_matters = _get_sample_legal_matters()
+        stakeholders = _get_sample_stakeholders()
+        investments = _get_sample_investments()
+
+        self.stdout.write("Creating email links...")
+        el_pks = []
+
+        email_data = [
+            # (message_id, subject, from_name, from_email, date_offset_days,
+            #  property_name, investment_name, legal_name, stakeholder_name)
+            ("sample_email_001", "Oak Ave Lease Renewal Discussion",
+             "Tom Driscoll", "tom.driscoll@example.com", -5,
+             "1200 Oak Avenue", None, None, "Tom Driscoll"),
+            ("sample_email_002", "RE: Magnolia Blvd Due Diligence Checklist",
+             "Sandra Liu", "sandra.liu@example.com", -3,
+             "3300 Magnolia Blvd", None, "Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu"),
+            ("sample_email_003", "Elm St Q4 Operating Statement Attached",
+             "Tom Driscoll", "tom.driscoll@example.com", -12,
+             "450 Elm Street", None, None, "Tom Driscoll"),
+            ("sample_email_004", "Holston Eviction - Court Date Confirmed",
+             "James Calloway", "calloway@lawfirm.example.com", -8,
+             "1200 Oak Avenue", None, "Holston Eviction - 1200 Oak Ave", "James Calloway"),
+            ("sample_email_005", "NP Fund II - Q4 Distribution Notice",
+             "Derek Vasquez", "derek@npinvest.example.com", -15,
+             None, "NP Investments LP - Fund II", None, "Derek Vasquez"),
+            ("sample_email_006", "Cedar Lane Survey Results",
+             "Karen Whitfield", "karen.whitfield@example.com", -20,
+             None, None, "Cedar Lane Boundary Dispute", "Karen Whitfield"),
+            ("sample_email_007", "RE: Bridge Loan Refinance Options",
+             "Janet Cobb", "janet.cobb@bank.example.com", -2,
+             None, None, None, "Janet Cobb"),
+            ("sample_email_008", "Estate Plan - Updated Draft Documents",
+             "Dr. Helen Park", "helen.park@law.example.com", -18,
+             None, None, "Estate Plan Update", "Dr. Helen Park"),
+            ("sample_email_009", "Property Tax Assessment Notice - Oak Ave",
+             "County Assessor", "assessor@county.example.gov", -25,
+             "1200 Oak Avenue", None, None, None),
+            ("sample_email_010", "RE: Elm St Business License Renewal",
+             "City Clerk", "clerk@city.example.gov", -30,
+             "450 Elm Street", None, None, None),
+        ]
+
+        for (msg_id, subject, from_name, from_email, day_offset,
+             prop_name, inv_name, legal_name, sh_name) in email_data:
+            el = EmailLink.objects.create(
+                message_id=msg_id,
+                subject=subject,
+                from_name=from_name,
+                from_email=from_email,
+                date=now + timedelta(days=day_offset),
+                provider="gmail",
+                related_property=properties.get(prop_name),
+                related_investment=investments.get(inv_name),
+                related_legal_matter=legal_matters.get(legal_name),
+                related_stakeholder=stakeholders.get(sh_name),
+            )
+            el_pks.append(el.pk)
+
+        return {
+            "email_links.emaillink": el_pks,
         }

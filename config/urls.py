@@ -14,6 +14,7 @@ urlpatterns = [
     path('notes/', include('notes.urls')),
     path('healthcare/', include('healthcare.urls')),
     path('documents/', include('documents.urls')),
+    path('emails/', include('email_links.urls')),
     # Serve media files unconditionally (single-user app, no Nginx needed)
     re_path(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
 ]

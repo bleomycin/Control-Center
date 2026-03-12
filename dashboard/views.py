@@ -201,6 +201,10 @@ def global_search(request):
         context["documents"] = DocumentModel.objects.filter(
             Q(title__icontains=q) | Q(description__icontains=q) | Q(category__icontains=q)
         )[:limit]
+        from email_links.models import EmailLink
+        context["email_links"] = EmailLink.objects.filter(
+            Q(subject__icontains=q) | Q(from_name__icontains=q) | Q(from_email__icontains=q)
+        )[:limit]
         from healthcare.models import Provider, Prescription, Appointment
         context["hc_providers"] = Provider.objects.filter(
             Q(name__icontains=q) | Q(specialty__icontains=q) | Q(practice_name__icontains=q)
@@ -222,6 +226,7 @@ def global_search(request):
             context["cashflow_entries"],
             context["leases"],
             context["documents"],
+            context["email_links"],
             context["hc_providers"],
             context["hc_prescriptions"],
             context["hc_appointments"],

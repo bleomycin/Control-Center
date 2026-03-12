@@ -244,6 +244,7 @@ class LegalMatterDetailView(DetailView):
         ).count()
         ctx["related_entities"] = _build_entity_list(obj)
         ctx["entity_documents"] = obj.documents.all()
+        ctx["entity_email_links"] = obj.email_links.all()
         return ctx
 
 

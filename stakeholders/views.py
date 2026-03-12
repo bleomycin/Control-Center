@@ -307,6 +307,7 @@ class StakeholderDetailView(DetailView):
         ctx["cashflow_net"] = cf_totals["inflows"] - cf_totals["outflows"]
         ctx["delete_url_name"] = "cashflow:stakeholder_cashflow_delete"
         ctx["entity_documents"] = obj.documents.all()
+        ctx["entity_email_links"] = obj.email_links.all()
 
         # Parent/child hierarchy (employees for firms, child entities for any parent)
         ctx["employees"] = obj.employees.all()

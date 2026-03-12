@@ -109,6 +109,25 @@
 </div>
 {% endif %}
 
+{% if email_links %}
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
+    <div class="px-4 py-3 border-b border-gray-700">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Emails ({{ email_links|length }})</h2>
+    </div>
+    <div class="divide-y divide-gray-700">
+        {% for el in email_links %}
+        <a href="{{ el.web_url }}" target="_blank" rel="noopener" class="flex items-center justify-between px-4 py-3 hover:bg-gray-700/50 transition-colors">
+            <div>
+                <p class="text-sm text-gray-200">{{ el.subject|default:"(no subject)" }}</p>
+                <p class="text-xs text-gray-400">{{ el.from_name|default:el.from_email }}{% if el.date %} · {{ el.date|date:"M j, Y" }}{% endif %}</p>
+            </div>
+            <span class="text-xs text-blue-400">Gmail</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if properties %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 mb-4">
     <div class="px-4 py-3 border-b border-gray-700">

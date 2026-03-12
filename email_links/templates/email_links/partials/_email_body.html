@@ -1,0 +1,9 @@
+{% if body %}
+<div class="pb-3 pt-1">
+    <div class="bg-gray-900/50 border border-gray-700 rounded-md p-3 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-64 overflow-y-auto">{{ body }}</div>
+</div>
+{% else %}
+<div class="pb-3 pt-1">
+    <p class="text-xs text-gray-500 italic">Unable to load email body{% if not gmail_available %} — Gmail not connected{% endif %}</p>
+</div>
+{% endif %}

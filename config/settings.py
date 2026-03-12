@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     'notes',
     'healthcare',
     'documents',
+    'email_links',
     'dashboard',
 ]
 

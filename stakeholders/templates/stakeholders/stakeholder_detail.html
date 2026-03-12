@@ -518,6 +518,21 @@
     </div>
 </div>
 
+<!-- Emails -->
+<div class="bg-gray-800 rounded-lg border border-gray-700 mb-6">
+    <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Emails{% if entity_email_links.count %} <span class="text-gray-400 text-xs font-normal">({{ entity_email_links.count }})</span>{% endif %}</h2>
+        <button hx-get="{% url 'email_links:stakeholder_email_link' stakeholder.pk %}"
+                hx-target="#email-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300">+ Link Email</button>
+    </div>
+    <div id="email-form-container"></div>
+    <div id="email-list">
+        {% include "email_links/partials/_email_list_section.html" with email_links=entity_email_links unlink_url_name="email_links:stakeholder_email_unlink" entity_pk=stakeholder.pk %}
+    </div>
+</div>
+
 <!-- Tab Switching Script -->
 <script>
 function switchConnectionTab(targetTab) {

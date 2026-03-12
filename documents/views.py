@@ -420,11 +420,15 @@ def gdrive_settings(request):
     connected = instance.is_connected and bool(instance.refresh_token)
     connected_email = instance.connected_email if connected else ""
 
+    from . import gdrive
+    gmail_available = connected and gdrive.has_gmail_scope()
+
     return render(request, "documents/gdrive_settings.html", {
         "form": form,
         "settings_obj": instance,
         "connected": connected,
         "connected_email": connected_email,
+        "gmail_available": gmail_available,
     })
 
 

@@ -19,6 +19,7 @@ SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 # ---------------------------------------------------------------------------
@@ -79,6 +80,7 @@ def get_authorization_url(redirect_uri):
     auth_url, state = flow.authorization_url(
         access_type="offline",
         prompt="consent",
+        include_granted_scopes="true",
     )
     # PKCE: the flow generates a code_verifier that must be sent
     # back during the token exchange step.
@@ -256,6 +258,15 @@ def get_picker_access_token():
     if not creds:
         return None
     return creds.token
+
+
+def has_gmail_scope():
+    """Return True if the current credentials include the gmail.readonly scope."""
+    creds = get_credentials()
+    if not creds:
+        return False
+    granted = getattr(creds, "scopes", None) or []
+    return "https://www.googleapis.com/auth/gmail.readonly" in granted
 
 
 def revoke_credentials():
