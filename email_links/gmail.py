@@ -7,6 +7,8 @@ Only this file imports the Gmail-specific Google API calls.
 
 import logging
 
+from django.core.cache import cache
+
 logger = logging.getLogger(__name__)
 
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
@@ -48,12 +50,13 @@ def _get_service():
         return None
 
 
-def search_threads(query="", max_results=15):
+def search_threads(query="", max_results=15, page_token=None, label_ids=None):
     """
     Search Gmail threads (conversations).
     When query is empty, returns the most recent threads (browse mode).
-    Returns list of dicts: {id, subject, from_name, from_email, date,
-                            snippet, message_count, participants}.
+    Returns dict: {"threads": [...], "next_page_token": str|None}.
+    Each thread: {id, subject, from_name, from_email, date,
+                  snippet, message_count, participants}.
     Returns None on failure.
     """
     service = _get_service()
@@ -63,10 +66,15 @@ def search_threads(query="", max_results=15):
         params = {"userId": "me", "maxResults": max_results}
         if query:
             params["q"] = query
+        if page_token:
+            params["pageToken"] = page_token
+        if label_ids:
+            params["labelIds"] = label_ids
         result = service.users().threads().list(**params).execute()
         thread_stubs = result.get("threads", [])
+        next_page_token = result.get("nextPageToken")
         if not thread_stubs:
-            return []
+            return {"threads": [], "next_page_token": None}
 
         threads = []
         for stub in thread_stubs:
@@ -103,10 +111,79 @@ def search_threads(query="", max_results=15):
                 "message_count": len(messages),
                 "participants": participants,
             })
-        return threads
+        return {"threads": threads, "next_page_token": next_page_token}
     except Exception:
         logger.exception("Failed to search Gmail threads")
         return None
+
+
+LABELS_CACHE_KEY = "gmail_labels"
+LABELS_CACHE_TIMEOUT = 3600  # 1 hour
+
+# System labels to show (in display order)
+_SYSTEM_LABELS = ["INBOX", "SENT", "STARRED", "IMPORTANT", "DRAFT"]
+_SYSTEM_LABEL_NAMES = {
+    "INBOX": "Inbox",
+    "SENT": "Sent",
+    "STARRED": "Starred",
+    "IMPORTANT": "Important",
+    "DRAFT": "Drafts",
+}
+# Labels to exclude
+_EXCLUDED_PREFIXES = ("CATEGORY_",)
+_EXCLUDED_IDS = {"SPAM", "TRASH", "UNREAD", "CHAT"}
+
+
+def get_labels():
+    """
+    Return Gmail labels suitable for the picker dropdown.
+    Returns [{"id": "INBOX", "name": "Inbox", "type": "system"}, ...].
+    Cached for 1 hour.
+    """
+    result = cache.get(LABELS_CACHE_KEY)
+    if result is not None:
+        return result
+
+    service = _get_service()
+    if not service:
+        return []
+    try:
+        response = service.users().labels().list(userId="me").execute()
+        all_labels = response.get("labels", [])
+    except Exception:
+        logger.exception("Failed to fetch Gmail labels")
+        return []
+
+    system = []
+    user = []
+    for label in all_labels:
+        lid = label["id"]
+        ltype = label.get("type", "user")
+        # Exclude unwanted system labels
+        if lid in _EXCLUDED_IDS:
+            continue
+        if any(lid.startswith(p) for p in _EXCLUDED_PREFIXES):
+            continue
+        if ltype == "system" and lid in _SYSTEM_LABELS:
+            system.append({
+                "id": lid,
+                "name": _SYSTEM_LABEL_NAMES.get(lid, label["name"]),
+                "type": "system",
+            })
+        elif ltype == "user":
+            user.append({
+                "id": lid,
+                "name": label["name"],
+                "type": "user",
+            })
+
+    # Sort system labels in defined order, user labels alphabetically
+    system.sort(key=lambda x: _SYSTEM_LABELS.index(x["id"]))
+    user.sort(key=lambda x: x["name"].lower())
+
+    result = system + user
+    cache.set(LABELS_CACHE_KEY, result, LABELS_CACHE_TIMEOUT)
+    return result
 
 
 def get_thread_messages(gmail_id):

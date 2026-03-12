@@ -67,9 +67,11 @@ def _email_link(request, entity_type, pk):
     # GET: show search/link form
     link_url_name = f"email_links:{entity_type}_email_link"
     from django.urls import reverse
+    gmail_available = gmail.is_available()
     return render(request, "email_links/partials/_email_link_form.html", {
         "link_url": reverse(link_url_name, args=[pk]),
-        "gmail_available": gmail.is_available(),
+        "gmail_available": gmail_available,
+        "labels": gmail.get_labels() if gmail_available else [],
     })
 
 
@@ -172,15 +174,25 @@ def gmail_search_html(request):
             "error": "Gmail is not connected. Please reconnect Google Drive with Gmail permissions.",
         })
     query = request.GET.get("q", "").strip()
-    results = gmail.search_threads(query=query, max_results=15)
-    if results is None:
+    page_token = request.GET.get("page_token", "").strip() or None
+    label = request.GET.get("label", "").strip() or None
+    label_ids = [label] if label else None
+
+    data = gmail.search_threads(
+        query=query, max_results=15, page_token=page_token, label_ids=label_ids,
+    )
+    if data is None:
         return render(request, "email_links/partials/_email_search_results.html", {
             "error": "Failed to search Gmail. Please try again.",
         })
     return render(request, "email_links/partials/_email_search_results.html", {
-        "results": results,
+        "results": data["threads"],
+        "next_page_token": data["next_page_token"],
         "link_url": link_url,
-        "browsing": not query,
+        "browsing": not query and not label,
+        "query": query,
+        "label": label or "",
+        "is_page_load": bool(page_token),
     })
 
 

@@ -11,6 +11,7 @@ module.exports = {
     './notes/templates/**/*.html',
     './notes/templatetags/**/*.py',
     './healthcare/templates/**/*.html',
+    './email_links/templates/**/*.html',
     './config/forms.py',
   ],
   theme: {

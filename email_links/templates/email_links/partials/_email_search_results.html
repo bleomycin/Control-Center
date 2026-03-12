@@ -3,8 +3,10 @@
     {{ error }}
 </div>
 {% elif results %}
+{% if not is_page_load %}
 {% if browsing %}<p class="text-xs text-gray-500 mb-1 px-1">Recent emails</p>{% endif %}
 <div class="max-h-64 overflow-y-auto border border-gray-600 rounded-md divide-y divide-gray-700">
+{% endif %}
     {% for msg in results %}
     <form method="post" action="{{ link_url }}" class="hover:bg-gray-700/50 transition-colors">
         {% csrf_token %}
@@ -39,7 +41,22 @@
         </button>
     </form>
     {% endfor %}
+    {% if next_page_token %}
+    <div id="load-more-btn">
+        <button type="button"
+                hx-get="{% url 'email_links:gmail_search' %}?q={{ query|urlencode }}&link_url={{ link_url|urlencode }}&label={{ label|urlencode }}&page_token={{ next_page_token|urlencode }}"
+                hx-target="#load-more-btn"
+                hx-swap="outerHTML"
+                hx-indicator="#load-more-spinner"
+                class="w-full text-center px-3 py-2 text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-700/50 transition-colors">
+            <span>Load more&hellip;</span>
+            <span id="load-more-spinner" class="htmx-indicator text-xs text-gray-500">Loading...</span>
+        </button>
+    </div>
+    {% endif %}
+{% if not is_page_load %}
 </div>
+{% endif %}
 {% elif results is not None %}
 <p class="text-sm text-gray-500 py-2">No emails found</p>
 {% endif %}

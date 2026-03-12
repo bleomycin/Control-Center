@@ -1,9 +1,13 @@
+from unittest.mock import patch, MagicMock
+
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from .models import EmailLink
 from .views import _parse_email_date
+from . import gmail
 
 
 class EmailLinkModelTest(TestCase):
@@ -114,3 +118,290 @@ class EmailLinkUnlinkTest(TestCase):
         # Original subject preserved (get_or_create doesn't update)
         self.assertEqual(self.email.subject, "Test Email")
         self.assertEqual(self.email.related_legal_matter, self.matter)
+
+
+class GmailSearchViewIntegrationTest(TestCase):
+    """Hit the actual view with mocked gmail, inspect rendered HTML."""
+
+    def _url(self, **params):
+        base = reverse("email_links:gmail_search")
+        qs = "&".join(f"{k}={v}" for k, v in params.items())
+        return f"{base}?{qs}" if qs else base
+
+    @patch("email_links.views.gmail")
+    def test_page1_has_scroll_wrapper_and_load_more(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t1", "subject": "Hello", "from_name": "A",
+                         "from_email": "a@b.c", "date": "", "snippet": "",
+                         "message_count": 1, "participants": ["A"]}],
+            "next_page_token": "PAGE2",
+        }
+        resp = self.client.get(self._url(q="", link_url="/link/1/"))
+        html = resp.content.decode()
+        # Page 1 should have the scroll wrapper
+        self.assertIn('class="max-h-64 overflow-y-auto', html)
+        # Should have Load More button with the token
+        self.assertIn("Load more", html)
+        self.assertIn("page_token=PAGE2", html)
+        # Should include link_url and label in Load More URL
+        self.assertIn("link_url=", html)
+        self.assertIn("label=", html)
+
+    @patch("email_links.views.gmail")
+    def test_page2_has_no_scroll_wrapper(self, mock_gmail):
+        """Page 2+ should return bare rows, no wrapper div."""
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t2", "subject": "Page2", "from_name": "B",
+                         "from_email": "b@b.c", "date": "", "snippet": "",
+                         "message_count": 1, "participants": ["B"]}],
+            "next_page_token": None,
+        }
+        resp = self.client.get(self._url(q="", link_url="/link/1/", page_token="PAGE2"))
+        html = resp.content.decode()
+        # Page 2 must NOT have the wrapper div
+        self.assertNotIn('class="max-h-64 overflow-y-auto', html)
+        # No Load More since next_page_token is None
+        self.assertNotIn("Load more", html)
+        # But row content should be present
+        self.assertIn("Page2", html)
+
+    @patch("email_links.views.gmail")
+    def test_label_passed_through_to_search_threads(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [], "next_page_token": None,
+        }
+        self.client.get(self._url(q="test", label="INBOX", link_url="/x/"))
+        mock_gmail.search_threads.assert_called_once_with(
+            query="test", max_results=15, page_token=None, label_ids=["INBOX"],
+        )
+
+    @patch("email_links.views.gmail")
+    def test_empty_label_param_treated_as_none(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [], "next_page_token": None,
+        }
+        self.client.get(self._url(q="", label="", link_url="/x/"))
+        mock_gmail.search_threads.assert_called_once_with(
+            query="", max_results=15, page_token=None, label_ids=None,
+        )
+
+    @patch("email_links.views.gmail")
+    def test_empty_page_token_treated_as_none(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [], "next_page_token": None,
+        }
+        self.client.get(self._url(q="", page_token="", link_url="/x/"))
+        mock_gmail.search_threads.assert_called_once_with(
+            query="", max_results=15, page_token=None, label_ids=None,
+        )
+
+    @patch("email_links.views.gmail")
+    def test_load_more_preserves_label_in_url(self, mock_gmail):
+        """When browsing with a label, Load More URL should include that label."""
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t1", "subject": "X", "from_name": "",
+                         "from_email": "a@b.c", "date": "", "snippet": "",
+                         "message_count": 1, "participants": []}],
+            "next_page_token": "NEXT",
+        }
+        resp = self.client.get(self._url(q="inv", label="SENT", link_url="/x/"))
+        html = resp.content.decode()
+        # Load More URL must contain both the label and query
+        self.assertIn("label=SENT", html)
+        self.assertIn("q=inv", html)
+        self.assertIn("page_token=NEXT", html)
+
+    @patch("email_links.views.gmail")
+    def test_xss_in_subject_escaped(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t1", "subject": '<script>alert("xss")</script>',
+                         "from_name": "", "from_email": "a@b.c", "date": "",
+                         "snippet": "", "message_count": 1, "participants": []}],
+            "next_page_token": None,
+        }
+        resp = self.client.get(self._url(q="", link_url="/x/"))
+        html = resp.content.decode()
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+    @patch("email_links.views.gmail")
+    def test_xss_in_query_param_escaped_in_load_more(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t1", "subject": "X", "from_name": "",
+                         "from_email": "a@b.c", "date": "", "snippet": "",
+                         "message_count": 1, "participants": []}],
+            "next_page_token": "TOK",
+        }
+        resp = self.client.get(self._url(q='"><img src=x>', link_url="/x/"))
+        html = resp.content.decode()
+        # The raw injection must not appear unescaped
+        self.assertNotIn('"><img src=x>', html)
+
+    @patch("email_links.views.gmail")
+    def test_browsing_label_shows_recent_header(self, mock_gmail):
+        """No query and no label = browsing mode, should show 'Recent emails'."""
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t1", "subject": "X", "from_name": "",
+                         "from_email": "a@b.c", "date": "", "snippet": "",
+                         "message_count": 1, "participants": []}],
+            "next_page_token": None,
+        }
+        resp = self.client.get(self._url(q="", link_url="/x/"))
+        self.assertIn(b"Recent emails", resp.content)
+
+    @patch("email_links.views.gmail")
+    def test_label_set_no_recent_header(self, mock_gmail):
+        """With a label selected, 'Recent emails' header should not appear."""
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [{"id": "t1", "subject": "X", "from_name": "",
+                         "from_email": "a@b.c", "date": "", "snippet": "",
+                         "message_count": 1, "participants": []}],
+            "next_page_token": None,
+        }
+        resp = self.client.get(self._url(q="", label="INBOX", link_url="/x/"))
+        self.assertNotIn(b"Recent emails", resp.content)
+
+    @patch("email_links.views.gmail")
+    def test_search_threads_returns_none_shows_error(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = None
+        resp = self.client.get(self._url(q="test", link_url="/x/"))
+        self.assertIn(b"Failed to search Gmail", resp.content)
+
+    @patch("email_links.views.gmail")
+    def test_empty_results_shows_no_emails(self, mock_gmail):
+        mock_gmail.is_available.return_value = True
+        mock_gmail.search_threads.return_value = {
+            "threads": [], "next_page_token": None,
+        }
+        resp = self.client.get(self._url(q="nonexistent", link_url="/x/"))
+        self.assertIn(b"No emails found", resp.content)
+
+
+class SearchThreadsPaginationTest(TestCase):
+    """Test that search_threads passes pagination and label params correctly."""
+
+    @patch("email_links.gmail._get_service")
+    def test_returns_next_page_token(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        # threads().list() returns stubs + nextPageToken
+        mock_service.users().threads().list().execute.return_value = {
+            "threads": [{"id": "t1"}],
+            "nextPageToken": "TOKEN_2",
+        }
+        # threads().get() returns a thread with one message
+        mock_service.users().threads().get().execute.return_value = {
+            "id": "t1",
+            "snippet": "hello",
+            "messages": [{
+                "payload": {"headers": [
+                    {"name": "Subject", "value": "Test"},
+                    {"name": "From", "value": "Alice <alice@test.com>"},
+                    {"name": "Date", "value": "Thu, 12 Mar 2026 12:00:00 +0000"},
+                ]},
+            }],
+        }
+        result = gmail.search_threads(query="test")
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["next_page_token"], "TOKEN_2")
+        self.assertEqual(len(result["threads"]), 1)
+        self.assertEqual(result["threads"][0]["subject"], "Test")
+
+    @patch("email_links.gmail._get_service")
+    def test_page_token_passed_to_api(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().threads().list().execute.return_value = {"threads": []}
+        gmail.search_threads(query="", page_token="MY_TOKEN")
+        call_kwargs = mock_service.users().threads().list.call_args
+        self.assertEqual(call_kwargs[1].get("pageToken"), "MY_TOKEN")
+
+    @patch("email_links.gmail._get_service")
+    def test_label_ids_passed_to_api(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().threads().list().execute.return_value = {"threads": []}
+        gmail.search_threads(query="", label_ids=["INBOX"])
+        call_kwargs = mock_service.users().threads().list.call_args
+        self.assertEqual(call_kwargs[1].get("labelIds"), ["INBOX"])
+
+    @patch("email_links.gmail._get_service")
+    def test_empty_result_returns_dict(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().threads().list().execute.return_value = {"threads": []}
+        result = gmail.search_threads()
+        self.assertEqual(result, {"threads": [], "next_page_token": None})
+
+
+class GetLabelsTest(TestCase):
+    """Test get_labels caching and filtering."""
+
+    def setUp(self):
+        cache.delete(gmail.LABELS_CACHE_KEY)
+
+    @patch("email_links.gmail._get_service")
+    def test_returns_filtered_labels(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().labels().list().execute.return_value = {
+            "labels": [
+                {"id": "INBOX", "name": "INBOX", "type": "system"},
+                {"id": "SENT", "name": "SENT", "type": "system"},
+                {"id": "SPAM", "name": "SPAM", "type": "system"},
+                {"id": "TRASH", "name": "TRASH", "type": "system"},
+                {"id": "UNREAD", "name": "UNREAD", "type": "system"},
+                {"id": "CATEGORY_SOCIAL", "name": "CATEGORY_SOCIAL", "type": "system"},
+                {"id": "Label_1", "name": "My Label", "type": "user"},
+            ],
+        }
+        result = gmail.get_labels()
+        ids = [l["id"] for l in result]
+        self.assertIn("INBOX", ids)
+        self.assertIn("SENT", ids)
+        self.assertIn("Label_1", ids)
+        self.assertNotIn("SPAM", ids)
+        self.assertNotIn("TRASH", ids)
+        self.assertNotIn("UNREAD", ids)
+        self.assertNotIn("CATEGORY_SOCIAL", ids)
+
+    @patch("email_links.gmail._get_service")
+    def test_labels_cached(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().labels().list().execute.return_value = {
+            "labels": [{"id": "INBOX", "name": "INBOX", "type": "system"}],
+        }
+        first = gmail.get_labels()
+        second = gmail.get_labels()
+        self.assertEqual(first, second)
+        # API should only be called once
+        mock_service.users().labels().list().execute.assert_called_once()
+
+    @patch("email_links.gmail._get_service")
+    def test_system_labels_sorted_first(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().labels().list().execute.return_value = {
+            "labels": [
+                {"id": "SENT", "name": "SENT", "type": "system"},
+                {"id": "INBOX", "name": "INBOX", "type": "system"},
+                {"id": "Label_1", "name": "Zebra", "type": "user"},
+                {"id": "Label_2", "name": "Alpha", "type": "user"},
+            ],
+        }
+        result = gmail.get_labels()
+        names = [l["name"] for l in result]
+        # System first in defined order, then user alphabetical
+        self.assertEqual(names, ["Inbox", "Sent", "Alpha", "Zebra"])

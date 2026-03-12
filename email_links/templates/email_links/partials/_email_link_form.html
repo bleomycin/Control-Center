@@ -7,14 +7,33 @@
     <div class="mb-3">
         <label class="block text-xs font-medium text-gray-400 mb-1">Search Gmail</label>
         <input type="hidden" name="link_url" value="{{ link_url }}">
-        <input type="text" name="q" placeholder="Search or browse recent emails..."
-               class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-               hx-get="{% url 'email_links:gmail_search' %}"
-               hx-trigger="{% if gmail_available %}load, keyup changed delay:400ms{% endif %}"
-               hx-target="#email-search-results"
-               hx-swap="innerHTML"
-               hx-include="[name=link_url]"
-               {% if not gmail_available %}disabled{% endif %}>
+        <div class="flex gap-2">
+            <input type="text" name="q" placeholder="Search or browse recent emails..."
+                   class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                   hx-get="{% url 'email_links:gmail_search' %}"
+                   hx-trigger="{% if gmail_available %}load, keyup changed delay:400ms, search-reload{% endif %}"
+                   hx-target="#email-search-results"
+                   hx-swap="innerHTML"
+                   hx-include="[name=link_url],[name=label]"
+                   {% if not gmail_available %}disabled{% endif %}>
+            {% if labels %}
+            <select name="label"
+                    class="bg-gray-700 border border-gray-600 rounded-md px-2 py-1.5 text-sm text-gray-200 w-auto max-w-36"
+                    onchange="htmx.trigger(this.closest('.mb-3').querySelector('[name=q]'), 'search-reload')">
+                <option value="">All Mail</option>
+                <optgroup label="System">
+                    {% for lbl in labels %}{% if lbl.type == "system" %}
+                    <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+                    {% endif %}{% endfor %}
+                </optgroup>
+                <optgroup label="Labels">
+                    {% for lbl in labels %}{% if lbl.type == "user" %}
+                    <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+                    {% endif %}{% endfor %}
+                </optgroup>
+            </select>
+            {% endif %}
+        </div>
     </div>
     <div id="email-search-results">
         {% if gmail_available %}
