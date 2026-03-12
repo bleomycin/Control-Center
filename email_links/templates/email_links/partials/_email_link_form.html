@@ -10,7 +10,7 @@
         <input type="text" name="q" placeholder="Search or browse recent emails..."
                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                hx-get="{% url 'email_links:gmail_search' %}"
-               hx-trigger="load{% if gmail_available %}, keyup changed delay:400ms{% endif %}"
+               hx-trigger="{% if gmail_available %}load, keyup changed delay:400ms{% endif %}"
                hx-target="#email-search-results"
                hx-swap="innerHTML"
                hx-include="[name=link_url]"

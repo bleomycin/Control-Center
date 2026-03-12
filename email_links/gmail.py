@@ -109,33 +109,44 @@ def search_threads(query="", max_results=15):
         return None
 
 
-def get_thread_messages(thread_id):
+def get_thread_messages(gmail_id):
     """
     Fetch all messages in a Gmail thread.
+    Accepts either a thread ID (new records) or a message ID (legacy records).
     Returns list of dicts: [{from_name, from_email, date, body}], or None.
     """
     service = _get_service()
     if not service:
         return None
     try:
+        # Try as thread ID first (current format)
         thread = service.users().threads().get(
-            userId="me", id=thread_id, format="full",
+            userId="me", id=gmail_id, format="full",
         ).execute()
-        result = []
-        for msg in thread.get("messages", []):
-            headers = _msg_headers(msg)
-            from_name, from_email = _parse_from(headers.get("From", ""))
-            body = _extract_plain_text(msg.get("payload", {}))
-            result.append({
-                "from_name": from_name,
-                "from_email": from_email,
-                "date": headers.get("Date", ""),
-                "body": body or "(no text content)",
-            })
-        return result
     except Exception:
-        logger.exception("Failed to fetch Gmail thread %s", thread_id)
-        return None
+        # Fallback for legacy message IDs: look up the message's thread
+        try:
+            msg = service.users().messages().get(
+                userId="me", id=gmail_id, format="minimal",
+            ).execute()
+            thread = service.users().threads().get(
+                userId="me", id=msg["threadId"], format="full",
+            ).execute()
+        except Exception:
+            logger.exception("Failed to fetch Gmail thread for %s", gmail_id)
+            return None
+    result = []
+    for msg in thread.get("messages", []):
+        headers = _msg_headers(msg)
+        from_name, from_email = _parse_from(headers.get("From", ""))
+        body = _extract_plain_text(msg.get("payload", {}))
+        result.append({
+            "from_name": from_name,
+            "from_email": from_email,
+            "date": headers.get("Date", ""),
+            "body": body or "(no text content)",
+        })
+    return result
 
 
 def _msg_headers(msg):
