@@ -4,11 +4,8 @@
         <div class="flex items-center justify-between px-4 py-3">
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                    <button hx-get="{% url 'email_links:email_body' el.pk %}"
-                            hx-target="#email-body-{{ el.pk }}"
-                            hx-swap="innerHTML"
-                            class="text-gray-500 hover:text-gray-300 flex-shrink-0 email-expand-btn"
-                            onclick="var b=document.getElementById('email-body-{{ el.pk }}');if(b.children.length){b.innerHTML='';this.querySelector('svg').classList.remove('rotate-90');return false;}this.querySelector('svg').classList.add('rotate-90');">
+                    <button class="text-gray-500 hover:text-gray-300 flex-shrink-0 email-expand-btn"
+                            onclick="var b=document.getElementById('email-body-{{ el.pk }}'),s=this.querySelector('svg');if(b.children.length){b.innerHTML='';s.classList.remove('rotate-90')}else{s.classList.add('rotate-90');htmx.ajax('GET','{% url 'email_links:email_body' el.pk %}',{target:'#email-body-{{ el.pk }}',swap:'innerHTML'})}">
                         <svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     </button>
                     <div class="min-w-0">
