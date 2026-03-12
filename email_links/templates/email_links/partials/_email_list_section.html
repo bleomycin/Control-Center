@@ -8,7 +8,7 @@
                             hx-target="#email-body-{{ el.pk }}"
                             hx-swap="innerHTML"
                             class="text-gray-500 hover:text-gray-300 flex-shrink-0 email-expand-btn"
-                            onclick="this.querySelector('svg').classList.toggle('rotate-90')">
+                            onclick="var b=document.getElementById('email-body-{{ el.pk }}');if(b.children.length){b.innerHTML='';this.querySelector('svg').classList.remove('rotate-90');return false;}this.querySelector('svg').classList.add('rotate-90');">
                         <svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     </button>
                     <div class="min-w-0">
