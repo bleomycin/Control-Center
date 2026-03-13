@@ -6,10 +6,28 @@
             <span class="text-xs font-medium text-gray-300">{{ msg.from_name|default:msg.from_email }}</span>
             <span class="text-xs text-gray-500">{{ msg.date }}</span>
         </div>
-        <div class="text-xs text-gray-400 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">{{ msg.body }}</div>
+        <div class="email-msg-wrapper relative">
+            <div class="email-msg-body text-xs text-gray-400 whitespace-pre-wrap font-mono max-h-24 overflow-hidden">{{ msg.body }}</div>
+            <div class="email-msg-fade absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-gray-900/80 to-transparent pointer-events-none hidden"></div>
+            <button type="button" class="email-msg-toggle text-xs text-blue-400 hover:text-blue-300 mt-1 hidden" onclick="
+                var w=this.parentElement, b=w.querySelector('.email-msg-body'), f=w.querySelector('.email-msg-fade');
+                if(b.classList.contains('max-h-24')){b.classList.remove('max-h-24','overflow-hidden');f.classList.add('hidden');this.textContent='Show less'}
+                else{b.classList.add('max-h-24','overflow-hidden');f.classList.remove('hidden');this.textContent='Show more'}
+            ">Show more</button>
+        </div>
     </div>
     {% endfor %}
 </div>
+<script>
+// Show expand buttons only on messages that overflow
+document.currentScript.parentElement.querySelectorAll('.email-msg-wrapper').forEach(function(w){
+    var b=w.querySelector('.email-msg-body');
+    if(b.scrollHeight>b.clientHeight){
+        w.querySelector('.email-msg-fade').classList.remove('hidden');
+        w.querySelector('.email-msg-toggle').classList.remove('hidden');
+    }
+});
+</script>
 {% else %}
 <div class="pb-3 pt-1">
     <p class="text-xs text-gray-500 italic">Unable to load email body{% if not gmail_available %} &mdash; Gmail not connected{% endif %}</p>
