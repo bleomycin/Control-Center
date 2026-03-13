@@ -16,7 +16,7 @@
         {% if comm.subject %}
         <p class="text-sm font-medium text-gray-200 mt-1">{{ comm.subject }}</p>
         {% endif %}
-        <p class="text-sm text-gray-300 mt-1">{{ comm.summary }}</p>
+        <p class="text-sm text-gray-300 mt-1 whitespace-pre-wrap">{{ comm.summary }}</p>
         {% if comm.follow_up_needed %}
         <div class="flex items-center gap-2 mt-1 flex-wrap">
             {% if comm.follow_up_completed %}
