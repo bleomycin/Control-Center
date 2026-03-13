@@ -60,6 +60,8 @@ def _email_link(request, entity_type, pk):
                     "provider": "gmail",
                 },
             )
+            if not _created:
+                email_link.message_count = int(request.POST.get("message_count", 1) or 1)
             setattr(email_link, fk_field, entity)
             email_link.save()
             return render(request, "email_links/partials/_email_list_section.html",
