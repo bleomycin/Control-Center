@@ -76,6 +76,9 @@ def search_threads(query="", max_results=15, page_token=None, label_ids=None):
         if not thread_stubs:
             return {"threads": [], "next_page_token": None}
 
+        from email.utils import parsedate_to_datetime
+        from datetime import datetime, timezone
+
         threads = []
         for stub in thread_stubs:
             thread = service.users().threads().get(
@@ -101,16 +104,28 @@ def search_threads(query="", max_results=15, page_token=None, label_ids=None):
                     seen.add(display)
                     participants.append(display)
 
+            raw_date = last_headers.get("Date", "")
+            try:
+                parsed_date = parsedate_to_datetime(raw_date)
+            except (ValueError, TypeError):
+                parsed_date = None
+
             threads.append({
                 "id": thread["id"],
                 "subject": first_headers.get("Subject", "(no subject)"),
                 "from_name": from_name,
                 "from_email": from_email,
-                "date": last_headers.get("Date", ""),
+                "date": raw_date,
+                "parsed_date": parsed_date,
                 "snippet": thread.get("snippet", ""),
                 "message_count": len(messages),
                 "participants": participants,
             })
+
+        # Sort by date descending (handles mixed timezones)
+        epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        threads.sort(key=lambda t: t.get("parsed_date") or epoch, reverse=True)
+
         return {"threads": threads, "next_page_token": next_page_token}
     except Exception:
         logger.exception("Failed to search Gmail threads")
