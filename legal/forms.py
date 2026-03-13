@@ -56,7 +56,7 @@ class LegalCommunicationForm(TailwindFormMixin, forms.ModelForm):
         widgets = {
             "date": forms.DateTimeInput(attrs={"type": "datetime-local"}),
             "follow_up_date": forms.DateInput(attrs={"type": "date"}),
-            "summary": forms.Textarea(attrs={"rows": 3}),
+            "summary": forms.Textarea(attrs={"rows": 8}),
             "method": forms.Select(),
             "file": forms.FileInput(),
         }
