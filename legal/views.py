@@ -663,6 +663,21 @@ def case_log_add(request, pk):
                   {"form": form, "matter": matter})
 
 
+def case_log_edit(request, pk):
+    log = get_object_or_404(CaseLog, pk=pk)
+    matter = log.legal_matter
+    if request.method == "POST":
+        form = CaseLogForm(request.POST, instance=log)
+        if form.is_valid():
+            form.save()
+            ctx = _activity_list_context(matter)
+            return render(request, "legal/partials/_activity_list.html", ctx)
+    else:
+        form = CaseLogForm(instance=log)
+    return render(request, "legal/partials/_case_log_form.html",
+                  {"form": form, "matter": matter, "editing": log})
+
+
 @require_POST
 def case_log_delete(request, pk):
     log = get_object_or_404(CaseLog, pk=pk)

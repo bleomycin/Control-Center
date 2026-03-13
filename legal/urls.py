@@ -26,6 +26,7 @@ urlpatterns = [
     path("checklist/<int:pk>/edit/", views.checklist_edit, name="checklist_edit"),
     path("checklist/<int:pk>/delete/", views.checklist_delete, name="checklist_delete"),
     path("<int:pk>/case-logs/add/", views.case_log_add, name="case_log_add"),
+    path("case-logs/<int:pk>/edit/", views.case_log_edit, name="case_log_edit"),
     path("case-logs/<int:pk>/delete/", views.case_log_delete, name="case_log_delete"),
     path("<int:pk>/related/link/", views.related_entity_link, name="related_entity_link"),
     path("<int:pk>/related/unlink/", views.related_entity_unlink, name="related_entity_unlink"),

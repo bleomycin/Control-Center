@@ -16,11 +16,15 @@
             </div>
             <p class="text-sm text-gray-200 whitespace-pre-wrap">{{ log.text }}</p>
         </div>
-        <button hx-post="{% url 'legal:case_log_delete' log.pk %}"
-                hx-target="#activity-list" hx-swap="innerHTML"
-                hx-confirm="Delete this log entry?"
-                class="text-gray-500 hover:text-red-400 sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0 mt-0.5">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
+        <div class="flex items-center gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-all shrink-0 mt-0.5">
+            <button hx-get="{% url 'legal:case_log_edit' log.pk %}"
+                    hx-target="#activity-form-container"
+                    hx-swap="innerHTML"
+                    class="text-gray-500 hover:text-blue-400 text-xs">edit</button>
+            <button hx-post="{% url 'legal:case_log_delete' log.pk %}"
+                    hx-target="#activity-list" hx-swap="innerHTML"
+                    hx-confirm="Delete this log entry?"
+                    class="text-gray-500 hover:text-red-400 text-sm">&times;</button>
+        </div>
     </div>
 </div>
