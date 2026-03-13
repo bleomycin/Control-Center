@@ -9,7 +9,7 @@
                         <svg class="w-3.5 h-3.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                     </button>
                     <div class="min-w-0">
-                        <span class="text-sm text-gray-200 truncate block">{{ el.subject|default:"(no subject)" }}</span>
+                        <span class="text-sm text-gray-200 truncate block">{{ el.subject|default:"(no subject)" }}{% if el.message_count > 1 %} <span class="text-xs text-gray-500">({{ el.message_count }})</span>{% endif %}</span>
                         <span class="text-xs text-gray-400">
                             {{ el.from_name|default:el.from_email }}{% if el.date %} &middot; {{ el.date|date:"M j, Y" }}{% endif %}
                         </span>

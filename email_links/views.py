@@ -56,6 +56,7 @@ def _email_link(request, entity_type, pk):
                     "from_name": request.POST.get("from_name", ""),
                     "from_email": request.POST.get("from_email", ""),
                     "date": _parse_email_date(request.POST.get("date", "")),
+                    "message_count": int(request.POST.get("message_count", 1) or 1),
                     "provider": "gmail",
                 },
             )

@@ -15,6 +15,7 @@
         <input type="hidden" name="from_name" value="{{ msg.from_name }}">
         <input type="hidden" name="from_email" value="{{ msg.from_email }}">
         <input type="hidden" name="date" value="{{ msg.date }}">
+        <input type="hidden" name="message_count" value="{{ msg.message_count }}">
         <button type="submit"
                 hx-post="{{ link_url }}"
                 hx-target="#email-list"

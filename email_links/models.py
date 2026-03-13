@@ -9,6 +9,7 @@ class EmailLink(models.Model):
     from_name = models.CharField(max_length=255, blank=True)
     from_email = models.EmailField(max_length=255, blank=True)
     date = models.DateTimeField(null=True, blank=True)
+    message_count = models.PositiveIntegerField(default=1)
     provider = models.CharField(max_length=50, default="gmail")
 
     # Entity links (nullable FKs — same pattern as Document)
