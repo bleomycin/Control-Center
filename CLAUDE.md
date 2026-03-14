@@ -9,7 +9,10 @@ This file provides guidance to Claude Code when working with code in this reposi
 3. **Definition of Done** — ALL of these before reporting ANY work complete:
    - (a) `make test-unit` (in Docker) + `make test-e2e` (local) — all pass. NEVER run bare `python manage.py test` inside Docker.
    - (b) Playwright interactive verification against Docker on :8000 — click every new/changed button, link, HTMX action, form, toggle, collapsible. Verify they **work**, not just that they render.
-   - (c) Screenshots at desktop (1280x800) + mobile (375x812) — verify layout, empty states, edge cases.
+   - (c) Playwright screenshots at all three viewport profiles — verify layout, empty states, edge cases:
+     - **Mobile** (iPhone Air): `{ width: 420, height: 912 }`, `deviceScaleFactor: 3`, `isMobile: true`, `hasTouch: true`
+     - **Desktop** (MacBook Pro): `{ width: 1512, height: 982 }`, `deviceScaleFactor: 2`
+     - **Desktop Split** (4K half-screen): `{ width: 960, height: 1080 }`, `deviceScaleFactor: 2`
    - (d) After HTMX swaps: verify elements OUTSIDE the swap target (counters, progress bars, styling) are intact.
    - (e) `make tailwind-build` if any CSS classes changed.
    - **This is NOT optional. Do NOT report done without completing a–e.**

@@ -179,3 +179,42 @@ class CaseLog(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class FirmEngagement(models.Model):
+    STATUS_CHOICES = [
+        ("contacted", "Contacted"),
+        ("in_review", "In Review"),
+        ("interested", "Interested"),
+        ("declined", "Declined"),
+        ("engaged", "Engaged"),
+        ("on_hold", "On Hold"),
+    ]
+
+    legal_matter = models.ForeignKey(LegalMatter, on_delete=models.CASCADE, related_name="firm_engagements")
+    firm = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
+        null=True, related_name="legal_engagements",
+    )
+    referred_by = models.ForeignKey(
+        "self", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="referrals",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="contacted")
+    scope = models.TextField(blank=True)
+    initial_contact_date = models.DateField()
+    response_date = models.DateField(null=True, blank=True)
+    decision_date = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ["legal_matter", "firm"]
+        ordering = ["-initial_contact_date"]
+
+    def __str__(self):
+        name = self.firm.name if self.firm else "Unknown Firm"
+        return f"{name} — {self.get_status_display()}"
+
+    def get_absolute_url(self):
+        return reverse("legal:detail", kwargs={"pk": self.legal_matter.pk})

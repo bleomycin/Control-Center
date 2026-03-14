@@ -92,6 +92,8 @@ SAMPLE_NAMES = {
         "Victor Huang", "Alicia Moreno", "James Calloway", "Dr. Helen Park",
         "Armanino LLP", "Sarah Chen", "Michael Torres", "Lisa Park",
         "National Property Ins",
+        "Bennett & Associates", "Whitaker Huang LLP",
+        "Torres Mediation Group", "Park & Nguyen LLP",
     },
     "properties": {
         "1200 Oak Avenue", "450 Elm Street", "3300 Magnolia Blvd",
@@ -432,6 +434,45 @@ class Command(BaseCommand):
                        "forensic accounting, tax preparation, and advisory.",
         )
         stakeholders["Armanino LLP"] = armanino
+
+        # Law firms for counsel search feature
+        bennett = Stakeholder.objects.create(
+            name="Bennett & Associates", entity_type="firm", firm_type="law",
+            email="intake@bennettlaw.com", phone="555-890-2200",
+            website="https://www.bennettlaw.com",
+            organization="", trust_rating=4, risk_rating=2,
+            notes_text="Real estate litigation boutique. Strong eviction and property damage practice.",
+        )
+        stakeholders["Bennett & Associates"] = bennett
+
+        whitaker = Stakeholder.objects.create(
+            name="Whitaker Huang LLP", entity_type="firm", firm_type="law",
+            email="info@whitakerhuang.com", phone="555-445-7700",
+            website="https://www.whitakerhuang.com",
+            organization="", trust_rating=3, risk_rating=2,
+            notes_text="Full-service firm with strong zoning and land use practice.",
+        )
+        stakeholders["Whitaker Huang LLP"] = whitaker
+
+        torres_med = Stakeholder.objects.create(
+            name="Torres Mediation Group", entity_type="firm", firm_type="law",
+            email="intake@torresmediation.com", phone="555-312-8800",
+            website="https://www.torresmediation.com",
+            organization="", trust_rating=4, risk_rating=1,
+            notes_text="Specializes in real estate and neighbor dispute mediation. "
+                       "Former judge. High settlement rate.",
+        )
+        stakeholders["Torres Mediation Group"] = torres_med
+
+        park_nguyen = Stakeholder.objects.create(
+            name="Park & Nguyen LLP", entity_type="firm", firm_type="law",
+            email="info@parknguyen.com", phone="555-280-4500",
+            website="https://www.parknguyen.com",
+            organization="", trust_rating=4, risk_rating=1,
+            notes_text="Estate planning and trust administration. Boutique firm with "
+                       "deep expertise in complex multi-generational trusts.",
+        )
+        stakeholders["Park & Nguyen LLP"] = park_nguyen
 
         employee_data = [
             ("Sarah Chen", "professional", "schen@armanino.com", "555-700-1001",
@@ -1122,6 +1163,224 @@ class Command(BaseCommand):
                 )
                 case_log_pks.append(cl.pk)
 
+        # Firm engagements (counsel search)
+        self.stdout.write("Creating firm engagements...")
+        from legal.models import FirmEngagement
+        engagement_pks = []
+
+        # --- Holston Eviction: 3 firms, referral chain, mixed statuses ---
+        if "Holston Eviction - 1200 Oak Ave" in legal_matters:
+            matter = legal_matters["Holston Eviction - 1200 Oak Ave"]
+            eng_reed = None
+            # Marcus Reed — engaged as lead counsel
+            if "Marcus Reed" in stakeholders:
+                eng_reed = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Marcus Reed"],
+                    status="engaged", scope="Lead litigation counsel for eviction proceedings",
+                    initial_contact_date=today - timedelta(days=50),
+                    response_date=today - timedelta(days=49),
+                    decision_date=today - timedelta(days=45),
+                    notes="Retained after initial consult. Strong track record with tenant disputes in Travis County.",
+                )
+                engagement_pks.append(eng_reed.pk)
+            # Bennett & Associates — referred by Reed, in review for property damage
+            if "Bennett & Associates" in stakeholders:
+                eng_bennett = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Bennett & Associates"],
+                    referred_by=eng_reed,
+                    status="in_review", scope="Property damage assessment and counterclaim",
+                    initial_contact_date=today - timedelta(days=10),
+                    response_date=today - timedelta(days=7),
+                    notes="Reviewing photos and damage estimates. Expects to have answer by end of week.",
+                )
+                engagement_pks.append(eng_bennett.pk)
+                # Add communications tied to Bennett for cross-reference demo
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Bennett & Associates"],
+                    date=now - timedelta(days=10), direction="outbound", method="email",
+                    subject="Case materials — Holston property damage",
+                    summary="Sent damage photos, inspection report, and lease agreement. "
+                            "Asked for initial assessment of counterclaim viability.",
+                )
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Bennett & Associates"],
+                    date=now - timedelta(days=7), direction="inbound", method="call",
+                    subject="Bennett intake call",
+                    summary="Spoke with associate. They see merit in the counterclaim. "
+                            "Need 3-5 business days to review fully. Will provide written assessment.",
+                    follow_up_needed=True, follow_up_date=today + timedelta(days=3),
+                )
+            # Whitaker Huang — also referred by Reed, declined
+            if "Whitaker Huang LLP" in stakeholders:
+                eng_whitaker_holston = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Whitaker Huang LLP"],
+                    referred_by=eng_reed,
+                    status="declined", scope="Property damage — secondary option",
+                    initial_contact_date=today - timedelta(days=12),
+                    response_date=today - timedelta(days=11),
+                    decision_date=today - timedelta(days=11),
+                    notes="Full caseload, unable to take on new matters this quarter.",
+                )
+                engagement_pks.append(eng_whitaker_holston.pk)
+
+        # --- Cedar Lane Boundary Dispute: 4 firms, deeper chain ---
+        if "Cedar Lane Boundary Dispute" in legal_matters:
+            matter = legal_matters["Cedar Lane Boundary Dispute"]
+            eng_reed_cedar = None
+            # Marcus Reed — declined, conflict of interest
+            if "Marcus Reed" in stakeholders:
+                eng_reed_cedar = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Marcus Reed"],
+                    status="declined", scope="Boundary dispute litigation",
+                    initial_contact_date=today - timedelta(days=30),
+                    response_date=today - timedelta(days=28),
+                    decision_date=today - timedelta(days=28),
+                    notes="Conflict of interest — represents neighbor's business partner on another matter. "
+                          "Referred to Whitaker Huang for litigation and Torres for mediation.",
+                )
+                engagement_pks.append(eng_reed_cedar.pk)
+                # Communication showing the referral conversation
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Marcus Reed"],
+                    date=now - timedelta(days=28), direction="inbound", method="call",
+                    subject="Conflict check result",
+                    summary="Marcus called to let me know he can't take this one. His firm represents "
+                            "the neighbor's business partner (Calloway Construction) on a separate contract matter. "
+                            "Recommended Whitaker Huang for the boundary litigation and Torres Mediation Group "
+                            "as a pre-litigation option.",
+                )
+            # Whitaker Huang — referred by Reed, interested
+            eng_whitaker = None
+            if "Whitaker Huang LLP" in stakeholders:
+                eng_whitaker = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Whitaker Huang LLP"],
+                    referred_by=eng_reed_cedar,
+                    status="interested", scope="Boundary dispute litigation — trial counsel",
+                    initial_contact_date=today - timedelta(days=20),
+                    response_date=today - timedelta(days=15),
+                    notes="Reviewed survey report, says case has strong merits. Proposing retainer terms.",
+                )
+                engagement_pks.append(eng_whitaker.pk)
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Whitaker Huang LLP"],
+                    date=now - timedelta(days=20), direction="outbound", method="email",
+                    subject="Cedar Lane boundary dispute — new matter inquiry",
+                    summary="Sent case overview, survey report, and photos of fence line. "
+                            "Referenced Marcus Reed's recommendation.",
+                )
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Whitaker Huang LLP"],
+                    date=now - timedelta(days=15), direction="inbound", method="email",
+                    subject="Re: Cedar Lane boundary dispute",
+                    summary="Whitaker reviewed materials. Says the survey strongly supports our position. "
+                            "Wants to schedule a call to discuss strategy and retainer structure.",
+                    follow_up_needed=True, follow_up_date=today + timedelta(days=2),
+                )
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Whitaker Huang LLP"],
+                    date=now - timedelta(days=8), direction="outbound", method="call",
+                    subject="Strategy call with Whitaker partner",
+                    summary="Discussed two approaches: (1) demand letter + negotiation, or (2) file suit immediately. "
+                            "Whitaker recommends starting with a demand letter citing the survey. "
+                            "Retainer proposed at $7,500. Waiting for engagement letter.",
+                )
+            # Torres Mediation — also referred by Reed, on hold pending litigation decision
+            if "Torres Mediation Group" in stakeholders:
+                eng_torres = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Torres Mediation Group"],
+                    referred_by=eng_reed_cedar,
+                    status="on_hold", scope="Pre-litigation mediation",
+                    initial_contact_date=today - timedelta(days=18),
+                    response_date=today - timedelta(days=16),
+                    notes="Available to mediate. Putting on hold until we decide litigation vs. mediation path.",
+                )
+                engagement_pks.append(eng_torres.pk)
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Torres Mediation Group"],
+                    date=now - timedelta(days=18), direction="outbound", method="call",
+                    subject="Mediation inquiry — neighbor boundary dispute",
+                    summary="Spoke with Torres. He's familiar with similar disputes in Dallas County. "
+                            "Charges $400/hr for mediation sessions, typically resolves in 1-2 sessions.",
+                )
+            # Bennett — referred by Whitaker, contacted for survey expert testimony
+            if "Bennett & Associates" in stakeholders and eng_whitaker:
+                eng_bennett_cedar = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Bennett & Associates"],
+                    referred_by=eng_whitaker,
+                    status="contacted", scope="Expert testimony coordination — survey and land use",
+                    initial_contact_date=today - timedelta(days=3),
+                    notes="Whitaker suggested Bennett has a surveyor expert witness on retainer. Initial call scheduled.",
+                )
+                engagement_pks.append(eng_bennett_cedar.pk)
+
+        # --- Magnolia Blvd Acquisition: 2 firms, transaction counsel ---
+        if "Magnolia Blvd Acquisition - Due Diligence" in legal_matters:
+            matter = legal_matters["Magnolia Blvd Acquisition - Due Diligence"]
+            # Sandra Liu — engaged as transaction counsel
+            if "Sandra Liu" in stakeholders:
+                eng_liu = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Sandra Liu"],
+                    status="engaged", scope="Transaction counsel — purchase agreement, due diligence, closing",
+                    initial_contact_date=today - timedelta(days=35),
+                    response_date=today - timedelta(days=35),
+                    decision_date=today - timedelta(days=33),
+                    notes="Sandra's done all our closings. Flat fee for this transaction.",
+                )
+                engagement_pks.append(eng_liu.pk)
+            # Bennett — contacted for environmental liability opinion, declined
+            if "Bennett & Associates" in stakeholders:
+                eng_bennett_mag = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Bennett & Associates"],
+                    status="declined", scope="Environmental liability review — Phase I assessment",
+                    initial_contact_date=today - timedelta(days=25),
+                    response_date=today - timedelta(days=22),
+                    decision_date=today - timedelta(days=22),
+                    notes="Don't handle environmental. Suggested we check with Whitaker Huang's environmental group.",
+                )
+                engagement_pks.append(eng_bennett_mag.pk)
+
+        # --- Estate Plan Update: 2 firms, one engaged, one as second opinion ---
+        if "Estate Plan Update" in legal_matters:
+            matter = legal_matters["Estate Plan Update"]
+            # Dr. Helen Park — engaged
+            if "Dr. Helen Park" in stakeholders:
+                eng_park = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Dr. Helen Park"],
+                    status="engaged", scope="Full estate plan revision — trusts, POA, beneficiary updates",
+                    initial_contact_date=today - timedelta(days=90),
+                    response_date=today - timedelta(days=90),
+                    decision_date=today - timedelta(days=88),
+                )
+                engagement_pks.append(eng_park.pk)
+            # Park & Nguyen — contacted for second opinion on trust structure
+            if "Park & Nguyen LLP" in stakeholders:
+                eng_parknguyen = FirmEngagement.objects.create(
+                    legal_matter=matter, firm=stakeholders["Park & Nguyen LLP"],
+                    status="interested", scope="Second opinion — multi-generational trust structure",
+                    initial_contact_date=today - timedelta(days=14),
+                    response_date=today - timedelta(days=10),
+                    notes="Dr. Park recommended getting a second opinion on the dynasty trust provisions. "
+                          "Park & Nguyen specialize in complex trust structures.",
+                )
+                engagement_pks.append(eng_parknguyen.pk)
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Park & Nguyen LLP"],
+                    date=now - timedelta(days=14), direction="outbound", method="email",
+                    subject="Second opinion request — dynasty trust provisions",
+                    summary="Sent current trust documents and Dr. Park's proposed amendments. "
+                            "Asking for independent review of the dynasty trust structure and tax implications.",
+                )
+                LegalCommunication.objects.create(
+                    legal_matter=matter, stakeholder=stakeholders["Park & Nguyen LLP"],
+                    date=now - timedelta(days=10), direction="inbound", method="call",
+                    subject="Initial review feedback",
+                    summary="Park & Nguyen reviewed the trust structure. They flagged two issues: "
+                            "(1) generation-skipping tax exposure on the secondary trust, and "
+                            "(2) the spendthrift clause may not hold in Texas for the real property portion. "
+                            "Proposing a detailed written opinion for $2,500.",
+                    follow_up_needed=True, follow_up_date=today + timedelta(days=5),
+                )
+
         return {
             "legal.legalmatter": [lm.pk for lm in legal_matters.values()],
             "legal.evidence": list(
@@ -1130,6 +1389,7 @@ class Command(BaseCommand):
             "legal.legalcommunication": comm_pks,
             "legal.legalchecklistitem": checklist_pks,
             "legal.caselog": case_log_pks,
+            "legal.firmengagement": engagement_pks,
         }
 
     # -----------------------------------------------------------------------

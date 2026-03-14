@@ -9,7 +9,7 @@ from django.utils import timezone
 from assets.models import RealEstate
 from stakeholders.models import Stakeholder
 
-from .models import CaseLog, Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
+from .models import CaseLog, Evidence, FirmEngagement, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
 class LegalMatterModelTests(TestCase):
@@ -1169,3 +1169,230 @@ class ActivityListTests(TestCase):
         # 2 comms + 19 = 21 comms + 2 logs = 23 total, page 1 limit = 20
         resp = self.client.get(self._url())
         self.assertContains(resp, "Show more")
+
+
+class FirmEngagementModelTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="Engagement Matter")
+        cls.firm = Stakeholder.objects.create(name="Baker & Associates", entity_type="firm")
+        cls.firm2 = Stakeholder.objects.create(name="Chen Legal Group", entity_type="firm")
+
+    def test_create(self):
+        eng = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            status="contacted", initial_contact_date=date.today(),
+        )
+        self.assertEqual(eng.status, "contacted")
+        self.assertEqual(eng.legal_matter, self.matter)
+
+    def test_str(self):
+        eng = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today(),
+        )
+        self.assertIn("Baker & Associates", str(eng))
+        self.assertIn("Contacted", str(eng))
+
+    def test_get_absolute_url(self):
+        eng = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today(),
+        )
+        self.assertEqual(
+            eng.get_absolute_url(),
+            reverse("legal:detail", kwargs={"pk": self.matter.pk}),
+        )
+
+    def test_ordering(self):
+        eng1 = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today() - timedelta(days=10),
+        )
+        eng2 = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm2,
+            initial_contact_date=date.today(),
+        )
+        qs = FirmEngagement.objects.all()
+        self.assertEqual(qs[0], eng2)
+        self.assertEqual(qs[1], eng1)
+
+    def test_cascade_on_matter_delete(self):
+        FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today(),
+        )
+        matter_pk = self.matter.pk
+        self.matter.delete()
+        self.assertFalse(FirmEngagement.objects.filter(legal_matter_id=matter_pk).exists())
+
+    def test_firm_set_null(self):
+        eng = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm2,
+            initial_contact_date=date.today(),
+        )
+        self.firm2.delete()
+        eng.refresh_from_db()
+        self.assertIsNone(eng.firm)
+
+    def test_referred_by_set_null(self):
+        parent = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today(),
+        )
+        child = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm2,
+            referred_by=parent, initial_contact_date=date.today(),
+        )
+        parent.delete()
+        child.refresh_from_db()
+        self.assertIsNone(child.referred_by)
+
+    def test_unique_together(self):
+        FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today(),
+        )
+        from django.db import IntegrityError
+        with self.assertRaises(IntegrityError):
+            FirmEngagement.objects.create(
+                legal_matter=self.matter, firm=self.firm,
+                initial_contact_date=date.today(),
+            )
+
+    def test_referral_chain(self):
+        parent = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm,
+            initial_contact_date=date.today(),
+        )
+        child = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm2,
+            referred_by=parent, initial_contact_date=date.today(),
+        )
+        self.assertIn(child, parent.referrals.all())
+        self.assertEqual(child.referred_by, parent)
+
+
+class FirmEngagementViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.matter = LegalMatter.objects.create(title="FE View Matter")
+        cls.firm = Stakeholder.objects.create(name="Smith Law Partners", entity_type="firm")
+        cls.firm2 = Stakeholder.objects.create(name="Davis Group", entity_type="firm")
+        cls.eng = FirmEngagement.objects.create(
+            legal_matter=cls.matter, firm=cls.firm,
+            status="in_review", scope="Litigation",
+            initial_contact_date=date.today() - timedelta(days=5),
+        )
+
+    def test_detail_has_engagement_context(self):
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        self.assertIn("engagement_data", resp.context)
+        self.assertEqual(resp.context["engagement_total"], 1)
+        self.assertContains(resp, "Counsel Search")
+        self.assertContains(resp, "Smith Law Partners")
+
+    def test_add_get_returns_form(self):
+        resp = self.client.get(reverse("legal:firm_engagement_add", args=[self.matter.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Add Firm")
+
+    def test_add_post_creates_engagement(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_add", args=[self.matter.pk]),
+            {"firm": self.firm2.pk, "status": "contacted",
+             "initial_contact_date": date.today().isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(
+            FirmEngagement.objects.filter(legal_matter=self.matter, firm=self.firm2).exists()
+        )
+
+    def test_add_with_referred_by_prepopulated(self):
+        resp = self.client.get(
+            reverse("legal:firm_engagement_add", args=[self.matter.pk])
+            + f"?referred_by={self.eng.pk}"
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Add Firm")
+
+    def test_edit_get_returns_form(self):
+        resp = self.client.get(reverse("legal:firm_engagement_edit", args=[self.eng.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Save Changes")
+
+    def test_edit_post_updates(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_edit", args=[self.eng.pk]),
+            {"firm": self.firm.pk, "status": "interested",
+             "scope": "Updated scope",
+             "initial_contact_date": self.eng.initial_contact_date.isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.eng.refresh_from_db()
+        self.assertEqual(self.eng.status, "interested")
+        self.assertEqual(self.eng.scope, "Updated scope")
+
+    def test_delete_post_removes(self):
+        eng = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm2,
+            initial_contact_date=date.today(),
+        )
+        resp = self.client.post(reverse("legal:firm_engagement_delete", args=[eng.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(FirmEngagement.objects.filter(pk=eng.pk).exists())
+
+    def test_delete_get_does_not_remove(self):
+        eng = FirmEngagement.objects.create(
+            legal_matter=self.matter, firm=self.firm2,
+            initial_contact_date=date.today(),
+        )
+        self.client.get(reverse("legal:firm_engagement_delete", args=[eng.pk]))
+        self.assertTrue(FirmEngagement.objects.filter(pk=eng.pk).exists())
+
+    def test_promote_adds_attorney(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_promote", args=[self.eng.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn(self.firm, self.matter.attorneys.all())
+        self.eng.refresh_from_db()
+        self.assertEqual(self.eng.status, "engaged")
+        self.assertIsNotNone(self.eng.decision_date)
+
+    def test_promote_creates_case_log(self):
+        self.client.post(
+            reverse("legal:firm_engagement_promote", args=[self.eng.pk])
+        )
+        self.assertTrue(
+            CaseLog.objects.filter(
+                legal_matter=self.matter, stakeholder=self.firm,
+                text__icontains="Promoted",
+            ).exists()
+        )
+
+    def test_promote_get_not_allowed(self):
+        resp = self.client.get(
+            reverse("legal:firm_engagement_promote", args=[self.eng.pk])
+        )
+        self.assertEqual(resp.status_code, 405)
+
+    def test_activity_cross_reference_counts(self):
+        LegalCommunication.objects.create(
+            legal_matter=self.matter, stakeholder=self.firm,
+            date=timezone.now(), direction="outbound", method="email",
+            summary="Test comm",
+        )
+        CaseLog.objects.create(
+            legal_matter=self.matter, stakeholder=self.firm,
+            text="Test log",
+        )
+        resp = self.client.get(reverse("legal:detail", args=[self.matter.pk]))
+        data = resp.context["engagement_data"]
+        item = next(d for d in data if d["engagement"].pk == self.eng.pk)
+        self.assertEqual(item["comm_count"], 1)
+        self.assertEqual(item["log_count"], 1)
+
+    def test_engagement_in_pdf(self):
+        resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
+        self.assertEqual(resp["Content-Type"], "application/pdf")

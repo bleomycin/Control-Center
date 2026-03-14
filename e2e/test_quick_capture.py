@@ -384,7 +384,7 @@ class QuickCaptureMobileExpandTests(PlaywrightTestCase):
         )
 
     def _open_quick_capture_mobile(self):
-        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.page.set_viewport_size({"width": 420, "height": 912})
         self.page.goto(self.url("/notes/"))
         # On mobile, sidebar is off-screen. Use JS to trigger the HTMX request directly.
         self.page.evaluate("""

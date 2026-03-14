@@ -1,0 +1,82 @@
+{% load humanize %}
+{% if engagement_data %}
+<div class="px-4 py-2 border-b border-gray-700 flex items-center gap-2 text-xs text-gray-400">
+    <span>{{ engagement_total }} firm{{ engagement_total|pluralize }}</span>
+    {% if engagement_engaged %}<span>· <span class="text-green-400">{{ engagement_engaged }} engaged</span></span>{% endif %}
+    {% if engagement_reviewing %}<span>· <span class="text-yellow-300">{{ engagement_reviewing }} reviewing</span></span>{% endif %}
+    {% if engagement_declined %}<span>· <span class="text-red-400">{{ engagement_declined }} declined</span></span>{% endif %}
+</div>
+{% endif %}
+<div class="divide-y divide-gray-700">
+    {% for item in engagement_data %}
+    <div class="px-4 py-3 group">
+        <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    {% if item.engagement.firm %}
+                    <a href="{{ item.engagement.firm.get_absolute_url }}" class="text-sm font-medium text-blue-400 hover:text-blue-300">{{ item.engagement.firm.name }}</a>
+                    {% else %}
+                    <span class="text-sm font-medium text-gray-400">Unknown Firm</span>
+                    {% endif %}
+                    <span class="text-xs px-2 py-0.5 rounded-full
+                        {% if item.engagement.status == 'contacted' %}bg-gray-700 text-gray-300
+                        {% elif item.engagement.status == 'in_review' %}bg-yellow-900/50 text-yellow-300
+                        {% elif item.engagement.status == 'interested' %}bg-blue-900/50 text-blue-300
+                        {% elif item.engagement.status == 'declined' %}bg-red-900/50 text-red-300
+                        {% elif item.engagement.status == 'engaged' %}bg-green-900/50 text-green-300
+                        {% elif item.engagement.status == 'on_hold' %}bg-gray-700 text-gray-400
+                        {% endif %}">{{ item.engagement.get_status_display }}</span>
+                </div>
+                <div class="flex items-center gap-3 mt-1 text-xs text-gray-500">
+                    {% if item.engagement.referred_by and item.engagement.referred_by.firm %}
+                    <span>Referred by: <span class="text-gray-400">{{ item.engagement.referred_by.firm.name }}</span></span>
+                    {% else %}
+                    <span>Direct contact</span>
+                    {% endif %}
+                    <span>{{ item.engagement.initial_contact_date|date:"M j, Y" }}</span>
+                    {% if item.activity_total > 0 %}
+                    <a href="#activity-list" onclick="document.querySelector('[name=act_stakeholder]').value='{{ item.engagement.firm_id }}'; htmx.trigger(document.querySelector('[name=act_stakeholder]'), 'change');"
+                       class="text-blue-400/70 hover:text-blue-300">
+                        {% if item.comm_count %}{{ item.comm_count }} comm{{ item.comm_count|pluralize }}{% endif %}{% if item.comm_count and item.log_count %}, {% endif %}{% if item.log_count %}{{ item.log_count }} log{{ item.log_count|pluralize }}{% endif %}{% if item.email_count %}{% if item.comm_count or item.log_count %}, {% endif %}{{ item.email_count }} email{{ item.email_count|pluralize }}{% endif %}
+                    </a>
+                    {% endif %}
+                </div>
+                {% if item.engagement.scope %}
+                <p class="text-xs text-gray-400 mt-1">{{ item.engagement.scope }}</p>
+                {% endif %}
+                {% if item.engagement.notes %}
+                <p class="text-xs text-gray-500 mt-1 italic">{{ item.engagement.notes }}</p>
+                {% endif %}
+            </div>
+            <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                <button hx-get="{% url 'legal:firm_engagement_add' matter.pk %}?referred_by={{ item.engagement.pk }}"
+                        hx-target="#firm-engagement-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-gray-500 hover:text-blue-400 px-1.5 py-0.5 rounded"
+                        title="Add referral from this firm">+ref</button>
+                {% if item.engagement.status != 'engaged' and item.engagement.firm %}
+                <button hx-post="{% url 'legal:firm_engagement_promote' item.engagement.pk %}"
+                        hx-target="#firm-engagement-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Promote {{ item.engagement.firm.name }} to attorney and mark as engaged?"
+                        class="text-xs text-gray-500 hover:text-green-400 px-1.5 py-0.5 rounded"
+                        title="Promote to attorney">promote</button>
+                {% endif %}
+                <button hx-get="{% url 'legal:firm_engagement_edit' item.engagement.pk %}"
+                        hx-target="#firm-engagement-form-container"
+                        hx-swap="innerHTML"
+                        class="text-xs text-gray-500 hover:text-blue-400 px-1.5 py-0.5 rounded"
+                        title="Edit">edit</button>
+                <button hx-post="{% url 'legal:firm_engagement_delete' item.engagement.pk %}"
+                        hx-target="#firm-engagement-list"
+                        hx-swap="innerHTML"
+                        hx-confirm="Remove this firm engagement?"
+                        class="text-xs text-gray-500 hover:text-red-400 px-1.5 py-0.5 rounded"
+                        title="Delete">&times;</button>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <p class="px-4 py-4 text-sm text-gray-500 text-center">No firms contacted yet</p>
+    {% endfor %}
+</div>

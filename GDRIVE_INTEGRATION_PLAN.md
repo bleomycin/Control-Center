@@ -109,7 +109,7 @@ New `documents` Django app with full CRUD, entity linking, filtering, exports. N
 - [x] `make test-e2e` — 140 tests pass
 - [x] Docker rebuild + manual Playwright verification (all pages, CRUD, filters, HTMX)
 - [x] Desktop screenshot (1280x800) — list, detail, create, edit verified
-- [x] Mobile screenshot (375x812) — responsive layout, entity metadata visible
+- [x] Mobile screenshot (420x912) — responsive layout, entity metadata visible
 - [x] Tailwind build completed
 - [x] HTMX filter swaps verified — surrounding elements intact
 

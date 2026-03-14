@@ -8,8 +8,8 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
-from .forms import CaseLogForm, EvidenceForm, LegalChecklistForm, LegalCommunicationForm, LegalMatterForm
-from .models import CaseLog, Evidence, LegalChecklistItem, LegalCommunication, LegalMatter
+from .forms import CaseLogForm, EvidenceForm, FirmEngagementForm, LegalChecklistForm, LegalCommunicationForm, LegalMatterForm
+from .models import CaseLog, Evidence, FirmEngagement, LegalChecklistItem, LegalCommunication, LegalMatter
 
 
 ACTIVITY_PAGE_SIZE = 20
@@ -242,6 +242,7 @@ class LegalMatterDetailView(DetailView):
         ctx["recent_comm_count"] = obj.communications.filter(
             date__date__gte=thirty_days_ago
         ).count()
+        ctx.update(_firm_engagement_context(obj))
         ctx["related_entities"] = _build_entity_list(obj)
         ctx["entity_documents"] = obj.documents.all()
         ctx["entity_email_links"] = obj.email_links.all()
@@ -309,6 +310,18 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Attorneys", "type": "table",
                          "headers": ["Name", "Organization", "Email", "Phone"],
                          "rows": [[a.name, a.organization or "-", a.email or "-", a.phone or "-"] for a in attorneys]})
+    engagements = m.firm_engagements.select_related("firm", "referred_by__firm").all()
+    if engagements:
+        sections.append({"heading": "Counsel Search", "type": "table",
+                         "headers": ["Firm", "Status", "Scope", "Contact Date", "Referred By"],
+                         "rows": [
+                             [e.firm.name if e.firm else "-",
+                              e.get_status_display(),
+                              e.scope or "-",
+                              e.initial_contact_date.strftime("%b %d, %Y") if e.initial_contact_date else "-",
+                              e.referred_by.firm.name if e.referred_by and e.referred_by.firm else "-"]
+                             for e in engagements
+                         ]})
     stakeholders = m.related_stakeholders.all()
     if stakeholders:
         sections.append({"heading": "Related Stakeholders", "type": "table",
@@ -497,6 +510,108 @@ def bulk_export_csv(request):
         ("judgment_amount", "Judgment Amount"),
     ]
     return do_export(qs, fields, "legal_matters_selected")
+
+
+# ---------------------------------------------------------------------------
+# Firm Engagements (Counsel Search)
+# ---------------------------------------------------------------------------
+
+
+def _firm_engagement_context(matter):
+    """Build context for the counsel search section."""
+    engagements = matter.firm_engagements.select_related("firm", "referred_by__firm").all()
+
+    engagement_data = []
+    for eng in engagements:
+        if eng.firm_id:
+            comm_count = matter.communications.filter(stakeholder_id=eng.firm_id).count()
+            log_count = matter.case_logs.filter(stakeholder_id=eng.firm_id).count()
+            email_count = matter.email_links.filter(related_stakeholder_id=eng.firm_id).count()
+        else:
+            comm_count = log_count = email_count = 0
+        engagement_data.append({
+            "engagement": eng,
+            "comm_count": comm_count,
+            "log_count": log_count,
+            "email_count": email_count,
+            "activity_total": comm_count + log_count + email_count,
+        })
+
+    total = len(engagement_data)
+    engaged_count = sum(1 for d in engagement_data if d["engagement"].status == "engaged")
+    reviewing_count = sum(1 for d in engagement_data if d["engagement"].status == "in_review")
+    declined_count = sum(1 for d in engagement_data if d["engagement"].status == "declined")
+
+    return {
+        "engagement_data": engagement_data,
+        "engagement_total": total,
+        "engagement_engaged": engaged_count,
+        "engagement_reviewing": reviewing_count,
+        "engagement_declined": declined_count,
+        "matter": matter,
+    }
+
+
+def firm_engagement_add(request, pk):
+    matter = get_object_or_404(LegalMatter, pk=pk)
+    if request.method == "POST":
+        form = FirmEngagementForm(request.POST, legal_matter=matter)
+        if form.is_valid():
+            eng = form.save(commit=False)
+            eng.legal_matter = matter
+            eng.save()
+            return render(request, "legal/partials/_firm_engagement_list.html",
+                          _firm_engagement_context(matter))
+    else:
+        initial = {"initial_contact_date": timezone.localdate()}
+        referred_by_pk = request.GET.get("referred_by")
+        if referred_by_pk:
+            initial["referred_by"] = referred_by_pk
+        form = FirmEngagementForm(initial=initial, legal_matter=matter)
+    return render(request, "legal/partials/_firm_engagement_form.html",
+                  {"form": form, "matter": matter})
+
+
+def firm_engagement_edit(request, pk):
+    eng = get_object_or_404(FirmEngagement, pk=pk)
+    matter = eng.legal_matter
+    if request.method == "POST":
+        form = FirmEngagementForm(request.POST, instance=eng, legal_matter=matter)
+        if form.is_valid():
+            form.save()
+            return render(request, "legal/partials/_firm_engagement_list.html",
+                          _firm_engagement_context(matter))
+    else:
+        form = FirmEngagementForm(instance=eng, legal_matter=matter)
+    return render(request, "legal/partials/_firm_engagement_form.html",
+                  {"form": form, "matter": matter, "editing": eng})
+
+
+def firm_engagement_delete(request, pk):
+    eng = get_object_or_404(FirmEngagement, pk=pk)
+    matter = eng.legal_matter
+    if request.method == "POST":
+        eng.delete()
+    return render(request, "legal/partials/_firm_engagement_list.html",
+                  _firm_engagement_context(matter))
+
+
+@require_POST
+def firm_engagement_promote(request, pk):
+    eng = get_object_or_404(FirmEngagement.objects.select_related("firm", "legal_matter"), pk=pk)
+    matter = eng.legal_matter
+    if eng.firm:
+        matter.attorneys.add(eng.firm)
+        eng.status = "engaged"
+        eng.decision_date = timezone.localdate()
+        eng.save(update_fields=["status", "decision_date"])
+        CaseLog.objects.create(
+            legal_matter=matter,
+            stakeholder=eng.firm,
+            text=f"Promoted {eng.firm.name} to attorney. Scope: {eng.scope or 'General counsel'}",
+        )
+    return render(request, "legal/partials/_firm_engagement_list.html",
+                  _firm_engagement_context(matter))
 
 
 # ---------------------------------------------------------------------------

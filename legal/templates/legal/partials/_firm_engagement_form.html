@@ -1,0 +1,55 @@
+<form hx-post="{% if editing %}{% url 'legal:firm_engagement_edit' editing.pk %}{% else %}{% url 'legal:firm_engagement_add' matter.pk %}{% endif %}"
+      hx-target="#firm-engagement-list"
+      hx-swap="innerHTML"
+      class="px-4 py-4 border-b border-gray-700 bg-gray-750">
+    {% csrf_token %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+            <label for="{{ form.firm.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Firm</label>
+            {{ form.firm }}
+        </div>
+        <div>
+            <label for="{{ form.status.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Status</label>
+            {{ form.status }}
+        </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+        <div>
+            <label for="{{ form.initial_contact_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Contact Date</label>
+            {{ form.initial_contact_date }}
+        </div>
+        <div>
+            <label for="{{ form.response_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Response Date</label>
+            {{ form.response_date }}
+        </div>
+        <div>
+            <label for="{{ form.decision_date.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Decision Date</label>
+            {{ form.decision_date }}
+        </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+            <label for="{{ form.referred_by.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Referred By</label>
+            {{ form.referred_by }}
+        </div>
+    </div>
+    <div class="mb-3">
+        <label for="{{ form.scope.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Scope</label>
+        {{ form.scope }}
+    </div>
+    <div class="mb-3">
+        <label for="{{ form.notes.id_for_label }}" class="block text-xs font-medium text-gray-400 mb-1">Notes</label>
+        {{ form.notes }}
+    </div>
+    {% if form.errors %}
+    <div class="mb-3 text-xs text-red-400">
+        {% for field, errors in form.errors.items %}
+        {% for error in errors %}<p>{{ error }}</p>{% endfor %}
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="flex gap-2">
+        <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors">{% if editing %}Save Changes{% else %}Add Firm{% endif %}</button>
+        <button type="button" onclick="this.closest('form').remove()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-medium rounded-md transition-colors">Cancel</button>
+    </div>
+</form>

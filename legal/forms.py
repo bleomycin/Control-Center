@@ -2,7 +2,7 @@ from django import forms
 from config.forms import TailwindFormMixin
 from dashboard.choices import get_choices
 from stakeholders.models import Stakeholder
-from .models import CaseLog, LegalMatter, Evidence, LegalCommunication, LegalChecklistItem
+from .models import CaseLog, FirmEngagement, LegalMatter, Evidence, LegalCommunication, LegalChecklistItem
 
 
 class LegalMatterForm(TailwindFormMixin, forms.ModelForm):
@@ -87,3 +87,29 @@ class CaseLogForm(TailwindFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["stakeholder"].queryset = Stakeholder.objects.order_by("name")
         self.fields["stakeholder"].required = False
+
+
+class FirmEngagementForm(TailwindFormMixin, forms.ModelForm):
+    class Meta:
+        model = FirmEngagement
+        fields = ["firm", "status", "initial_contact_date", "response_date",
+                  "decision_date", "referred_by", "scope", "notes"]
+        widgets = {
+            "initial_contact_date": forms.DateInput(attrs={"type": "date"}),
+            "response_date": forms.DateInput(attrs={"type": "date"}),
+            "decision_date": forms.DateInput(attrs={"type": "date"}),
+            "scope": forms.Textarea(attrs={"rows": 2, "placeholder": "What aspect of the case does this firm cover?"}),
+            "notes": forms.Textarea(attrs={"rows": 2, "placeholder": "Additional notes..."}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        self.legal_matter = kwargs.pop("legal_matter", None)
+        super().__init__(*args, **kwargs)
+        self.fields["firm"].queryset = Stakeholder.objects.order_by("name")
+        if self.legal_matter:
+            self.fields["referred_by"].queryset = FirmEngagement.objects.filter(
+                legal_matter=self.legal_matter
+            ).select_related("firm")
+        else:
+            self.fields["referred_by"].queryset = FirmEngagement.objects.none()
+        self.fields["referred_by"].required = False

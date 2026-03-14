@@ -114,6 +114,32 @@
     </div>
 </div>
 
+<!-- Counsel Search -->
+<details class="bg-gray-800 rounded-lg border border-gray-700 mb-4 group" open>
+    <summary class="px-4 py-3 cursor-pointer flex items-center justify-between select-none hover:bg-gray-700/30 transition-colors">
+        <div class="flex items-center gap-3">
+            <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-90 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Counsel Search</h2>
+            {% if engagement_total %}
+            <span class="text-xs text-gray-400">
+                {{ engagement_total }} firm{{ engagement_total|pluralize }}
+                {% if engagement_engaged %} · <span class="text-green-400">{{ engagement_engaged }} engaged</span>{% endif %}
+                {% if engagement_reviewing %} · <span class="text-yellow-300">{{ engagement_reviewing }} reviewing</span>{% endif %}
+            </span>
+            {% endif %}
+        </div>
+        <button hx-get="{% url 'legal:firm_engagement_add' matter.pk %}"
+                hx-target="#firm-engagement-form-container"
+                hx-swap="innerHTML"
+                class="text-xs text-blue-400 hover:text-blue-300"
+                onclick="event.stopPropagation()">+ Add Firm</button>
+    </summary>
+    <div id="firm-engagement-form-container"></div>
+    <div id="firm-engagement-list">
+        {% include "legal/partials/_firm_engagement_list.html" %}
+    </div>
+</details>
+
 {% if matter.description %}
 <div class="bg-gray-800 rounded-lg border border-gray-700 p-4 mb-6">
     <p class="text-xs text-gray-400 uppercase tracking-wide mb-2">Description</p>
