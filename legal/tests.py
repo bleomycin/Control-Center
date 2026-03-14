@@ -1396,3 +1396,51 @@ class FirmEngagementViewTests(TestCase):
     def test_engagement_in_pdf(self):
         resp = self.client.get(reverse("legal:export_pdf", args=[self.matter.pk]))
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+    def test_add_create_new_firm(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_add", args=[self.matter.pk]),
+            {"create_new": "on", "new_firm_name": "Brand New Law Firm",
+             "new_firm_email": "info@brandnew.com", "new_firm_phone": "555-000-1111",
+             "status": "contacted",
+             "initial_contact_date": date.today().isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        firm = Stakeholder.objects.get(name="Brand New Law Firm")
+        self.assertEqual(firm.entity_type, "firm")
+        self.assertEqual(firm.firm_type, "law")
+        self.assertEqual(firm.email, "info@brandnew.com")
+        self.assertTrue(
+            FirmEngagement.objects.filter(legal_matter=self.matter, firm=firm).exists()
+        )
+
+    def test_add_create_new_firm_name_only(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_add", args=[self.matter.pk]),
+            {"create_new": "on", "new_firm_name": "Minimal Firm",
+             "status": "contacted",
+             "initial_contact_date": date.today().isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        firm = Stakeholder.objects.get(name="Minimal Firm")
+        self.assertEqual(firm.email, "")
+        self.assertEqual(firm.phone, "")
+
+    def test_add_create_new_missing_name_shows_error(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_add", args=[self.matter.pk]),
+            {"create_new": "on", "new_firm_name": "",
+             "status": "contacted",
+             "initial_contact_date": date.today().isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Firm name is required")
+
+    def test_add_no_firm_no_create_shows_error(self):
+        resp = self.client.post(
+            reverse("legal:firm_engagement_add", args=[self.matter.pk]),
+            {"status": "contacted",
+             "initial_contact_date": date.today().isoformat()},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Select a firm or create a new one")

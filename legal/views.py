@@ -568,8 +568,9 @@ def firm_engagement_add(request, pk):
         if referred_by_pk:
             initial["referred_by"] = referred_by_pk
         form = FirmEngagementForm(initial=initial, legal_matter=matter)
+    create_new_mode = request.POST.get("create_new") == "on" if request.method == "POST" else False
     return render(request, "legal/partials/_firm_engagement_form.html",
-                  {"form": form, "matter": matter})
+                  {"form": form, "matter": matter, "create_new_mode": create_new_mode})
 
 
 def firm_engagement_edit(request, pk):

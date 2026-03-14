@@ -90,6 +90,14 @@ class CaseLogForm(TailwindFormMixin, forms.ModelForm):
 
 
 class FirmEngagementForm(TailwindFormMixin, forms.ModelForm):
+    create_new = forms.BooleanField(required=False, widget=forms.HiddenInput())
+    new_firm_name = forms.CharField(required=False, max_length=255,
+                                    widget=forms.TextInput(attrs={"placeholder": "Firm name"}))
+    new_firm_email = forms.CharField(required=False, max_length=254,
+                                     widget=forms.EmailInput(attrs={"placeholder": "Email (optional)"}))
+    new_firm_phone = forms.CharField(required=False, max_length=50,
+                                     widget=forms.TextInput(attrs={"placeholder": "Phone (optional)"}))
+
     class Meta:
         model = FirmEngagement
         fields = ["firm", "status", "initial_contact_date", "response_date",
@@ -106,6 +114,7 @@ class FirmEngagementForm(TailwindFormMixin, forms.ModelForm):
         self.legal_matter = kwargs.pop("legal_matter", None)
         super().__init__(*args, **kwargs)
         self.fields["firm"].queryset = Stakeholder.objects.order_by("name")
+        self.fields["firm"].required = False
         if self.legal_matter:
             self.fields["referred_by"].queryset = FirmEngagement.objects.filter(
                 legal_matter=self.legal_matter
@@ -113,3 +122,28 @@ class FirmEngagementForm(TailwindFormMixin, forms.ModelForm):
         else:
             self.fields["referred_by"].queryset = FirmEngagement.objects.none()
         self.fields["referred_by"].required = False
+
+    def clean(self):
+        cleaned = super().clean()
+        create_new = cleaned.get("create_new")
+        firm = cleaned.get("firm")
+        new_name = cleaned.get("new_firm_name", "").strip()
+
+        if create_new:
+            if not new_name:
+                self.add_error("new_firm_name", "Firm name is required.")
+        elif not firm:
+            self.add_error("firm", "Select a firm or create a new one.")
+        return cleaned
+
+    def save(self, commit=True):
+        if self.cleaned_data.get("create_new"):
+            firm = Stakeholder.objects.create(
+                name=self.cleaned_data["new_firm_name"].strip(),
+                entity_type="firm",
+                firm_type="law",
+                email=self.cleaned_data.get("new_firm_email", "").strip(),
+                phone=self.cleaned_data.get("new_firm_phone", "").strip(),
+            )
+            self.instance.firm = firm
+        return super().save(commit=commit)
