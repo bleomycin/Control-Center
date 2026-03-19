@@ -224,6 +224,7 @@ class LegalMatterDetailView(DetailView):
         ctx["checklist_done"] = checklist_items.filter(is_completed=True).count()
         ctx["tasks"] = obj.tasks.exclude(status="complete")[:5]
         ctx["notes"] = obj.notes.all()[:5]
+        ctx["note_count"] = obj.notes.count()
         # Activity summary stats
         today = timezone.localdate()
         ctx["pending_followups"] = obj.communications.filter(

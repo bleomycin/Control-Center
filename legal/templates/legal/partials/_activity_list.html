@@ -7,7 +7,7 @@
             {% include "legal/partials/_activity_log_row.html" with log=item.obj %}
         {% endif %}
     {% empty %}
-    <p class="px-4 py-4 text-sm text-gray-500 text-center">No activity found</p>
+    <p class="px-4 py-2 text-xs text-gray-500 text-center">No activity found</p>
     {% endfor %}
 </div>
 {% if act_has_more %}

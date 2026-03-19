@@ -1,12 +1,3 @@
-<div class="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
-    <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Checklist</h2>
-    {% if checklist_count > 0 %}
-    <span class="text-xs text-gray-400">{{ checklist_done }}/{{ checklist_count }}</span>
-    <div class="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
-        <div class="h-full bg-green-500 rounded-full" style="width: {% widthratio checklist_done checklist_count 100 %}%"></div>
-    </div>
-    {% endif %}
-</div>
 <div class="divide-y divide-gray-700">
     {% for item in checklist_items %}
     <div id="checklist-row-{{ item.pk }}" class="flex items-center gap-3 px-4 py-2 group hover:bg-gray-700/30">
