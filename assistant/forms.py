@@ -33,7 +33,7 @@ class AssistantSettingsForm(TailwindFormMixin, forms.ModelForm):
 
     class Meta:
         model = AssistantSettings
-        fields = ["api_key", "model", "max_tokens", "temperature"]
+        fields = ["owner_name", "api_key", "model", "max_tokens", "temperature"]
         widgets = {
             "max_tokens": forms.NumberInput(attrs={"min": 256, "max": 16384, "step": 256}),
             "temperature": forms.NumberInput(attrs={"min": 0, "max": 2, "step": 0.1}),

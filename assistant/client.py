@@ -152,6 +152,18 @@ def _build_system_prompt():
     stats_lines = ["\n## Current system state"]
     from django.utils import timezone
     stats_lines.append(f"Today: {timezone.localdate().isoformat()}")
+
+    # Include owner identity if configured
+    from .models import AssistantSettings
+    owner_name = AssistantSettings.load().owner_name
+    if owner_name:
+        stats_lines.append(f"System owner: {owner_name}")
+        stats_lines.append(
+            f"When processing emails, do NOT create a stakeholder record for {owner_name} — "
+            f"that is the user. Messages from {owner_name} are first-person context. "
+            f"Extract their commitments as personal tasks (direction=personal, no assigned_to)."
+        )
+
     for key, value in stats.items():
         label = key.replace("_", " ").title()
         stats_lines.append(f"- {label}: {value}")

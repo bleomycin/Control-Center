@@ -10,6 +10,10 @@ class AssistantSettings(models.Model):
         ("claude-opus-4-6", "Claude Opus 4.6 (most capable)"),
     ]
 
+    owner_name = models.CharField(
+        max_length=100, blank=True, default="",
+        help_text="Your name, so the assistant knows not to create a stakeholder for you.",
+    )
     api_key = models.CharField(max_length=255, blank=True, default="")
     model = models.CharField(max_length=100, default="claude-sonnet-4-6")
     max_tokens = models.PositiveIntegerField(default=8192)
