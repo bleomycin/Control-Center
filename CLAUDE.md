@@ -152,3 +152,57 @@ Eight Django apps + one e2e test package, all relationally linked:
 - **Test-driven iteration**: After each major component, write tests and run them before moving on.
 - **Always work in parallel**: Maximize parallel tool calls and background agents. Run independent operations concurrently (tests + Docker rebuild, multiple file reads, research agents). Ask: "How many workers can I usefully run right now?"
 - For detailed feature-specific patterns (Insurance, Loans, Calendar, Tasks, Notes, etc.), see `.claude/docs/ARCHITECTURE.md`.
+
+## cmux Browser (Visual Verification)
+
+When running inside cmux, use the built-in browser for visual verification during development. **Always check availability first** — cmux may not be present in all environments.
+
+### Availability Check
+```bash
+cmux ping  # Returns "pong" if available. If this fails, fall back to Playwright for verification.
+```
+
+### Common Commands
+```bash
+# Open browser in split pane
+cmux browser open http://localhost:8000
+
+# Navigate
+cmux browser --surface surface:N navigate http://localhost:8000/legal/149/
+
+# Screenshot (save to file, then Read it to see the result)
+cmux browser --surface surface:N screenshot --out /tmp/screenshot.png
+
+# DOM snapshot (compact tree of elements with ref IDs for clicking)
+cmux browser --surface surface:N snapshot --compact
+
+# Interact
+cmux browser --surface surface:N click "selector-or-ref"
+cmux browser --surface surface:N fill "selector" "text"
+cmux browser --surface surface:N scroll --dy 500
+
+# Check console/errors
+cmux browser --surface surface:N console list
+cmux browser --surface surface:N errors list
+
+# Sidebar status (show progress during long operations)
+cmux set-status "key" "value" --icon "name" --color "#hex"
+cmux set-progress 0.75 --label "Testing 3/4 apps"
+cmux notify --title "Build Complete" --body "All tests passed"
+```
+
+### When to Use
+- **During development**: quick visual checks after code changes (faster than Playwright)
+- **UI verification**: screenshot + read to verify layout, styling, responsiveness
+- **Interactive testing**: click buttons, fill forms, verify HTMX swaps work
+- **Progress feedback**: sidebar status/progress during long builds/test runs
+
+### When NOT to Use
+- **Automated test suites**: use `make test-e2e` (Playwright) — cmux is for interactive dev, not CI
+- **If cmux is unavailable**: fall back to Playwright for all browser verification
+- **Viewport testing**: cmux browser is WKWebView, viewport is tied to pane size (use Playwright for precise viewport profiles)
+
+### Key Notes
+- The cmux browser is **WKWebView (Safari/WebKit)** — gives cross-browser coverage vs Playwright (Chromium)
+- Surface IDs persist within a session. Use `cmux tree` to see current surfaces.
+- Browser state persists between navigations. Use `cmux browser --surface surface:N state save/load` to preserve auth cookies across Docker rebuilds.

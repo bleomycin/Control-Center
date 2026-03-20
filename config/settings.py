@@ -58,7 +58,11 @@ INSTALLED_APPS = [
     'documents',
     'email_links',
     'dashboard',
+    'assistant',
 ]
+
+# Anthropic API
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

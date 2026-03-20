@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Assistant Settings - Control Center{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="mb-6">
+        <a href="{% url 'dashboard:settings_hub' %}" class="text-sm text-gray-400 hover:text-gray-300">&larr; Settings</a>
+        <h1 class="text-2xl font-bold text-white mt-2">Assistant Settings</h1>
+        <p class="text-sm text-gray-400 mt-1">Configure the AI assistant model and API credentials.</p>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="mb-4 p-3 rounded-md text-sm {% if message.tags == 'success' %}bg-green-900/50 text-green-300 border border-green-700{% else %}bg-red-900/50 text-red-300 border border-red-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <form method="post" class="bg-gray-800 rounded-lg border border-gray-700 p-6 space-y-6">
+        {% csrf_token %}
+
+        <!-- Status -->
+        <div class="flex items-center gap-3 pb-4 border-b border-gray-700">
+            {% if settings_obj.get_effective_api_key %}
+            <div class="w-2.5 h-2.5 rounded-full bg-green-500"></div>
+            <span class="text-sm text-green-400">Connected</span>
+            <span class="text-xs text-gray-500">{% if settings_obj.api_key %}(using saved key){% else %}(using environment variable){% endif %}</span>
+            {% else %}
+            <div class="w-2.5 h-2.5 rounded-full bg-red-500"></div>
+            <span class="text-sm text-red-400">Not configured</span>
+            {% endif %}
+        </div>
+
+        <!-- API Key -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">API Key</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.api_key.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                        Anthropic API Key
+                    </label>
+                    {{ form.api_key }}
+                    {% if form.api_key.errors %}<p class="mt-1 text-sm text-red-400">{{ form.api_key.errors.0 }}</p>{% endif %}
+                    <p class="mt-1 text-xs text-gray-500">{{ form.api_key.help_text }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model Selection -->
+        <div>
+            <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2">Model</h2>
+            <div class="space-y-4">
+                <div>
+                    <label for="{{ form.model.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                        Claude Model
+                    </label>
+                    {{ form.model }}
+                    {% if form.model.errors %}<p class="mt-1 text-sm text-red-400">{{ form.model.errors.0 }}</p>{% endif %}
+                    <p class="mt-1 text-xs text-gray-500">{{ form.model.help_text }}</p>
+
+                    <!-- datalist for autocomplete -->
+                    <datalist id="model-choices">
+                        <option value="claude-sonnet-4-6">Sonnet 4.6 — recommended balance of speed, capability, and cost</option>
+                        <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest and cheapest, good for simple queries</option>
+                        <option value="claude-opus-4-6">Opus 4.6 — most capable, best for complex reasoning</option>
+                    </datalist>
+
+                    <!-- Quick pick buttons -->
+                    <div class="flex flex-wrap gap-2 mt-2">
+                        <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-sonnet-4-6'"
+                                class="text-xs px-2 py-1 rounded bg-blue-900/30 text-blue-400 border border-blue-800 hover:bg-blue-900/50 transition-colors">Sonnet 4.6</button>
+                        <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-haiku-4-5-20251001'"
+                                class="text-xs px-2 py-1 rounded bg-green-900/30 text-green-400 border border-green-800 hover:bg-green-900/50 transition-colors">Haiku 4.5</button>
+                        <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-opus-4-6'"
+                                class="text-xs px-2 py-1 rounded bg-purple-900/30 text-purple-400 border border-purple-800 hover:bg-purple-900/50 transition-colors">Opus 4.6</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Advanced -->
+        <details class="group">
+            <summary class="text-lg font-semibold text-white mb-3 border-b border-gray-700 pb-2 cursor-pointer flex items-center gap-2">
+                <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                Advanced
+            </summary>
+            <div class="space-y-4 pt-2">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="{{ form.max_tokens.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                            Max Tokens
+                        </label>
+                        {{ form.max_tokens }}
+                        {% if form.max_tokens.errors %}<p class="mt-1 text-sm text-red-400">{{ form.max_tokens.errors.0 }}</p>{% endif %}
+                        <p class="mt-1 text-xs text-gray-500">Maximum length of each response (default: 4096).</p>
+                    </div>
+                    <div>
+                        <label for="{{ form.temperature.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                            Temperature
+                        </label>
+                        {{ form.temperature }}
+                        {% if form.temperature.errors %}<p class="mt-1 text-sm text-red-400">{{ form.temperature.errors.0 }}</p>{% endif %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.temperature.help_text }}</p>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <!-- Security note -->
+        <div class="bg-gray-900/50 border border-gray-700 rounded-md p-3">
+            <p class="text-xs text-gray-500">
+                <span class="text-yellow-500 font-medium">Note:</span>
+                The API key is stored in the local SQLite database. This is acceptable for a single-user app accessed via VPN.
+                When set here, it takes precedence over the <code class="text-gray-400">ANTHROPIC_API_KEY</code> environment variable.
+            </p>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex flex-wrap gap-3 pt-2">
+            <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
+                Save Settings
+            </button>
+            <a href="{% url 'dashboard:settings_hub' %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

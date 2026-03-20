@@ -1,0 +1,11 @@
+<div class="divide-y divide-gray-700/50">
+    {% for s in sessions %}
+    <a href="{{ s.get_absolute_url }}"
+       class="block px-3 py-2 text-sm hover:bg-gray-700/50 transition-colors {% if session and s.pk == session.pk %}bg-gray-700/50 text-white{% else %}text-gray-400{% endif %}">
+        <div class="truncate">{{ s.title }}</div>
+        <div class="text-xs text-gray-600 mt-0.5">{{ s.updated_at|date:"M j, g:i A" }}</div>
+    </a>
+    {% empty %}
+    <p class="px-3 py-4 text-xs text-gray-500 text-center">No conversations yet</p>
+    {% endfor %}
+</div>
