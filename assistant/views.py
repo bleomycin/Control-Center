@@ -217,7 +217,9 @@ import re
 # Everything from this line onward is a copy of previous messages.
 _REPLY_MARKERS = [
     # Gmail: "On Fri, Mar 20, 2026 at 11:11 AM Name <email> wrote:"
+    # The "wrote:" may be on the next line due to line wrapping
     re.compile(r"^On .+\d{4}.+wrote:\s*$", re.MULTILINE),
+    re.compile(r"^On .+\d{4}.+>\s*\nwrote:", re.MULTILINE),
     # Outlook: "From: Name\nSent: Date" reply header block
     re.compile(r"^From: .+\nSent: ", re.MULTILINE),
     # Divider lines (5+ underscores or dashes) used by some clients
