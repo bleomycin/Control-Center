@@ -136,6 +136,20 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     var body = new FormData();
     body.append('message', text);
 
+    // Inactivity watchdog: if no SSE event arrives for 90s, show error
+    var inactivityTimer = null;
+    function resetWatchdog() {
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(function() {
+            console.error('Stream inactivity timeout (90s)');
+            if (streamContent) {
+                streamContent.innerHTML = '<span class="text-red-400">Connection lost — no response for 90 seconds. <a href="" class="underline text-blue-400">Reload to see results</a> (your data was saved).</span>';
+            }
+            finish();
+        }, 90000);
+    }
+    resetWatchdog();
+
     fetch(STREAM_URL, {
         method: 'POST',
         headers: {'X-CSRFToken': CSRF_TOKEN},
@@ -151,6 +165,7 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
                     finish();
                     return;
                 }
+                resetWatchdog();
                 buffer += decoder.decode(result.value, {stream: true});
                 var lines = buffer.split('\n');
                 buffer = lines.pop(); // keep incomplete line
@@ -204,6 +219,7 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
         }
 
         function finish() {
+            if (inactivityTimer) clearTimeout(inactivityTimer);
             sendBtn.disabled = false;
             sendBtn.textContent = 'Send';
             // Remove stream IDs to prevent conflicts on next message
