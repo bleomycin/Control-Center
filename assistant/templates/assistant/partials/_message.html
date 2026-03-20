@@ -11,8 +11,8 @@
 </div>
 {% elif message.role == "assistant" %}
 <!-- Assistant message -->
-<div class="flex justify-start">
-    <div class="max-w-[85%] sm:max-w-[80%]">
+<div>
+    <div>
         {% if message.tool_data and not message.content %}
         <!-- Tool call indicator -->
         <details class="mb-1">
