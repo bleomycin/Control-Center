@@ -92,7 +92,7 @@
                         </label>
                         {{ form.max_tokens }}
                         {% if form.max_tokens.errors %}<p class="mt-1 text-sm text-red-400">{{ form.max_tokens.errors.0 }}</p>{% endif %}
-                        <p class="mt-1 text-xs text-gray-500">Maximum length of each response (default: 4096).</p>
+                        <p class="mt-1 text-xs text-gray-500">Maximum length of each response (default: 8192).</p>
                     </div>
                     <div>
                         <label for="{{ form.temperature.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">

@@ -12,9 +12,9 @@ class AssistantSettings(models.Model):
 
     api_key = models.CharField(max_length=255, blank=True, default="")
     model = models.CharField(max_length=100, default="claude-sonnet-4-6")
-    max_tokens = models.PositiveIntegerField(default=4096)
+    max_tokens = models.PositiveIntegerField(default=8192)
     temperature = models.DecimalField(
-        max_digits=3, decimal_places=2, default=1.0,
+        max_digits=3, decimal_places=2, default=0.0,
         help_text="0.0 = deterministic, 1.0 = default, 2.0 = maximum creativity",
     )
 
