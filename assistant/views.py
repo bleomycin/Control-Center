@@ -211,6 +211,43 @@ def gmail_thread_search(request):
     })
 
 
+import re
+
+# Patterns that mark the start of a trailing quoted reply block.
+# Everything from this line onward is a copy of previous messages.
+_REPLY_MARKERS = [
+    # Gmail: "On Fri, Mar 20, 2026 at 11:11 AM Name <email> wrote:"
+    re.compile(r"^On .+\d{4}.+wrote:\s*$", re.MULTILINE),
+    # Outlook: "From: Name\nSent: Date" reply header block
+    re.compile(r"^From: .+\nSent: ", re.MULTILINE),
+    # Divider lines (5+ underscores or dashes) used by some clients
+    re.compile(r"^_{5,}$|^-{5,}$", re.MULTILINE),
+]
+
+
+def _strip_quoted_reply(body):
+    """Remove the trailing quoted reply block from an email body.
+
+    Finds the first reply marker (e.g., "On ... wrote:" or "From: ...")
+    and truncates everything after it. Preserves inline content above
+    the marker, including inline replies.
+    """
+    if not body:
+        return body
+    # Find the earliest reply marker position
+    earliest = len(body)
+    for pattern in _REPLY_MARKERS:
+        match = pattern.search(body)
+        if match and match.start() < earliest:
+            earliest = match.start()
+    if earliest < len(body):
+        stripped = body[:earliest].rstrip()
+        # Don't return empty — if the entire body was a quote, keep it
+        if stripped:
+            return stripped
+    return body
+
+
 def gmail_thread_fetch(request):
     """JSON endpoint: fetch a Gmail thread's messages as formatted text."""
     from email_links import gmail
@@ -224,7 +261,7 @@ def gmail_thread_fetch(request):
         return JsonResponse({"error": str(e)}, status=500)
     if not thread_messages:
         return JsonResponse({"error": "No messages found in thread"}, status=404)
-    # Format messages into structured text
+    # Format messages into structured text, stripping trailing quoted blocks
     parts = []
     subject = request.GET.get("subject", "Email Thread")
     parts.append(f"Subject: {subject}")
@@ -233,7 +270,7 @@ def gmail_thread_fetch(request):
         parts.append(f"--- Message {i} ---")
         parts.append(f"From: {msg.get('from_name', '')} <{msg.get('from_email', '')}>")
         parts.append(f"Date: {msg.get('date', '')}")
-        body = msg.get("body", "").strip()
+        body = _strip_quoted_reply(msg.get("body", "").strip())
         parts.append(body)
         parts.append("")
     return JsonResponse({"formatted_text": "\n".join(parts), "subject": subject})
