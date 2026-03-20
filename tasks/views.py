@@ -76,7 +76,7 @@ class TaskListView(ListView):
     paginate_by = 25
 
     def get_queryset(self):
-        qs = super().get_queryset().prefetch_related("related_stakeholders", "follow_ups").annotate(
+        qs = super().get_queryset().select_related("assigned_to").prefetch_related("related_stakeholders", "follow_ups").annotate(
             subtask_count=Count("subtasks", distinct=True),
             subtask_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
             note_count=Count("notes", distinct=True),
@@ -105,6 +105,9 @@ class TaskListView(ListView):
         stakeholder = self.request.GET.get("stakeholder", "").strip()
         if stakeholder:
             qs = qs.filter(related_stakeholders__pk=stakeholder).distinct()
+        assigned_to = self.request.GET.get("assigned_to", "").strip()
+        if assigned_to:
+            qs = qs.filter(assigned_to__pk=assigned_to)
         ALLOWED_SORTS = {"title", "status", "priority", "due_date", "direction", "created_at"}
         sort = self.request.GET.get("sort", "")
         if sort in ALLOWED_SORTS:
@@ -168,6 +171,7 @@ class TaskListView(ListView):
         ctx["current_view"] = self.request.GET.get("view", "table")
         ctx["stakeholders"] = Stakeholder.objects.all().order_by("name")
         ctx["selected_stakeholder"] = self.request.GET.get("stakeholder", "")
+        ctx["selected_assigned_to"] = self.request.GET.get("assigned_to", "")
         group_by = self.request.GET.get("group", "")
         ctx["current_group"] = group_by
         ctx["group_choices"] = [
@@ -214,6 +218,8 @@ class TaskCreateView(CreateView):
             initial["related_legal_matter"] = self.request.GET["legal"]
         if self.request.GET.get("property"):
             initial["related_property"] = self.request.GET["property"]
+        if self.request.GET.get("assigned_to"):
+            initial["assigned_to"] = self.request.GET["assigned_to"]
         if self.request.GET.get("direction"):
             initial["direction"] = self.request.GET["direction"]
         if self.request.GET.get("due_date"):
@@ -315,7 +321,7 @@ def quick_create(request):
 
 def export_csv(request):
     from config.export import export_csv as do_export
-    qs = Task.objects.prefetch_related("related_stakeholders").annotate(
+    qs = Task.objects.select_related("assigned_to").prefetch_related("related_stakeholders").annotate(
         _st_count=Count("subtasks", distinct=True),
         _st_done=Count("subtasks", filter=Q(subtasks__is_completed=True), distinct=True),
     ).all()
@@ -326,6 +332,7 @@ def export_csv(request):
         ("priority", "Priority"),
         ("due_date", "Due Date"),
         ("_due_time_str", "Time"),
+        ("_assigned_to_name", "Assigned To"),
         ("_stakeholder_names", "Stakeholders"),
         ("_subtask_progress", "Checklist"),
         ("_recurrence_str", "Recurrence"),
@@ -333,6 +340,7 @@ def export_csv(request):
     ]
     tasks_list = []
     for task in qs:
+        task._assigned_to_name = task.assigned_to.name if task.assigned_to else ""
         task._stakeholder_names = ", ".join(
             s.name for s in task.related_stakeholders.all()
         ) or ""
@@ -345,7 +353,7 @@ def export_csv(request):
 
 def export_pdf_detail(request, pk):
     from config.pdf_export import render_pdf
-    t = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
+    t = get_object_or_404(Task.objects.select_related("assigned_to").prefetch_related("related_stakeholders"), pk=pk)
     direction_label = t.get_direction_display()
     stakeholder_label = "Stakeholders"
     if t.direction == "outbound":
@@ -368,6 +376,8 @@ def export_pdf_detail(request, pk):
     stakeholder_names = ", ".join(s.name for s in t.related_stakeholders.all())
     if stakeholder_names:
         sections[0]["rows"].append((stakeholder_label, stakeholder_names))
+    if t.assigned_to:
+        sections[0]["rows"].append(("Assigned To", t.assigned_to.name))
     if t.related_legal_matter:
         sections[0]["rows"].append(("Legal Matter", t.related_legal_matter.title))
     if t.related_property:
@@ -713,6 +723,11 @@ def inline_edit_metadata(request, pk):
         task_type = request.POST.get("task_type", "")
         if task_type in dict(Task.TASK_TYPE_CHOICES):
             task.task_type = task_type
+        assigned_to_pk = request.POST.get("assigned_to", "")
+        if assigned_to_pk:
+            task.assigned_to_id = int(assigned_to_pk)
+        else:
+            task.assigned_to = None
         task.save()
         _handle_recurring_completion(task)
         return render(request, "tasks/partials/_detail_metadata_display.html", {"task": task})
@@ -724,5 +739,6 @@ def inline_edit_metadata(request, pk):
         "priority_choices": Task.PRIORITY_CHOICES,
         "direction_choices": Task.DIRECTION_CHOICES,
         "type_choices": Task.TASK_TYPE_CHOICES,
+        "stakeholders": Stakeholder.objects.order_by("name"),
     }
     return render(request, "tasks/partials/_detail_metadata_editor.html", ctx)

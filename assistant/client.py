@@ -97,12 +97,13 @@ Records must be created in this order because later records reference earlier on
 Use `create_record` with `dry_run=true` for the batch. After the user confirms, execute all with `dry_run=false`.
 
 ### Step 5: Task assignment conventions
-Infer task direction and structure from how the email assigns work:
-- **"Amanda: do X"** or **"Amanda needs to handle X"** → create task with `direction="outbound"`, add Amanda as a related stakeholder
-- **"I need to do X"** or **"reminder: X"** or self-directed items → `direction="personal"`
-- **"Waiting on Thomas for X"** or **"Thomas to send us X"** → `direction="inbound"`, `status="waiting"`, Thomas as related stakeholder
-- **Nested lists** like "items to request from Thomas: A, B, C" → create one parent task ("Request items from Thomas") with SubTasks for each item (A, B, C)
-- **Inline replies** from team members (e.g., "> Amanda: I'll handle the filing") → outbound task assigned contextually, Amanda as related stakeholder
+Use the `assigned_to` field (FK to Stakeholder) for the person responsible for the task. This is distinct from `related_stakeholders` (M2M for people involved/referenced).
+- **"Amanda: do X"** or **"Amanda needs to handle X"** → `direction="outbound"`, `assigned_to=Amanda's stakeholder ID`
+- **"I need to do X"** or **"reminder: X"** or self-directed items → `direction="personal"`, `assigned_to` left blank
+- **"Waiting on Thomas for X"** or **"Thomas to send us X"** → `direction="inbound"`, `status="waiting"`, `assigned_to=Thomas's stakeholder ID`
+- **Nested lists** like "items to request from Thomas: A, B, C" → create one parent task ("Request items from Thomas", `assigned_to=Thomas`) with SubTasks for each item (A, B, C)
+- **Inline replies** from team members (e.g., "> Amanda: I'll handle the filing") → outbound task, `assigned_to=Amanda`
+- Use `related_stakeholders` for other people mentioned in the task who are not the assignee (e.g., a property owner referenced in context)
 
 ### Step 6: Smart defaults
 **Priority** — infer from language cues in the email:

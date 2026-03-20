@@ -31,6 +31,7 @@
             {% elif task.status == "waiting" %}<span class="text-xs px-1.5 py-0.5 rounded-full bg-yellow-900/50 text-yellow-300">Waiting</span>
             {% elif task.status == "complete" %}<span class="text-xs px-1.5 py-0.5 rounded-full bg-green-900/50 text-green-300">Complete</span>{% endif %}
             {% if task.due_date %}<span class="text-xs text-gray-400">{{ task.due_date|date:"M j" }}{% if task.due_time %} {{ task.due_time|time:"g:iA" }}{% endif %}</span>{% endif %}
+            {% if task.assigned_to %}<span class="text-xs text-emerald-400">&rarr; {{ task.assigned_to }}</span>{% endif %}
             {% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<span class="text-xs text-gray-500">&middot; {{ stakeholders.0 }}{% if stakeholders.count > 1 %} +{{ stakeholders.count|add:"-1" }}{% endif %}</span>{% endif %}{% endwith %}
         </div>
     </td>
@@ -66,7 +67,8 @@
                hx-target="#task-row-{{ task.pk }}" hx-swap="outerHTML">
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden lg:table-cell">
-        {% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<a href="{{ stakeholders.0.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholders.0 }}</a>{% if stakeholders.count > 1 %} <span class="text-xs text-gray-500">+{{ stakeholders.count|add:"-1" }}</span>{% endif %}{% else %}-{% endif %}{% endwith %}
+        {% if task.assigned_to %}<span class="text-xs text-emerald-400 block" title="Assigned to">&rarr; {{ task.assigned_to }}</span>{% endif %}
+        {% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<a href="{{ stakeholders.0.get_absolute_url }}" class="text-blue-400 hover:text-blue-300">{{ stakeholders.0 }}</a>{% if stakeholders.count > 1 %} <span class="text-xs text-gray-500">+{{ stakeholders.count|add:"-1" }}</span>{% endif %}{% else %}{% if not task.assigned_to %}-{% endif %}{% endif %}{% endwith %}
     </td>
     <td class="px-4 py-3 text-xs text-gray-500 hidden xl:table-cell">{{ task.created_at|date:"M j" }}</td>
 </tr>

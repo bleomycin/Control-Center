@@ -13,9 +13,8 @@
     </div>
     <div class="flex items-center justify-between mt-2 text-xs text-gray-400">
         <span>{% if task.due_date %}{{ task.due_date|date:"M j" }}{% if task.due_time %} {{ task.due_time|time:"g:i A" }}{% endif %}{% else %}No date{% endif %}</span>
-        {% with stakeholders=task.related_stakeholders.all %}
-        {% if stakeholders %}<span class="truncate ml-2">{{ stakeholders.0 }}</span>{% endif %}
-        {% endwith %}
+        {% if task.assigned_to %}<span class="text-emerald-400 truncate ml-2" title="Assigned to">&rarr; {{ task.assigned_to }}</span>
+        {% else %}{% with stakeholders=task.related_stakeholders.all %}{% if stakeholders %}<span class="truncate ml-2">{{ stakeholders.0 }}</span>{% endif %}{% endwith %}{% endif %}
     </div>
     {% if task.subtask_count %}
     <div class="mt-2 flex items-center gap-2">

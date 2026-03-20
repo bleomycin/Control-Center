@@ -43,7 +43,7 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
         model = Task
         fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "duration_minutes",
                   "reminder_date", "status",
-                  "priority", "related_stakeholders",
+                  "priority", "assigned_to", "related_stakeholders",
                   "related_legal_matter", "related_property",
                   "is_recurring", "recurrence_rule"]
         widgets = {
@@ -59,6 +59,7 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["fu_method"].choices = get_choices("contact_method")
         self.fields["related_stakeholders"].choices = _grouped_stakeholder_choices()
+        self.fields["assigned_to"].queryset = Stakeholder.objects.order_by("name")
 
     def clean(self):
         cleaned = super().clean()

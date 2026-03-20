@@ -2,7 +2,7 @@
     <form hx-post="{% url 'tasks:inline_edit_metadata' task.pk %}"
           hx-target="#task-metadata-block" hx-swap="outerHTML">
         {% csrf_token %}
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <div>
                 <label class="block text-xs font-medium text-gray-400 mb-1">Status</label>
                 <select name="status"
@@ -36,6 +36,16 @@
                         class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
                     {% for val, label in type_choices %}
                     <option value="{{ val }}" {% if val == task.task_type %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-400 mb-1">Assigned To</label>
+                <select name="assigned_to"
+                        class="w-full rounded-md border-gray-600 bg-gray-700 text-gray-200 text-sm px-2 py-1.5 focus:border-blue-500 focus:ring-blue-500">
+                    <option value="">Unassigned</option>
+                    {% for s in stakeholders %}
+                    <option value="{{ s.pk }}" {% if s.pk == task.assigned_to_id %}selected{% endif %}>{{ s.name }}</option>
                     {% endfor %}
                 </select>
             </div>

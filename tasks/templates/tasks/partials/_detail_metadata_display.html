@@ -8,6 +8,7 @@
     {% if task.direction == "outbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-cyan-900/50 text-cyan-300">&nearr; Outbound</span>
     {% elif task.direction == "inbound" %}<span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/50 text-amber-300">&swarr; Inbound</span>
     {% endif %}
+    {% if task.assigned_to %}<a href="{{ task.assigned_to.get_absolute_url }}" class="text-xs px-2 py-0.5 rounded-full bg-emerald-900/50 text-emerald-300 hover:text-emerald-200">&rarr; {{ task.assigned_to }}</a>{% endif %}
     {% if task.is_meeting %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Meeting</span>
     {% else %}<span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>{% endif %}
     {% if task.is_recurring %}<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300">&#x21bb; {{ task.get_recurrence_rule_display }}</span>{% endif %}

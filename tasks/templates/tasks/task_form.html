@@ -96,8 +96,15 @@
             {% if form.related_stakeholders.errors %}<p class="mt-1 text-sm text-red-400">{{ form.related_stakeholders.errors.0 }}</p>{% endif %}
         </div>
 
-        <!-- Legal matter + Property (2-col on desktop) -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <!-- Assigned to + Legal matter + Property (3-col on desktop) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+                <label for="{{ form.assigned_to.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                    Assigned To
+                </label>
+                {{ form.assigned_to }}
+                {% if form.assigned_to.errors %}<p class="mt-1 text-sm text-red-400">{{ form.assigned_to.errors.0 }}</p>{% endif %}
+            </div>
             <div>
                 <label for="{{ form.related_legal_matter.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                     {{ form.related_legal_matter.label }}

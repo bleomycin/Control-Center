@@ -1473,13 +1473,21 @@ class Command(BaseCommand):
              today + timedelta(days=10), "not_started", "medium", "one_time", "inbound",
              "Lisa Park", "Magnolia Blvd Acquisition - Due Diligence", None),
         ]
+        # Tasks where the stakeholder is the assignee (outbound/inbound = delegated work)
+        assigned_tasks = {
+            "Review Magnolia closing documents", "Schedule roof inspection - Elm St",
+            "Oak Ave bathroom renovation check-in", "Request Polaris Risk background report via Armanino",
+            "Request 2024 Elm St transaction review", "Request Magnolia Blvd tax review",
+        }
         for title, desc, due, status, priority, ttype, direction, sh_name, lm_title, prop_name in task_data:
+            assignee = stakeholders.get(sh_name) if sh_name and title in assigned_tasks else None
             t = Task.objects.create(
                 title=title, description=desc, due_date=due,
                 status=status, priority=priority, task_type=ttype,
                 direction=direction,
                 related_legal_matter=legal_matters.get(lm_title) if lm_title else None,
                 related_property=properties.get(prop_name) if prop_name else None,
+                assigned_to=assignee,
             )
             if sh_name and sh_name in stakeholders:
                 t.related_stakeholders.add(stakeholders[sh_name])

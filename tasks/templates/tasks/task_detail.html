@@ -24,10 +24,16 @@
     </div>
 </div>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.is_meeting %}Meeting Time{% else %}Due Date{% endif %}</p>
         <p class="text-sm text-gray-200">{{ task.due_date|date:"F j, Y"|default:"Not set" }}{% if task.due_time %} <span class="text-blue-400">at {{ task.due_time|time:"g:i A" }}</span>{% endif %}{% if task.duration_minutes %} <span class="text-gray-400">({{ task.duration_minutes }} min)</span>{% endif %}</p>
+    </div>
+    <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
+        <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Assigned To</p>
+        {% if task.assigned_to %}
+        <a href="{{ task.assigned_to.get_absolute_url }}" class="text-sm text-blue-400 hover:text-blue-300">{{ task.assigned_to }}</a>
+        {% else %}<p class="text-sm text-gray-500">None</p>{% endif %}
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.direction == "outbound" %}Requested From{% elif task.direction == "inbound" %}Requested By{% else %}Stakeholders{% endif %}</p>

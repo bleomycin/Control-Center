@@ -59,6 +59,10 @@ class Task(models.Model):
         "assets.RealEstate", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="tasks",
     )
+    assigned_to = models.ForeignKey(
+        "stakeholders.Stakeholder", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="assigned_tasks",
+    )
     is_recurring = models.BooleanField(default=False)
     recurrence_rule = models.CharField(max_length=15, choices=RECURRENCE_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -111,6 +115,7 @@ class Task(models.Model):
             direction=self.direction,
             related_legal_matter=self.related_legal_matter,
             related_property=self.related_property,
+            assigned_to=self.assigned_to,
             is_recurring=True,
             recurrence_rule=self.recurrence_rule,
         )

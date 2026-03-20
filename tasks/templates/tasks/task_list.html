@@ -49,6 +49,11 @@
             <option value="">All People</option>
             {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_stakeholder == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
         </select>
+        <select name="assigned_to" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
+                class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
+            <option value="">Assigned To</option>
+            {% for s in stakeholders %}<option value="{{ s.pk }}" {% if selected_assigned_to == s.pk|stringformat:"d" %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
         <select name="group" hx-get="{% url 'tasks:list' %}" hx-trigger="change" hx-target="#task-content" hx-include="#filter-form" hx-indicator="#loading-spinner"
                 class="rounded-md border-gray-600 bg-gray-800 text-gray-100 text-sm px-2 py-2 sm:px-3">
             {% for val, label in group_choices %}<option value="{{ val }}" {% if current_group == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
