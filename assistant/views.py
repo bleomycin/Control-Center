@@ -1,10 +1,14 @@
+import logging
+
 from django.contrib import messages
-from django.http import HttpResponse, StreamingHttpResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 
 from . import client as assistant_client
 from .forms import AssistantSettingsForm, ChatInputForm
 from .models import AssistantSettings, ChatMessage, ChatSession
+
+logger = logging.getLogger(__name__)
 
 
 def chat_page(request, session_id=None):
@@ -166,7 +170,73 @@ def session_list(request):
 
 def process_email_form(request):
     """Return the Process Email modal form."""
-    return render(request, "assistant/partials/_process_email_form.html")
+    from email_links import gmail
+    gmail_available = gmail.is_available()
+    labels = gmail.get_labels() if gmail_available else []
+    return render(request, "assistant/partials/_process_email_form.html", {
+        "gmail_available": gmail_available,
+        "labels": labels,
+    })
+
+
+def gmail_thread_search(request):
+    """HTMX endpoint: search Gmail threads for the assistant email picker."""
+    from email_links import gmail
+    if not gmail.is_available():
+        return render(request, "assistant/partials/_gmail_thread_results.html", {
+            "error": "Gmail is not connected.",
+        })
+    query = request.GET.get("q", "")
+    page_token = request.GET.get("page_token", "")
+    label = request.GET.get("label", "")
+    label_ids = [label] if label else None
+    try:
+        data = gmail.search_threads(
+            query=query,
+            max_results=15,
+            page_token=page_token or None,
+            label_ids=label_ids,
+        )
+    except Exception as e:
+        logger.exception("Gmail search failed")
+        return render(request, "assistant/partials/_gmail_thread_results.html", {
+            "error": f"Gmail search error: {e}",
+        })
+    return render(request, "assistant/partials/_gmail_thread_results.html", {
+        "results": data.get("threads"),
+        "next_page_token": data.get("next_page_token"),
+        "query": query,
+        "label": label,
+        "browsing": not query,
+    })
+
+
+def gmail_thread_fetch(request):
+    """JSON endpoint: fetch a Gmail thread's messages as formatted text."""
+    from email_links import gmail
+    thread_id = request.GET.get("thread_id", "")
+    if not thread_id:
+        return JsonResponse({"error": "No thread_id provided"}, status=400)
+    try:
+        thread_messages = gmail.get_thread_messages(thread_id)
+    except Exception as e:
+        logger.exception("Gmail thread fetch failed")
+        return JsonResponse({"error": str(e)}, status=500)
+    if not thread_messages:
+        return JsonResponse({"error": "No messages found in thread"}, status=404)
+    # Format messages into structured text
+    parts = []
+    subject = request.GET.get("subject", "Email Thread")
+    parts.append(f"Subject: {subject}")
+    parts.append(f"Thread: {len(thread_messages)} message(s)\n")
+    for i, msg in enumerate(thread_messages, 1):
+        parts.append(f"--- Message {i} ---")
+        parts.append(f"From: {msg.get('from_name', '')} <{msg.get('from_email', '')}>")
+        parts.append(f"Date: {msg.get('date', '')}")
+        body = msg.get("body", "").strip()
+        parts.append(body)
+        parts.append("")
+    return JsonResponse({"formatted_text": "\n".join(parts), "subject": subject})
 
 
 def assistant_settings(request):

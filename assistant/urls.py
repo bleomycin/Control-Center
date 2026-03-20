@@ -15,5 +15,7 @@ urlpatterns = [
     path("<int:session_id>/prune/", views.prune_history, name="prune"),
     path("sessions/", views.session_list, name="session_list"),
     path("process-email/", views.process_email_form, name="process_email"),
+    path("gmail-search/", views.gmail_thread_search, name="gmail_thread_search"),
+    path("gmail-thread/", views.gmail_thread_fetch, name="gmail_thread_fetch"),
     path("settings/", views.assistant_settings, name="settings"),
 ]

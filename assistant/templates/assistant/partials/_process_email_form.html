@@ -5,22 +5,95 @@
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
     </div>
-    <p class="text-sm text-gray-400 mb-4">Paste an email or meeting notes below. The assistant will extract all stakeholders, assets, action items, and create linked records.</p>
 
-    <div class="space-y-4">
+    {% if gmail_available %}
+    <!-- Tab bar -->
+    <div class="flex mb-4 border-b border-gray-700">
+        <button type="button" id="tab-gmail" onclick="switchEmailTab('gmail')"
+                class="flex-1 px-3 py-2 text-sm font-medium text-center border-b-2 border-green-500 text-green-400">
+            Import from Gmail
+        </button>
+        <button type="button" id="tab-paste" onclick="switchEmailTab('paste')"
+                class="flex-1 px-3 py-2 text-sm font-medium text-center border-b-2 border-transparent text-gray-400 hover:text-gray-200">
+            Paste Text
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Gmail Import Tab -->
+    {% if gmail_available %}
+    <div id="panel-gmail" class="space-y-4">
+        <!-- Search bar -->
+        <div id="gmail-search-section">
+            <div class="flex flex-col sm:flex-row gap-2 mb-3">
+                <input type="text" name="q" id="gmail-search-input" placeholder="Search Gmail or browse recent..."
+                       class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                       hx-get="{% url 'assistant:gmail_thread_search' %}"
+                       hx-trigger="load, keyup changed delay:400ms, search-reload"
+                       hx-target="#assistant-gmail-results"
+                       hx-swap="innerHTML"
+                       hx-include="#gmail-label-select">
+                {% if labels %}
+                <select name="label" id="gmail-label-select"
+                        class="bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-sm text-gray-200 w-full sm:w-auto sm:max-w-36"
+                        onchange="htmx.trigger(document.getElementById('gmail-search-input'), 'search-reload')">
+                    <option value="">All Mail</option>
+                    <optgroup label="System">
+                        {% for lbl in labels %}{% if lbl.type == "system" %}
+                        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+                        {% endif %}{% endfor %}
+                    </optgroup>
+                    <optgroup label="Labels">
+                        {% for lbl in labels %}{% if lbl.type == "user" %}
+                        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+                        {% endif %}{% endfor %}
+                    </optgroup>
+                </select>
+                {% endif %}
+            </div>
+            <div id="assistant-gmail-results">
+                <p class="text-xs text-gray-500 py-2 text-center">Loading recent emails...</p>
+            </div>
+        </div>
+
+        <!-- Selected thread preview (hidden until a thread is selected) -->
+        <div id="gmail-selected" class="hidden">
+            <div class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 flex items-center justify-between">
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs text-gray-400">Selected email</p>
+                    <p id="gmail-selected-subject" class="text-sm text-gray-200 truncate"></p>
+                </div>
+                <button type="button" onclick="clearGmailSelection()" class="text-xs text-blue-400 hover:text-blue-300 ml-2 flex-shrink-0">Change</button>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">Additional Context <span class="text-gray-500">(optional)</span></label>
+            <input type="text" id="gmail-context" placeholder='e.g. "focus on action items for Amanda"'
+                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+        </div>
+
+        <button type="button" id="gmail-process-btn" onclick="submitGmailEmail()" disabled
+                class="w-full px-4 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-600 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors">
+            Process
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Paste Text Tab -->
+    <div id="panel-paste" class="space-y-4 {% if gmail_available %}hidden{% endif %}">
+        <p class="text-sm text-gray-400">Paste an email or meeting notes below. The assistant will extract all stakeholders, assets, action items, and create linked records.</p>
         <div>
             <label for="email-content" class="block text-sm font-medium text-gray-300 mb-1">Email / Notes Content</label>
             <textarea id="email-content" rows="12" placeholder="Paste the full email here..."
                       class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"></textarea>
         </div>
-
         <div>
             <label for="email-context" class="block text-sm font-medium text-gray-300 mb-1">Additional Context <span class="text-gray-500">(optional)</span></label>
             <input type="text" id="email-context" placeholder='e.g. "focus on action items for Amanda" or "this is about the Cedar Lane property"'
                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
         </div>
-
-        <button id="process-email-btn" onclick="submitProcessEmail()"
+        <button type="button" onclick="submitProcessEmail()"
                 class="w-full px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition-colors">
             Process
         </button>
@@ -28,22 +101,92 @@
 </div>
 
 <script>
+// --- Tab switching ---
+function switchEmailTab(tab) {
+    var gmailPanel = document.getElementById('panel-gmail');
+    var pastePanel = document.getElementById('panel-paste');
+    var gmailTab = document.getElementById('tab-gmail');
+    var pasteTab = document.getElementById('tab-paste');
+    if (tab === 'gmail') {
+        gmailPanel.classList.remove('hidden');
+        pastePanel.classList.add('hidden');
+        gmailTab.className = gmailTab.className.replace('border-transparent text-gray-400', 'border-green-500 text-green-400');
+        pasteTab.className = pasteTab.className.replace('border-green-500 text-green-400', 'border-transparent text-gray-400');
+    } else {
+        pastePanel.classList.remove('hidden');
+        if (gmailPanel) gmailPanel.classList.add('hidden');
+        pasteTab.className = pasteTab.className.replace('border-transparent text-gray-400', 'border-green-500 text-green-400');
+        gmailTab.className = gmailTab.className.replace('border-green-500 text-green-400', 'border-transparent text-gray-400');
+    }
+}
+
+// --- Gmail thread selection ---
+var _selectedThreadText = '';
+
+function selectGmailThread(threadId, subject) {
+    var searchSection = document.getElementById('gmail-search-section');
+    var selectedSection = document.getElementById('gmail-selected');
+    var subjectEl = document.getElementById('gmail-selected-subject');
+    var processBtn = document.getElementById('gmail-process-btn');
+
+    // Show loading state
+    searchSection.classList.add('hidden');
+    selectedSection.classList.remove('hidden');
+    subjectEl.textContent = 'Loading thread...';
+    processBtn.disabled = true;
+
+    fetch('{% url "assistant:gmail_thread_fetch" %}?thread_id=' + encodeURIComponent(threadId) + '&subject=' + encodeURIComponent(subject))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                subjectEl.textContent = 'Error: ' + data.error;
+                return;
+            }
+            _selectedThreadText = data.formatted_text;
+            subjectEl.textContent = data.subject;
+            processBtn.disabled = false;
+        })
+        .catch(function(err) {
+            subjectEl.textContent = 'Failed to load thread';
+        });
+}
+
+function clearGmailSelection() {
+    _selectedThreadText = '';
+    document.getElementById('gmail-search-section').classList.remove('hidden');
+    document.getElementById('gmail-selected').classList.add('hidden');
+    document.getElementById('gmail-process-btn').disabled = true;
+}
+
+function submitGmailEmail() {
+    if (!_selectedThreadText) return;
+    var context = document.getElementById('gmail-context').value.trim();
+    var message = 'Process this email thread and extract all stakeholders, assets, action items, and notes:\n\n---\n\n' + _selectedThreadText + '\n\n---';
+    if (context) {
+        message += '\n\nAdditional context: ' + context;
+    }
+    closeModal();
+    var chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        chatInput.value = message;
+        chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+    }
+}
+
+// --- Paste tab (unchanged) ---
 function submitProcessEmail() {
     var content = document.getElementById('email-content').value.trim();
     if (!content) {
         document.getElementById('email-content').focus();
         return;
     }
-
     var context = document.getElementById('email-context').value.trim();
     var message = 'Process this email and extract all stakeholders, assets, action items, and notes:\n\n---\n\n' + content + '\n\n---';
     if (context) {
         message += '\n\nAdditional context: ' + context;
     }
-
     closeModal();
-
-    // Inject the composed message into the chat input and submit
     var chatInput = document.getElementById('chat-input');
     if (chatInput) {
         chatInput.value = message;

@@ -42,6 +42,12 @@ SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a
 
 When the user pastes a long email, meeting notes, or multi-party correspondence, process it systematically using the steps below. The goal is to extract every actionable piece of information and get it into the system with full cross-linking — so nothing falls through the cracks.
 
+When the content includes structured thread markers (e.g., "--- Message 1 ---", "From:", "Date:" headers), this is a multi-message Gmail thread. Parse each message individually. Pay attention to:
+- The chronological flow — messages are in order, most recent is usually most actionable
+- Different senders across messages — each may have different action items
+- Quoted/forwarded content within messages (often prefixed with ">") — avoid creating duplicate action items from quoted text
+- Email signatures and legal disclaimers — ignore these entirely
+
 ### Step 1: Parse & identify all entities
 Read the entire text carefully and extract:
 - **People**: every person mentioned by name, role, or title
