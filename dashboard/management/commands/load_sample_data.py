@@ -1641,7 +1641,10 @@ class Command(BaseCommand):
         ]
         folders = {}
         for name, color, order in folder_data:
-            folder, _ = Folder.objects.get_or_create(name=name, defaults={"color": color, "sort_order": order})
+            try:
+                folder, _ = Folder.objects.get_or_create(name=name, defaults={"color": color, "sort_order": order})
+            except Folder.MultipleObjectsReturned:
+                folder = Folder.objects.filter(name=name).first()
             folders[name] = folder
 
         self.stdout.write("Creating notes...")
