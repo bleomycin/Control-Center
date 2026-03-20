@@ -24,6 +24,7 @@ A self-hosted personal management system built with Django. Designed as a single
 - [Editable Choice Fields](#editable-choice-fields)
 - [CSV & PDF Export](#csv--pdf-export)
 - [Search & Filtering](#search--filtering)
+- [AI Assistant](#ai-assistant)
 - [Calendar](#calendar)
 - [Calendar Feed (ICS)](#calendar-feed-ics)
 - [Database Configuration](#database-configuration)
@@ -90,6 +91,7 @@ reportlab==4.4.9
 pillow>=12.0
 gunicorn==23.0.0
 whitenoise==6.9.0
+anthropic>=0.42.0
 ```
 
 ---
@@ -115,6 +117,7 @@ Configure via `.env` file (copy from `.env.example`):
 | `RESTIC_PASSWORD` | — | Encryption password for restic repository (**required** for restic) |
 | `RESTIC_PASSWORD_FILE` | — | Alternative: path to file containing restic password |
 | `RESTIC_KEEP_LAST` | `10` | Number of restic snapshots to retain during pruning |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key for AI assistant (alternative to DB setting) |
 
 Production security headers (SSL redirect, HSTS, secure cookies) activate when `DEBUG=False` and `ENABLE_SSL=true`.
 
@@ -122,7 +125,7 @@ Production security headers (SSL redirect, HSTS, secure cookies) activate when `
 
 ## Modules
 
-Seven Django apps, all relationally cross-linked:
+Eight Django apps, all relationally cross-linked:
 
 | Module | Models | Purpose |
 |--------|--------|---------|
@@ -130,9 +133,10 @@ Seven Django apps, all relationally cross-linked:
 | **Stakeholders** | Stakeholder, StakeholderTab, Relationship, ContactLog | CRM with firm/employee hierarchy, trust/risk ratings, network graph, dynamic tabs |
 | **Assets** | AssetTab, RealEstate, PropertyOwnership, Investment, InvestmentParticipant, Loan, LoanParty, InsurancePolicy, PolicyHolder, Vehicle, VehicleOwner, Aircraft, AircraftOwner | Unified asset page with dynamic tabs; properties, investments, loans, insurance, vehicles, aircraft with multi-stakeholder ownership |
 | **Legal** | LegalMatter, Evidence | Case tracking with hearings, settlements, evidence, linked entities |
-| **Tasks** | Task, FollowUp, SubTask | Deadlines, priorities, bidirectional direction, follow-up reminders, subtask checklists, recurring tasks, kanban board, meetings |
+| **Tasks** | Task, FollowUp, SubTask | Deadlines, priorities, bidirectional direction, assigned_to, follow-up reminders, subtask checklists, recurring tasks, kanban board, meetings |
 | **Cash Flow** | CashFlowEntry | Income/expense tracking with charts, projections, liquidity alerts |
 | **Notes** | Note, Attachment, Link, Tag, Folder | Searchable notes with file uploads, tags, folders, 3 view modes (cards/list/timeline) |
+| **Assistant** | AssistantSettings, ChatSession, ChatMessage | AI assistant with Anthropic API, tool-use loop, email/meeting notes processing |
 
 ---
 
@@ -446,6 +450,20 @@ Each task has a `direction` field:
 - Follow-up section is hidden for inbound tasks
 - Notification messages are prefixed with `[OUTBOUND]` or `[INBOUND]`
 - Stakeholder detail page has convenience action links: "+ Request from them" and "+ They requested"
+
+### Task Assignment
+
+Tasks have an `assigned_to` ForeignKey to Stakeholder — the person responsible for completing the task. This is distinct from `related_stakeholders` (M2M) which tracks people involved or referenced.
+
+- **Detail page:** Emerald badge in metadata row, dedicated info card with link to stakeholder profile
+- **List view:** Green arrow indicator (→ Name) in mobile metadata and desktop stakeholder column
+- **Kanban board:** Assignee name shown on cards
+- **Inline editor:** Change assignment from the detail page metadata editor without leaving the page
+- **Filter:** "Assigned To" dropdown on the task list filter bar
+- **CSV/PDF export:** Included as a column
+- **Recurring tasks:** Assignment is preserved when the next recurrence is created
+
+The `assigned_to` field complements the `direction` field — a task can be `direction=outbound` with `assigned_to=Amanda` (delegated to Amanda) or `direction=personal` with no assignee (doing it yourself).
 
 ### Follow-Up Tracking
 
@@ -1034,6 +1052,69 @@ Managed by `static/js/bulk-actions.js`.
 
 ---
 
+## AI Assistant
+
+**URL:** `/assistant/`
+
+An AI-powered assistant that can query and modify all data in the system using the Anthropic API with tool-use. Accessible from the sidebar and designed for natural language interaction with your data.
+
+### Setup
+
+Requires an Anthropic API key. Configure at `/assistant/settings/` or set the `ANTHROPIC_API_KEY` environment variable. Default model: Claude Sonnet 4.6.
+
+| Setting | Default | Range |
+|---------|---------|-------|
+| Model | `claude-sonnet-4-6` | Any Anthropic model ID |
+| Max Tokens | 8,192 | 256 – 16,384 |
+| Temperature | 0.0 | 0.0 – 2.0 |
+
+### Tools
+
+The assistant has 8 tools for interacting with the database:
+
+| Tool | Purpose |
+|------|---------|
+| `search` | Broad text search across all models |
+| `query` | Precise ORM queries with Django-style filters |
+| `get_record` | Full record with expanded relations |
+| `create_record` | Create new record (always previews with dry_run first) |
+| `update_record` | Update existing record (always previews first) |
+| `delete_record` | Delete with cascade impact preview |
+| `list_models` | Discovery of all available models and fields |
+| `summarize` | System state overview (counts, overdue items, etc.) |
+
+### Email & Meeting Notes Processing
+
+Paste a full email or meeting notes into the assistant (or use the green "Process Email" button in the chat header). The assistant will:
+
+1. **Parse** all people, assets, action items, deadlines, and relationships
+2. **Search** the system for every entity mentioned — only creates records for entities that don't exist
+3. **Present a structured plan** showing found records, new records to create, tasks with priorities/due dates/assignees, and a note to save
+4. **Wait for confirmation** before creating anything
+5. **Execute in dependency order** — stakeholders first, then assets, then tasks, then the note linked to everything
+
+**Smart defaults:**
+- Priority from language cues: "ASAP" = critical, "need to" = high, "should" = medium, "when time allows" = low
+- Due dates from context: "next week Thursday" = calculated date, "end of month" = last day, "ASAP" = tomorrow
+- Task direction: "Amanda: do X" = outbound with `assigned_to=Amanda`, "I need to" = personal
+- Subtask extraction: nested lists like "items to request from Thomas: A, B, C" become a parent task with subtasks
+
+### Streaming
+
+Responses stream token-by-token via SSE. During tool-use iterations, tool indicators show progress (spinner → checkmark). A 90-second client-side inactivity watchdog detects connection drops and shows a reload link — messages are always saved to the database regardless of stream state.
+
+### Performance
+
+- **Prompt caching** — system prompt and tool definitions are cached across API calls within a session
+- **Tool result trimming** — null/empty fields stripped from responses to reduce context size
+- **Aggressive batching** — the assistant batches all entity searches into a single API round-trip
+
+### Chat Sessions
+
+Multiple chat sessions with conversation history. Sessions appear in a sidebar (desktop) or dropdown (mobile). Each session preserves the full message history including tool calls. Sessions can be pruned (keep last 20 messages) or deleted.
+
+---
+
 ## Calendar
 
 **URL:** `/calendar/`
@@ -1574,6 +1655,7 @@ control-center/
 ├── templates/                 # Global templates
 │   ├── base.html              # Main layout (sidebar, nav, modals)
 │   └── partials/              # Shared partials (delete confirm, pagination, etc.)
+├── assistant/                 # AI assistant (Anthropic API, tool-use, email processing)
 ├── static/
 │   ├── css/input.css          # Tailwind source
 │   ├── js/                    # bulk-actions, kanban, dismiss-alerts, htmx
