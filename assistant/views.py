@@ -164,6 +164,11 @@ def session_list(request):
     })
 
 
+def process_email_form(request):
+    """Return the Process Email modal form."""
+    return render(request, "assistant/partials/_process_email_form.html")
+
+
 def assistant_settings(request):
     """Configure AI assistant API key and model."""
     instance = AssistantSettings.load()

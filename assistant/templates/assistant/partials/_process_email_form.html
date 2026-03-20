@@ -1,0 +1,54 @@
+<div class="p-4 sm:p-6">
+    <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-100">Process Email</h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-200">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+    </div>
+    <p class="text-sm text-gray-400 mb-4">Paste an email or meeting notes below. The assistant will extract all stakeholders, assets, action items, and create linked records.</p>
+
+    <div class="space-y-4">
+        <div>
+            <label for="email-content" class="block text-sm font-medium text-gray-300 mb-1">Email / Notes Content</label>
+            <textarea id="email-content" rows="12" placeholder="Paste the full email here..."
+                      class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"></textarea>
+        </div>
+
+        <div>
+            <label for="email-context" class="block text-sm font-medium text-gray-300 mb-1">Additional Context <span class="text-gray-500">(optional)</span></label>
+            <input type="text" id="email-context" placeholder='e.g. "focus on action items for Amanda" or "this is about the Cedar Lane property"'
+                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+        </div>
+
+        <button id="process-email-btn" onclick="submitProcessEmail()"
+                class="w-full px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition-colors">
+            Process
+        </button>
+    </div>
+</div>
+
+<script>
+function submitProcessEmail() {
+    var content = document.getElementById('email-content').value.trim();
+    if (!content) {
+        document.getElementById('email-content').focus();
+        return;
+    }
+
+    var context = document.getElementById('email-context').value.trim();
+    var message = 'Process this email and extract all stakeholders, assets, action items, and notes:\n\n---\n\n' + content + '\n\n---';
+    if (context) {
+        message += '\n\nAdditional context: ' + context;
+    }
+
+    closeModal();
+
+    // Inject the composed message into the chat input and submit
+    var chatInput = document.getElementById('chat-input');
+    if (chatInput) {
+        chatInput.value = message;
+        chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+    }
+}
+</script>

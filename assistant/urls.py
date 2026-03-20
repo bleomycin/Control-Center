@@ -14,5 +14,6 @@ urlpatterns = [
     path("<int:session_id>/rename/", views.rename_session, name="rename_session"),
     path("<int:session_id>/prune/", views.prune_history, name="prune"),
     path("sessions/", views.session_list, name="session_list"),
+    path("process-email/", views.process_email_form, name="process_email"),
     path("settings/", views.assistant_settings, name="settings"),
 ]

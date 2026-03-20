@@ -35,6 +35,14 @@
                 <h1 class="hidden lg:block text-sm font-medium text-gray-200 truncate">{{ session.title }}</h1>
             </div>
             <div class="flex items-center gap-2">
+                <button hx-get="{% url 'assistant:process_email' %}"
+                        hx-target="#modal-content"
+                        hx-swap="innerHTML"
+                        class="text-xs px-2 py-1 bg-green-600 hover:bg-green-500 text-white rounded transition-colors"
+                        title="Process Email">
+                    <svg class="w-3.5 h-3.5 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    <span class="hidden sm:inline ml-1">Process Email</span>
+                </button>
                 <a href="{% url 'assistant:new_session' %}" class="lg:hidden text-xs text-blue-400 hover:text-blue-300">+ New</a>
                 <form hx-post="{% url 'assistant:prune' session.pk %}" hx-target="#message-list" hx-swap="innerHTML" hx-confirm="Prune older messages? This keeps the last 20.">
                     <input type="hidden" name="keep" value="20">
