@@ -13,21 +13,38 @@
 <!-- Upcoming Meetings -->
 {% include "dashboard/partials/_upcoming_meetings.html" %}
 
+<!-- Upcoming Reminders (mobile only — time-sensitive, right after meetings) -->
+{% if upcoming_reminders %}
+<div id="reminders-mobile" class="lg:hidden mb-6">
+    {% include "dashboard/partials/_upcoming_reminders.html" %}
+</div>
+{% endif %}
+
 <!-- Healthcare Summary -->
 {% include "dashboard/partials/_healthcare_summary.html" %}
 
 <!-- Primary Row: Overdue Tasks | Active Legal | Asset Overview -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-    {% include "dashboard/partials/_overdue_tasks.html" %}
-    {% include "dashboard/partials/_active_legal_matters.html" %}
+    <div class="{% if not overdue_tasks %}hidden lg:block{% endif %}">
+        {% include "dashboard/partials/_overdue_tasks.html" %}
+    </div>
+    <div class="{% if not active_legal_matters %}hidden lg:block{% endif %}">
+        {% include "dashboard/partials/_active_legal_matters.html" %}
+    </div>
     {% include "dashboard/partials/_asset_summary.html" %}
 </div>
 
 <!-- Secondary Row: Stale Follow-ups | Upcoming Reminders | Recent Activity -->
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-    {% include "dashboard/partials/_stale_followups.html" %}
-    {% include "dashboard/partials/_upcoming_reminders.html" %}
-    {% include "dashboard/partials/_recent_activity.html" %}
+    <div class="{% if not stale_followups %}hidden lg:block{% endif %}">
+        {% include "dashboard/partials/_stale_followups.html" %}
+    </div>
+    <div id="reminders-desktop" class="hidden lg:block">
+        {% include "dashboard/partials/_upcoming_reminders.html" %}
+    </div>
+    <div class="{% if not recent_activity %}hidden lg:block{% endif %}">
+        {% include "dashboard/partials/_recent_activity.html" %}
+    </div>
 </div>
 
 <!-- Upcoming Deadlines -->
