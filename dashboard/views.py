@@ -49,6 +49,15 @@ def dashboard(request):
     # Recent notes: last 10 ordered by -date
     recent_notes = Note.objects.order_by("-date")[:10]
 
+    # Upcoming task reminders: reminder_date within the next 7 days, not complete
+    upcoming_reminders = Task.objects.filter(
+        reminder_date__isnull=False,
+        reminder_date__gte=now,
+        reminder_date__lte=now + timedelta(days=7),
+    ).exclude(
+        status="complete",
+    ).order_by("reminder_date")
+
     # Stale follow-ups: no response, reminder enabled, outreach > 3 days ago
     stale_followups = FollowUp.objects.filter(
         response_received=False,
@@ -151,6 +160,7 @@ def dashboard(request):
         "active_legal_matters": active_legal_matters,
         "recent_notes": recent_notes,
         "recent_activity": recent_activity,
+        "upcoming_reminders": upcoming_reminders,
         "stale_followups": stale_followups,
         "liquidity_alerts": get_liquidity_alerts(),
         "property_count": property_count,
@@ -648,6 +658,14 @@ def calendar_feed(request):
             else:
                 ev.add("dtstart", task.due_date)
                 _add_alarms(ev, "meetings" if task.is_meeting else "tasks")
+            # Add VALARM for task-level reminder_date if set
+            if task.reminder_date:
+                from icalendar import Alarm
+                alarm = Alarm()
+                alarm.add("action", "DISPLAY")
+                alarm.add("description", f"Reminder: {task.title}")
+                alarm.add("trigger", task.reminder_date)
+                ev.add_component(alarm)
             if task.description:
                 ev.add("description", task.description)
             ev.add("url", f"{base_url}{task.get_absolute_url()}")

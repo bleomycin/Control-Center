@@ -6,6 +6,7 @@
                 {% if task.direction == "outbound" %}<span class="text-cyan-400 text-xs" title="Outbound">&nearr;</span>{% elif task.direction == "inbound" %}<span class="text-amber-400 text-xs" title="Inbound">&swarr;</span>{% endif %}
                 {% if task.has_stale_followups %}<span class="inline-block w-2 h-2 rounded-full bg-red-500" title="Stale follow-up"></span>{% endif %}
                 {% if task.is_recurring %}<span class="text-indigo-400 text-xs" title="Recurring: {{ task.get_recurrence_rule_display }}">&#x21bb;</span>{% endif %}
+                {% if task.reminder_date %}<span class="text-purple-400 text-xs" title="Reminder: {{ task.reminder_date|date:'M j, g:i A' }}">&#x1F514;</span>{% endif %}
             </div>
             <a href="{{ task.get_absolute_url }}" draggable="false" class="text-sm font-medium text-blue-400 hover:text-blue-300 block truncate">{{ task.title }}</a>
         </div>

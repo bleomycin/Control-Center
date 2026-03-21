@@ -12,6 +12,7 @@
     {% if task.is_meeting %}<span class="text-xs px-2 py-0.5 rounded-full bg-blue-900/50 text-blue-300">Meeting</span>
     {% else %}<span class="text-xs text-gray-400">{{ task.get_task_type_display }}</span>{% endif %}
     {% if task.is_recurring %}<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-900/50 text-indigo-300">&#x21bb; {{ task.get_recurrence_rule_display }}</span>{% endif %}
+    {% if task.reminder_date %}<span class="text-xs px-2 py-0.5 rounded-full bg-purple-900/50 text-purple-300" title="Reminder: {{ task.reminder_date|date:'M j, Y g:i A' }}">&#x1F514; {{ task.reminder_date|date:"M j, g:i A" }}</span>{% endif %}
     <button hx-get="{% url 'tasks:inline_edit_metadata' task.pk %}"
             hx-target="#task-metadata-block" hx-swap="outerHTML"
             class="text-xs text-gray-500 hover:text-blue-400 ml-1">Edit</button>

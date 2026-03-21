@@ -23,9 +23,10 @@
     {% include "dashboard/partials/_asset_summary.html" %}
 </div>
 
-<!-- Secondary Row: Stale Follow-ups | Recent Activity -->
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+<!-- Secondary Row: Stale Follow-ups | Upcoming Reminders | Recent Activity -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
     {% include "dashboard/partials/_stale_followups.html" %}
+    {% include "dashboard/partials/_upcoming_reminders.html" %}
     {% include "dashboard/partials/_recent_activity.html" %}
 </div>
 
