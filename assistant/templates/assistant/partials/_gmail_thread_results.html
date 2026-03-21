@@ -4,7 +4,7 @@
 </div>
 {% elif results %}
 {% if browsing %}<p class="text-xs text-gray-500 mb-1 px-1">Recent emails</p>{% endif %}
-<div class="max-h-64 overflow-y-auto border border-gray-600 rounded-md divide-y divide-gray-700">
+<div class="max-h-96 overflow-y-auto border border-gray-600 rounded-md divide-y divide-gray-700">
     {% for msg in results %}
     <button type="button"
             onclick="selectGmailThread('{{ msg.id }}', '{{ msg.subject|escapejs }}')"
