@@ -124,7 +124,7 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
 
     // Add assistant bubble placeholder
     var assistantBubble = document.createElement('div');
-    assistantBubble.innerHTML = '<div><div id="stream-tools" class="text-xs text-gray-500 mb-1"></div><div class="bg-gray-700 rounded-lg px-4 py-2"><div id="stream-content" class="prose-markdown text-sm text-gray-300"></div></div></div>';
+    assistantBubble.innerHTML = '<div class="overflow-hidden"><div id="stream-tools" class="text-xs text-gray-500 mb-1"></div><div class="bg-gray-700 rounded-lg px-4 py-2"><div id="stream-content" class="prose-markdown text-sm text-gray-300 break-words"></div></div></div>';
     messageList.appendChild(assistantBubble);
 
     var streamContent = document.getElementById('stream-content');
