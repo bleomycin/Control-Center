@@ -266,6 +266,8 @@ class TaskDetailView(DetailView):
         ctx["subtask_form"] = SubTaskForm()
         ctx["subtask_count"] = subtasks.count()
         ctx["subtask_done"] = subtasks.filter(is_completed=True).count()
+        from checklists.views import get_checklists_context
+        ctx.update(get_checklists_context(self.object, "task"))
         return ctx
 
 
@@ -415,6 +417,8 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Related Notes", "type": "table",
                          "headers": ["Title", "Type", "Date"],
                          "rows": [[n.title, get_choice_label("note_type", n.note_type), n.date.strftime("%b %d, %Y")] for n in notes]})
+    from checklists.pdf import append_checklist_sections
+    append_checklist_sections(sections, t, "related_task")
     return render_pdf(request, f"task-{t.pk}", t.title,
                       f"{t.get_status_display()} — {t.get_priority_display()} Priority", sections)
 

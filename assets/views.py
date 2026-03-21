@@ -544,6 +544,8 @@ def export_pdf_realestate_detail(request, pk):
                          "headers": ["Date", "Description", "Type", "Amount"],
                          "rows": [[e.date.strftime("%b %d, %Y"), e.description, e.get_entry_type_display(),
                                    f"{'+'if e.entry_type == 'inflow' else '-'}${e.amount:,.0f}"] for e in entries]})
+    from checklists.pdf import append_checklist_sections
+    append_checklist_sections(sections, p, "related_property")
     return render_pdf(request, f"property-{p.pk}", p.name,
                       f"Real Estate — {p.get_status_display()}", sections)
 
@@ -711,6 +713,8 @@ class RealEstateDetailView(DetailView):
         ctx["entity_documents"] = obj.documents.all()
         ctx["entity_email_links"] = obj.email_links.all()
         ctx["internal_notes_url"] = reverse("assets:property_internal_notes", args=[obj.pk])
+        from checklists.views import get_checklists_context
+        ctx.update(get_checklists_context(obj, "property"))
         return ctx
 
 

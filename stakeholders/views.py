@@ -339,6 +339,8 @@ class StakeholderDetailView(DetailView):
             "case_logs": ctx["stakeholder_case_logs"].count(),
         }
 
+        from checklists.views import get_checklists_context
+        ctx.update(get_checklists_context(obj, "stakeholder"))
         return ctx
 
 
@@ -426,6 +428,8 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Recent Notes", "type": "table",
                          "headers": ["Title", "Type", "Date"],
                          "rows": [[n.title, get_choice_label("note_type", n.note_type), n.date.strftime("%b %d, %Y")] for n in notes]})
+    from checklists.pdf import append_checklist_sections
+    append_checklist_sections(sections, s, "related_stakeholder")
     subtitle = f"{get_choice_label('entity_type', s.entity_type)}"
     if s.parent_organization:
         subtitle += f" — {s.parent_organization.name}"

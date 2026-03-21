@@ -243,6 +243,8 @@ class NoteDetailView(DetailView):
         ctx["attachment_form"] = AttachmentForm()
         ctx["link_list"] = self.object.links.all()
         ctx["link_form"] = LinkForm()
+        from checklists.views import get_checklists_context
+        ctx.update(get_checklists_context(self.object, "note"))
         return ctx
 
 
@@ -348,6 +350,8 @@ def export_pdf_detail(request, pk):
         sections.append({"heading": "Links", "type": "table",
                          "headers": ["Description", "URL", "Added"],
                          "rows": [[lk.description, lk.url, lk.created_at.strftime("%b %d, %Y")] for lk in links]})
+    from checklists.pdf import append_checklist_sections
+    append_checklist_sections(sections, n, "related_note")
     return render_pdf(request, f"note-{n.pk}", n.title,
                       f"{get_choice_label('note_type', n.note_type)} — {n.date.strftime('%b %d, %Y %I:%M %p')}", sections)
 

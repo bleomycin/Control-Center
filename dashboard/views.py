@@ -154,6 +154,36 @@ def dashboard(request):
     )
     has_asset_risks = at_risk_properties.exists() or at_risk_loans.exists()
 
+    # Outstanding checklists (incomplete items, ordered by staleness)
+    from checklists.models import Checklist as DashChecklist
+    from django.db.models import Count, F, Max
+    outstanding_checklists = (
+        DashChecklist.objects.annotate(
+            total_items=Count("items"),
+            done_items=Count("items", filter=Q(items__is_completed=True)),
+            last_activity=Max("items__completed_at"),
+        )
+        .filter(total_items__gt=0)
+        .exclude(done_items=F("total_items"))
+        .order_by("due_date", "last_activity", "created_at")[:10]
+    )
+    for cl in outstanding_checklists:
+        cl.remaining = cl.total_items - cl.done_items
+
+    # Checklists in upcoming deadlines
+    for cl in DashChecklist.objects.filter(
+        due_date__gte=today, due_date__lte=deadline_horizon,
+    ).annotate(
+        total_items=Count("items"),
+        done_items=Count("items", filter=Q(items__is_completed=True)),
+    ).filter(total_items__gt=0).exclude(done_items=F("total_items")):
+        upcoming_deadlines.append({
+            "date": cl.due_date, "type": "checklist", "color": "emerald",
+            "title": f"Checklist: {cl.name} ({cl.done_items}/{cl.total_items})",
+            "url": cl.get_absolute_url(),
+        })
+    upcoming_deadlines.sort(key=lambda x: x["date"])
+
     context = {
         "overdue_tasks": overdue_tasks,
         "upcoming_tasks": upcoming_tasks,
@@ -176,6 +206,7 @@ def dashboard(request):
         "at_risk_loans": at_risk_loans,
         "has_asset_risks": has_asset_risks,
         "upcoming_appointments": upcoming_appointments,
+        "outstanding_checklists": outstanding_checklists,
     }
 
     return render(request, "dashboard/index.html", context)
@@ -347,6 +378,20 @@ def get_activity_timeline(limit=50):
             "url": appt.get_absolute_url(),
         })
 
+    from checklists.models import ChecklistItem as TimelineChecklistItem
+    for ci in TimelineChecklistItem.objects.filter(
+        is_completed=True, completed_at__isnull=False,
+    ).select_related("checklist").order_by("-completed_at")[:limit]:
+        items.append({
+            "date": ci.completed_at,
+            "type": "checklist",
+            "color": "emerald",
+            "icon": "check-circle",
+            "title": f"Completed: {ci.title}",
+            "summary": f"In: {ci.checklist.name}",
+            "url": ci.checklist.get_absolute_url(),
+        })
+
     items.sort(key=lambda x: x["date"], reverse=True)
     return items[:limit]
 
@@ -381,7 +426,7 @@ def activity_timeline(request):
         except ValueError:
             pass
 
-    ALL_TYPES = ["contact", "note", "task", "followup", "cashflow", "evidence"]
+    ALL_TYPES = ["contact", "note", "task", "followup", "cashflow", "evidence", "checklist"]
     # If the filter form was submitted (has "filtered" param) but no types
     # are checked, show nothing. On initial page load (no "filtered" param),
     # default to showing all types.
@@ -505,6 +550,23 @@ def activity_timeline(request):
                 "title": ev.title,
                 "summary": f"Added to {ev.legal_matter.title}",
                 "url": ev.get_absolute_url(),
+                "amount": None,
+            })
+
+    if "checklist" in active_types:
+        from checklists.models import ChecklistItem as TlChecklistItem
+        qs = TlChecklistItem.objects.filter(
+            is_completed=True, completed_at__isnull=False,
+        ).select_related("checklist").order_by("-completed_at")
+        for ci in qs[:FETCH_LIMIT]:
+            items.append({
+                "date": ci.completed_at,
+                "type": "checklist",
+                "color": "emerald",
+                "icon": "check-circle",
+                "title": f"Completed: {ci.title}",
+                "summary": f"In: {ci.checklist.name}",
+                "url": ci.checklist.get_absolute_url(),
                 "amount": None,
             })
 

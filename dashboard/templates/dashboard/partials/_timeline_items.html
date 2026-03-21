@@ -9,6 +9,7 @@
         {% elif item.color == 'green' %}bg-green-500
         {% elif item.color == 'red' %}bg-red-500
         {% elif item.color == 'purple' %}bg-purple-500
+        {% elif item.color == 'emerald' %}bg-emerald-500
         {% else %}bg-gray-500{% endif %}"></div>
 
     <a href="{{ item.url }}" class="block hover:bg-gray-700/30 rounded-md p-2 -mt-1 transition-colors">
@@ -21,6 +22,7 @@
                 {% elif item.color == 'green' %}bg-green-900/50 text-green-300
                 {% elif item.color == 'red' %}bg-red-900/50 text-red-300
                 {% elif item.color == 'purple' %}bg-purple-900/50 text-purple-300
+                {% elif item.color == 'emerald' %}bg-emerald-900/50 text-emerald-300
                 {% else %}bg-gray-700 text-gray-300{% endif %}">{{ item.type }}</span>
             <span class="text-xs text-gray-500 hidden sm:inline">{{ item.date|date:"M j, Y g:i A" }}</span>
             <span class="text-xs text-gray-500 sm:hidden">{{ item.date|date:"M j, g:i A" }}</span>

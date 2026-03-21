@@ -12,8 +12,9 @@
                     {% elif item.color == 'yellow' %}bg-yellow-900/50 text-yellow-300
                     {% elif item.color == 'red' %}bg-red-900/50 text-red-300
                     {% elif item.color == 'purple' %}bg-purple-900/50 text-purple-300
+                    {% elif item.color == 'emerald' %}bg-emerald-900/50 text-emerald-300
                     {% else %}bg-gray-700 text-gray-300{% endif %}">
-                    {% if item.color == 'blue' %}Meeting{% elif item.type == 'task' %}Task{% elif item.type == 'payment' %}Payment{% elif item.type == 'hearing' %}Hearing{% endif %}
+                    {% if item.color == 'blue' %}Meeting{% elif item.type == 'task' %}Task{% elif item.type == 'payment' %}Payment{% elif item.type == 'hearing' %}Hearing{% elif item.type == 'checklist' %}Checklist{% endif %}
                 </span>
                 <p class="text-sm text-gray-200">{{ item.title }}</p>
             </div>

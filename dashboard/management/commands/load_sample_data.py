@@ -28,7 +28,7 @@ from email_links.models import EmailLink
 # Canonical section order and labels
 SECTION_ORDER = [
     "stakeholders", "assets", "legal", "tasks", "cashflow", "notes", "healthcare",
-    "documents", "email_links",
+    "documents", "email_links", "checklists",
 ]
 SECTION_LABELS = {
     "stakeholders": "Stakeholders",
@@ -40,6 +40,7 @@ SECTION_LABELS = {
     "healthcare": "Healthcare",
     "documents": "Documents",
     "email_links": "Email Links",
+    "checklists": "Checklists",
 }
 
 # Which sections depend on which others (for loading)
@@ -53,6 +54,7 @@ SECTION_DEPS = {
     "healthcare": [],
     "documents": ["stakeholders", "assets", "legal"],
     "email_links": ["stakeholders", "assets", "legal"],
+    "checklists": ["stakeholders", "assets", "legal", "tasks"],
 }
 
 # Deletion order per section (children before parents within each section)
@@ -79,6 +81,7 @@ SECTION_DELETION_ORDER = {
     ],
     "documents": ["documents.document"],
     "email_links": ["email_links.emaillink"],
+    "checklists": ["checklists.checklistitem", "checklists.checklist"],
 }
 
 # ---------------------------------------------------------------------------
@@ -2159,4 +2162,89 @@ class Command(BaseCommand):
 
         return {
             "email_links.emaillink": el_pks,
+        }
+
+    def _load_checklists(self, today, now):
+        from checklists.models import Checklist, ChecklistItem
+        stakeholders = _get_sample_stakeholders()
+        properties = _get_sample_properties()
+        tasks = _get_sample_tasks()
+
+        self.stdout.write("Creating checklists...")
+        cl_pks = []
+        ci_pks = []
+
+        def _make_checklist(name, due_date=None, **fk_kwargs):
+            cl = Checklist.objects.create(
+                name=name, due_date=due_date, sort_order=len(cl_pks), **fk_kwargs,
+            )
+            cl_pks.append(cl.pk)
+            return cl
+
+        def _make_items(cl, items_data):
+            for i, (title, completed) in enumerate(items_data):
+                item = ChecklistItem.objects.create(
+                    checklist=cl, title=title, is_completed=completed,
+                    sort_order=i,
+                    completed_at=now - timezone.timedelta(days=i + 1) if completed else None,
+                )
+                ci_pks.append(item.pk)
+
+        # 1. Stakeholder: "Items to request from Tom Driscoll"
+        tom = stakeholders.get("Tom Driscoll")
+        if tom:
+            cl1 = _make_checklist("Items to request from Tom", related_stakeholder=tom)
+            _make_items(cl1, [
+                ("W-9 form", True),
+                ("2024 K-1 schedule", True),
+                ("Operating agreement for Oak Ave LLC", False),
+                ("Insurance certificate — 1200 Oak Ave", False),
+                ("Bank statements (last 3 months)", False),
+            ])
+
+        # 2. Stakeholder: "Engagement deliverables — Sandra Liu"
+        sandra = stakeholders.get("Sandra Liu")
+        if sandra:
+            cl2 = _make_checklist(
+                "Documents received from Sandra",
+                due_date=today + timezone.timedelta(days=14),
+                related_stakeholder=sandra,
+            )
+            _make_items(cl2, [
+                ("Signed engagement letter", True),
+                ("Conflict check clearance", False),
+                ("Fee schedule", False),
+            ])
+
+        # 3. Property: "Due diligence — Magnolia Blvd"
+        magnolia = properties.get("3300 Magnolia Blvd")
+        if magnolia:
+            cl3 = _make_checklist(
+                "Due diligence items",
+                due_date=today + timezone.timedelta(days=21),
+                related_property=magnolia,
+            )
+            _make_items(cl3, [
+                ("Phase I environmental report", True),
+                ("Title search and commitment", True),
+                ("Survey and boundary confirmation", False),
+                ("Rent roll verification", False),
+                ("Building inspection", False),
+                ("Zoning compliance letter", False),
+            ])
+
+        # 4. Task checklist
+        sample_tasks = _get_sample_tasks()
+        if sample_tasks:
+            first_task = list(sample_tasks.values())[0]
+            cl4 = _make_checklist("Preparation items", related_task=first_task)
+            _make_items(cl4, [
+                ("Review prior correspondence", True),
+                ("Prepare agenda", False),
+                ("Confirm attendees", False),
+            ])
+
+        return {
+            "checklists.checklist": cl_pks,
+            "checklists.checklistitem": ci_pks,
         }

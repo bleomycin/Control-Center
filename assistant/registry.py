@@ -24,6 +24,7 @@ INCLUDED_APPS = [
     "notes",
     "healthcare",
     "documents",
+    "checklists",
     "dashboard",
     "email_links",
 ]
@@ -51,6 +52,8 @@ SEARCH_FIELDS = {
     "Condition": ["name"],
     "Tag": ["name"],
     "Folder": ["name"],
+    "Checklist": ["name"],
+    "ChecklistItem": ["title"],
     "FollowUp": ["notes_text", "response_notes"],
     "ContactLog": ["summary"],
     "LegalCommunication": ["subject", "summary"],

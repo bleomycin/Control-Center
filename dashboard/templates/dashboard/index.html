@@ -47,6 +47,11 @@
     </div>
 </div>
 
+<!-- Outstanding Checklists -->
+{% if outstanding_checklists %}
+{% include "dashboard/partials/_outstanding_checklists.html" %}
+{% endif %}
+
 <!-- Upcoming Deadlines -->
 {% include "dashboard/partials/_upcoming_deadlines.html" %}
 

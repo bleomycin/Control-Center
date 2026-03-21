@@ -52,6 +52,9 @@
 
 {% include "notes/partials/_detail_content_display.html" %}
 
+<!-- Checklists -->
+{% include "checklists/partials/_checklists_section.html" with entity_obj=note entity_type="note" %}
+
 <!-- Related Records -->
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     {% if note.participants.exists %}

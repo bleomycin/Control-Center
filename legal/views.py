@@ -247,6 +247,8 @@ class LegalMatterDetailView(DetailView):
         ctx["related_entities"] = _build_entity_list(obj)
         ctx["entity_documents"] = obj.documents.all()
         ctx["entity_email_links"] = obj.email_links.all()
+        from checklists.views import get_checklists_context
+        ctx.update(get_checklists_context(obj, "legal_matter"))
         return ctx
 
 
@@ -366,6 +368,8 @@ def export_pdf_detail(request, pk):
                          "headers": ["Title", "Status", "Priority", "Due Date"],
                          "rows": [[t.title, t.get_status_display(), t.get_priority_display(),
                                    t.due_date.strftime("%b %d, %Y") if t.due_date else "-"] for t in tasks]})
+    from checklists.pdf import append_checklist_sections
+    append_checklist_sections(sections, m, "related_legal_matter")
     return render_pdf(request, f"legal-matter-{m.pk}", m.title,
                       f"{get_choice_label('matter_type', m.matter_type)} — {m.get_status_display()}", sections)
 

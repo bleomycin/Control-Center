@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'healthcare',
     'documents',
     'email_links',
+    'checklists',
     'dashboard',
     'assistant',
 ]
