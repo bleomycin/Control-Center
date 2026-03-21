@@ -10,7 +10,7 @@ class ChecklistForm(TailwindFormMixin, forms.ModelForm):
         fields = ["name", "due_date"]
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Checklist name..."}),
-            "due_date": forms.DateInput(attrs={"type": "date", "placeholder": "Due date (optional)"}),
+            "due_date": forms.DateInput(attrs={"type": "date", "title": "Due date (optional)"}),
         }
 
 

@@ -10,6 +10,48 @@ from django.utils import timezone
 
 from . import registry
 
+
+def _normalize_choice_fields(model_cls, data):
+    """Normalize DB-backed choice field values (label→value mapping).
+
+    If the LLM sends a label like "Advisor" instead of the value "advisor",
+    map it to the correct value by checking ChoiceOption entries.
+    """
+    from dashboard.models import ChoiceOption
+
+    CHOICE_CATEGORIES = {
+        "entity_type": "entity_type",
+        "firm_type": "firm_type",
+        "contact_method": "contact_method",
+        "matter_type": "matter_type",
+        "note_type": "note_type",
+        "policy_type": "policy_type",
+        "vehicle_type": "vehicle_type",
+        "aircraft_type": "aircraft_type",
+    }
+    for field_name, category in CHOICE_CATEGORIES.items():
+        if field_name not in data:
+            continue
+        val = data[field_name]
+        if not isinstance(val, str):
+            continue
+        # Check if the value already matches a valid choice value
+        choices = ChoiceOption.objects.filter(category=category)
+        valid_values = {c.value for c in choices}
+        if val in valid_values:
+            continue
+        # Try case-insensitive value match
+        for c in choices:
+            if c.value.lower() == val.lower():
+                data[field_name] = c.value
+                break
+        else:
+            # Try label→value mapping (case-insensitive)
+            for c in choices:
+                if c.label.lower() == val.lower():
+                    data[field_name] = c.value
+                    break
+
 # Allowlisted Django ORM lookup suffixes
 ALLOWED_LOOKUPS = {
     "exact", "iexact", "contains", "icontains", "in",
@@ -131,6 +173,9 @@ def create_record(model, data, dry_run=True):
     """Create a new record. dry_run=True returns a preview without saving."""
     model_cls = registry.get_model(model)
 
+    # Normalize choice field values (label→value, case-insensitive)
+    _normalize_choice_fields(model_cls, data)
+
     # Separate M2M fields from regular fields
     m2m_data = {}
     regular_data = {}
@@ -181,6 +226,9 @@ def update_record(model, id, data, dry_run=True):
         obj = model_cls.objects.get(pk=id)
     except model_cls.DoesNotExist:
         return {"error": f"{model} with id={id} not found"}
+
+    # Normalize choice field values (label→value, case-insensitive)
+    _normalize_choice_fields(model_cls, data)
 
     m2m_data = {}
     regular_data = {}

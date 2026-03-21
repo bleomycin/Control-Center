@@ -529,8 +529,8 @@ def relationship_graph_data(request, pk):
         connected_stakeholder_ids.add(s.pk)
         edges.append({"source": f"s-{s.pk}", "target": f"s-{center.pk}", "label": rel.relationship_type})
 
-    # 2nd degree stakeholder relationships (between connected stakeholders)
-    if connected_stakeholder_ids:
+    # 2nd degree stakeholder relationships (only when ?extended=1)
+    if connected_stakeholder_ids and request.GET.get("extended") == "1":
         for rel in Relationship.objects.filter(
             from_stakeholder_id__in=connected_stakeholder_ids,
             to_stakeholder_id__in=connected_stakeholder_ids,
@@ -632,7 +632,7 @@ def relationship_graph_data(request, pk):
     # Healthcare providers linked to this stakeholder
     from healthcare.models import Provider as HcProv
     for prov in HcProv.objects.filter(stakeholder=center):
-        add_node(f"hc-{prov.pk}", prov.name, "Healthcare Provider", "hexagon", prov.get_absolute_url())
+        add_node(f"hc-{prov.pk}", prov.name, "Healthcare", "round-hexagon", prov.get_absolute_url())
         edges.append({"source": f"s-{center.pk}", "target": f"hc-{prov.pk}", "label": prov.specialty or "provider"})
 
     return JsonResponse({"nodes": list(nodes.values()), "edges": edges})

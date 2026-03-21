@@ -44,7 +44,7 @@ def dashboard(request):
     )
 
     # Recent activity: mixed timeline items for dashboard panel
-    recent_activity = get_activity_timeline(limit=10)
+    recent_activity = get_activity_timeline(limit=5)
 
     # Recent notes: last 10 ordered by -date
     recent_notes = Note.objects.order_by("-date")[:10]

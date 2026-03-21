@@ -127,45 +127,34 @@
         <svg class="w-4 h-4 text-gray-400 transition-transform [[open]>&]:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
     </summary>
     <div class="border-t border-gray-700">
-        <div id="cy" class="h-[300px] sm:h-[500px] w-full"></div>
-        <div class="px-4 py-2 sm:py-3 border-t border-gray-700">
-            <div class="flex flex-wrap gap-3 text-xs text-gray-400">
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 rounded-full bg-blue-500"></div>
-                    <span>Stakeholders</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-green-500" style="clip-path: inset(0 0 0 0 round 2px);"></div>
-                    <span>Properties</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-purple-500" style="transform: rotate(45deg);"></div>
-                    <span>Investments</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-orange-500" style="clip-path: polygon(50% 0%, 0% 100%, 100% 100%);"></div>
-                    <span>Loans</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-red-500" style="clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);"></div>
-                    <span>Legal Matters</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-yellow-500" style="clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></div>
-                    <span>High-Priority Tasks</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-teal-500" style="clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);"></div>
-                    <span>Vehicles</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-sky-500" style="clip-path: polygon(50% 0%, 100% 50%, 50% 30%, 0% 50%);"></div>
-                    <span>Aircraft</span>
-                </div>
-                <div class="flex items-center gap-1.5">
-                    <div class="w-3 h-3 bg-pink-500" style="clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%);"></div>
-                    <span>Insurance</span>
-                </div>
+        <!-- Filter pills (act as legend + toggles) -->
+        <div class="px-4 py-2 border-b border-gray-700 flex flex-wrap items-center gap-1.5">
+            <span class="text-xs text-gray-500 mr-1 hidden sm:inline">Filter:</span>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="ellipse" data-color="#6366f1" style="background: rgba(99,102,241,0.2); border-color: #6366f1; color: #a5b4fc;">Stakeholders</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="roundrectangle" data-color="#10b981" style="background: rgba(16,185,129,0.2); border-color: #10b981; color: #6ee7b7;">Properties</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="diamond" data-color="#a855f7" style="background: rgba(168,85,247,0.2); border-color: #a855f7; color: #c4b5fd;">Investments</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="triangle" data-color="#f97316" style="background: rgba(249,115,22,0.2); border-color: #f97316; color: #fdba74;">Loans</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="hexagon" data-color="#ef4444" style="background: rgba(239,68,68,0.2); border-color: #ef4444; color: #fca5a5;">Legal</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="star" data-color="#eab308" style="background: rgba(234,179,8,0.2); border-color: #eab308; color: #fde047;">Tasks</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors" data-entity="pentagon" data-color="#14b8a6" style="background: rgba(20,184,166,0.2); border-color: #14b8a6; color: #5eead4;">Vehicles</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors hidden sm:inline-block" data-entity="barrel" data-color="#84cc16" style="background: rgba(132,204,22,0.2); border-color: #84cc16; color: #bef264;">Leases</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors hidden sm:inline-block" data-entity="vee" data-color="#0ea5e9" style="background: rgba(14,165,233,0.2); border-color: #0ea5e9; color: #7dd3fc;">Aircraft</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors hidden sm:inline-block" data-entity="octagon" data-color="#ec4899" style="background: rgba(236,72,153,0.2); border-color: #ec4899; color: #f9a8d4;">Insurance</button>
+            <button type="button" class="graph-filter active text-xs px-2 py-0.5 rounded-full border transition-colors hidden sm:inline-block" data-entity="round-hexagon" data-color="#06b6d4" style="background: rgba(6,182,212,0.2); border-color: #06b6d4; color: #67e8f9;">Healthcare</button>
+            <div class="ml-auto flex items-center gap-2">
+                <label class="hidden sm:inline-flex items-center gap-1 text-xs text-gray-500 cursor-pointer" title="Show relationships between connected stakeholders">
+                    <input type="checkbox" id="extended-toggle" class="rounded border-gray-600 bg-gray-700 h-3 w-3 text-blue-500 focus:ring-blue-500">
+                    <span>Extended</span>
+                </label>
+            </div>
+        </div>
+        <div class="relative">
+            <div id="cy" class="h-[250px] w-full"></div>
+            <!-- Hover tooltip -->
+            <div id="cy-tooltip" class="hidden absolute pointer-events-none z-10 bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-xs shadow-lg max-w-[250px]">
+                <p id="cy-tooltip-name" class="text-gray-100 font-medium truncate"></p>
+                <p id="cy-tooltip-type" class="text-gray-400 mt-0.5"></p>
+                <p id="cy-tooltip-rel" class="text-gray-500 mt-0.5 hidden"></p>
             </div>
         </div>
     </div>
@@ -571,27 +560,39 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 <script>
 (function() {
     const detailsEl = document.getElementById('graph-details');
+    const tooltip = document.getElementById('cy-tooltip');
+    const tooltipName = document.getElementById('cy-tooltip-name');
+    const tooltipType = document.getElementById('cy-tooltip-type');
+    const tooltipRel = document.getElementById('cy-tooltip-rel');
+    const graphDataUrl = "{% url 'stakeholders:graph_data' stakeholder.pk %}";
+    let cy = null;
     let graphInitialized = false;
+
+    function truncLabel(text, max) {
+        if (!text) return '';
+        return text.length > max ? text.substring(0, max) + '…' : text;
+    }
 
     // Auto-open on desktop
     if (window.innerWidth >= 640) {
         detailsEl.open = true;
     }
 
-    function initGraph() {
-        if (graphInitialized) return;
-        graphInitialized = true;
+    function initGraph(extended) {
+        var url = graphDataUrl;
+        if (extended) url += '?extended=1';
 
-        fetch("{% url 'stakeholders:graph_data' stakeholder.pk %}")
-            .then(r => r.json())
-            .then(data => {
-                const elements = [];
+        fetch(url)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var elements = [];
 
-                data.nodes.forEach(n => {
+                data.nodes.forEach(function(n) {
                     elements.push({
                         data: {
                             id: n.id,
-                            label: n.name,
+                            label: truncLabel(n.name, 25),
+                            fullName: n.name,
                             type: n.entity_type,
                             url: n.url,
                             is_center: n.is_center,
@@ -600,7 +601,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     });
                 });
 
-                data.edges.forEach(e => {
+                data.edges.forEach(function(e) {
                     elements.push({
                         data: {
                             source: e.source,
@@ -610,7 +611,9 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     });
                 });
 
-                const cy = cytoscape({
+                if (cy) cy.destroy();
+
+                cy = cytoscape({
                     container: document.getElementById('cy'),
                     elements: elements,
                     style: [
@@ -621,10 +624,12 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                                 'text-valign': 'bottom',
                                 'text-halign': 'center',
                                 'color': '#d1d5db',
-                                'font-size': '10px',
-                                'text-margin-y': 8,
-                                'width': 35,
-                                'height': 35,
+                                'font-size': '9px',
+                                'text-margin-y': 6,
+                                'text-wrap': 'wrap',
+                                'text-max-width': '80px',
+                                'width': 30,
+                                'height': 30,
                                 'shape': 'data(shape)',
                             }
                         },
@@ -632,12 +637,13 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                             selector: 'node[?is_center]',
                             style: {
                                 'background-color': '#3b82f6',
-                                'width': 50,
-                                'height': 50,
+                                'width': 45,
+                                'height': 45,
                                 'border-width': 3,
                                 'border-color': '#60a5fa',
-                                'font-size': '12px',
+                                'font-size': '11px',
                                 'font-weight': 'bold',
+                                'text-max-width': '100px',
                             }
                         },
                         {
@@ -677,27 +683,45 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                             style: { 'background-color': '#ec4899' }
                         },
                         {
+                            selector: 'node[shape = "barrel"]',
+                            style: { 'background-color': '#84cc16' }
+                        },
+                        {
+                            selector: 'node[shape = "round-hexagon"]',
+                            style: { 'background-color': '#06b6d4' }
+                        },
+                        {
                             selector: 'edge',
                             style: {
-                                'label': 'data(label)',
-                                'color': '#6b7280',
-                                'font-size': '8px',
                                 'line-color': '#4b5563',
                                 'target-arrow-color': '#4b5563',
                                 'target-arrow-shape': 'triangle',
                                 'curve-style': 'bezier',
                                 'width': 1.5,
+                            }
+                        },
+                        {
+                            selector: 'edge.hover-label',
+                            style: {
+                                'label': 'data(label)',
+                                'color': '#9ca3af',
+                                'font-size': '8px',
                                 'text-rotation': 'autorotate',
                                 'text-margin-y': -8,
+                                'line-color': '#6b7280',
+                                'target-arrow-color': '#6b7280',
+                                'width': 2,
                             }
                         },
                     ],
                     layout: {
                         name: 'cose',
                         animate: false,
-                        padding: 40,
-                        nodeRepulsion: 8000,
-                        idealEdgeLength: 100,
+                        padding: 50,
+                        nodeRepulsion: function() { return 15000; },
+                        idealEdgeLength: function() { return 150; },
+                        nodeOverlap: 20,
+                        gravity: 0.4,
                     },
                     userZoomingEnabled: true,
                     userPanningEnabled: true,
@@ -705,29 +729,118 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
                     maxZoom: 2,
                 });
 
+                // Click node to navigate
                 cy.on('tap', 'node', function(evt) {
-                    const url = evt.target.data('url');
+                    var url = evt.target.data('url');
                     if (url) window.location.href = url;
                 });
 
+                // Node hover: highlight + tooltip
                 cy.on('mouseover', 'node', function(evt) {
-                    evt.target.style('border-width', 3);
-                    evt.target.style('border-color', '#60a5fa');
+                    var node = evt.target;
+                    node.style('border-width', 3);
+                    node.style('border-color', '#60a5fa');
+                    // Show tooltip
+                    tooltipName.textContent = node.data('fullName');
+                    tooltipType.textContent = node.data('type');
+                    // Find connected edge labels
+                    var rels = node.connectedEdges().map(function(e) { return e.data('label'); }).filter(Boolean);
+                    if (rels.length > 0) {
+                        tooltipRel.textContent = rels.join(', ');
+                        tooltipRel.classList.remove('hidden');
+                    } else {
+                        tooltipRel.classList.add('hidden');
+                    }
+                    tooltip.classList.remove('hidden');
+                    var pos = node.renderedPosition();
+                    var containerRect = document.getElementById('cy').getBoundingClientRect();
+                    var tx = Math.min(pos.x + 15, containerRect.width - 260);
+                    var ty = Math.max(pos.y - 50, 5);
+                    tooltip.style.left = tx + 'px';
+                    tooltip.style.top = ty + 'px';
                 });
                 cy.on('mouseout', 'node', function(evt) {
                     if (!evt.target.data('is_center')) {
                         evt.target.style('border-width', 0);
                     }
+                    tooltip.classList.add('hidden');
                 });
+
+                // Edge hover: show label
+                cy.on('mouseover', 'edge', function(evt) {
+                    evt.target.addClass('hover-label');
+                });
+                cy.on('mouseout', 'edge', function(evt) {
+                    evt.target.removeClass('hover-label');
+                });
+
+                // Dynamic height based on node count + fit
+                var count = cy.nodes().length;
+                var h = Math.max(250, Math.min(450, count * 35 + 80));
+                document.getElementById('cy').style.height = h + 'px';
+                cy.resize();
+                cy.fit(30);
+
+                // Apply current filter state
+                applyFilters();
+
+                graphInitialized = true;
             });
+    }
+
+    // Filter toggles
+    function applyFilters() {
+        if (!cy) return;
+        document.querySelectorAll('.graph-filter').forEach(function(btn) {
+            var shape = btn.dataset.entity;
+            var active = btn.classList.contains('active');
+            if (active) {
+                cy.nodes('[shape = "' + shape + '"][!is_center]').show();
+            } else {
+                cy.nodes('[shape = "' + shape + '"][!is_center]').hide();
+            }
+        });
+    }
+
+    document.querySelectorAll('.graph-filter').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            btn.classList.toggle('active');
+            var color = btn.dataset.color;
+            if (btn.classList.contains('active')) {
+                btn.style.background = 'rgba(' + hexToRgb(color) + ',0.2)';
+                btn.style.borderColor = color;
+                btn.style.color = '';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.borderColor = '#374151';
+                btn.style.color = '#6b7280';
+            }
+            applyFilters();
+        });
+    });
+
+    function hexToRgb(hex) {
+        var r = parseInt(hex.slice(1, 3), 16);
+        var g = parseInt(hex.slice(3, 5), 16);
+        var b = parseInt(hex.slice(5, 7), 16);
+        return r + ',' + g + ',' + b;
+    }
+
+    // Extended network toggle
+    var extToggle = document.getElementById('extended-toggle');
+    if (extToggle) {
+        extToggle.addEventListener('change', function() {
+            graphInitialized = false;
+            initGraph(extToggle.checked);
+        });
     }
 
     // Lazy-init: if already open (desktop), init immediately; otherwise on toggle
     if (detailsEl.open) {
-        initGraph();
+        initGraph(false);
     }
-    detailsEl.addEventListener('toggle', () => {
-        if (detailsEl.open) initGraph();
+    detailsEl.addEventListener('toggle', function() {
+        if (detailsEl.open && !graphInitialized) initGraph(false);
     });
 })();
 </script>

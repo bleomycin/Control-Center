@@ -1,3 +1,4 @@
+{% if overdue_tasks %}
 <div class="bg-gray-800 rounded-lg border border-gray-700">
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-red-400 uppercase tracking-wide">Overdue Tasks</h2>
@@ -18,8 +19,15 @@
                 <p class="text-xs text-red-400 mt-1">Due {{ task.due_date|date:"M j" }}</p>
             </div>
         </a>
-        {% empty %}
-        <p class="px-4 py-6 text-sm text-gray-500 text-center">No overdue tasks</p>
         {% endfor %}
     </div>
 </div>
+{% else %}
+<div class="bg-gray-800/50 rounded-lg border border-gray-700 px-4 py-2.5 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        <span class="text-sm text-gray-400">Overdue Tasks</span>
+    </div>
+    <span class="text-xs text-gray-500">0</span>
+</div>
+{% endif %}
