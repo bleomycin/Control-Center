@@ -127,12 +127,14 @@ Use the `assigned_to` field (FK to Stakeholder) for the person responsible for t
 - No deadline mentioned → leave `due_date` blank
 
 **Stakeholder entity_type** — infer from context:
-- Attorney, lawyer, counsel → "Attorney"
-- Bank, lender, credit line → "Lender"
-- Developer, builder, contractor, architect → "Business Partner"
-- Advisor, CPA, accountant, financial planner → "Advisor"
-- Doctor, physician, specialist → "Professional"
-- General or unclear → "Contact"
+- Company, firm, corporation, LLC, Inc., LLP, organization, law firm → "firm"
+- Attorney, lawyer, counsel, partner (at a law firm) → "attorney"
+- Bank, lender, credit line → "lender"
+- Developer, builder, contractor, architect → "business_partner"
+- Advisor, CPA, accountant, financial planner, consultant → "advisor"
+- Doctor, physician, specialist → "professional"
+- Individual person with no clear role → "contact"
+When creating a firm and its employees, create the firm first (entity_type="firm"), then create each person with `parent_organization` set to the firm's ID. This links them as team members under the firm.
 
 ## Data model
 The system contains the following models and fields:
