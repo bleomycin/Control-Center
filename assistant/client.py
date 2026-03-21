@@ -427,27 +427,47 @@ def stream_message(session, user_text):
     # Text tokens are yielded live during the final (non-tool) response.
     # During tool iterations, any brief text is cleared before tools execute.
     for iteration in range(MAX_TOOL_ITERATIONS):
-        try:
-            with client.messages.stream(
-                model=model_name,
-                max_tokens=max_tokens,
-                system=system_prompt,
-                tools=TOOL_DEFINITIONS,
-                messages=api_messages,
-            ) as stream:
-                # Stream text tokens to client as they arrive
-                for event in stream:
-                    if event.type == "content_block_delta":
-                        if event.delta.type == "text_delta":
-                            yield sse("token", {"text": event.delta.text})
+        # Retry loop for transient API errors (overloaded, rate limit)
+        response = None
+        for attempt in range(5):
+            try:
+                with client.messages.stream(
+                    model=model_name,
+                    max_tokens=max_tokens,
+                    system=system_prompt,
+                    tools=TOOL_DEFINITIONS,
+                    messages=api_messages,
+                ) as stream:
+                    # Stream text tokens to client as they arrive
+                    for event in stream:
+                        if event.type == "content_block_delta":
+                            if event.delta.type == "text_delta":
+                                yield sse("token", {"text": event.delta.text})
 
-                response = stream.get_final_message()
-        except anthropic.APIError as e:
-            logger.error(f"Anthropic API error: {e}")
-            ChatMessage.objects.create(
-                session=session, role="assistant", content=f"API error: {e}",
-            )
-            yield sse("error", {"message": str(e)})
+                    response = stream.get_final_message()
+                break  # Success — exit retry loop
+            except anthropic.APIStatusError as e:
+                if (e.status_code >= 500 or e.status_code == 429) and attempt < 4:
+                    wait = 2 ** attempt  # 1, 2, 4, 8, 16 seconds
+                    logger.warning(f"Anthropic API {e.status_code} (attempt {attempt + 1}/5), retrying in {wait}s")
+                    import time
+                    time.sleep(wait)
+                    continue
+                # Final attempt or non-retryable error
+                logger.error(f"Anthropic API error: {e}")
+                ChatMessage.objects.create(
+                    session=session, role="assistant",
+                    content="The AI service is temporarily unavailable. Please try again in a minute.",
+                )
+                yield sse("error", {"message": "Service temporarily unavailable. Please try again."})
+                return
+            except anthropic.APIError as e:
+                logger.error(f"Anthropic API error: {e}")
+                ChatMessage.objects.create(
+                    session=session, role="assistant", content=f"API error: {e}",
+                )
+                yield sse("error", {"message": str(e)})
+                return
             return
 
         has_tool_use = any(block.type == "tool_use" for block in response.content)
