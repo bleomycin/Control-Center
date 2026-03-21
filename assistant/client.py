@@ -268,7 +268,7 @@ def send_message(session, user_text):
     model_name = assistant_settings.model or DEFAULT_MODEL
     max_tokens = assistant_settings.max_tokens or DEFAULT_MAX_TOKENS
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, max_retries=5)
     system_prompt = _build_system_prompt()
 
     for iteration in range(MAX_TOOL_ITERATIONS):
@@ -417,7 +417,7 @@ def stream_message(session, user_text):
     model_name = assistant_settings.model or DEFAULT_MODEL
     max_tokens = assistant_settings.max_tokens or DEFAULT_MAX_TOKENS
 
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, max_retries=5)
     system_prompt = _build_system_prompt()
 
     all_messages = session.messages.all()
