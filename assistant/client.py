@@ -126,8 +126,8 @@ Use the `assigned_to` field (FK to Stakeholder) for the person responsible for t
 - "ASAP" with no date → tomorrow
 - No deadline mentioned → leave `due_date` blank
 
-**Stakeholder entity_type** — infer from context:
-- Company, firm, corporation, LLC, Inc., LLP, organization, law firm → "firm"
+**Stakeholder entity_type** — valid values are listed in the system state below. Use these inference rules:
+- Company, firm, corporation, LLC, Inc., LLP, organization → "firm"
 - Attorney, lawyer, counsel, partner (at a law firm) → "attorney"
 - Bank, lender, credit line → "lender"
 - Developer, builder, contractor, architect → "business_partner"
@@ -165,6 +165,13 @@ def _build_system_prompt():
             f"that is the user. Messages from {owner_name} are first-person context. "
             f"Extract their commitments as personal tasks (direction=personal, no assigned_to)."
         )
+
+    # Include valid entity types from DB (stays in sync with Settings > Manage Choices)
+    from dashboard.choices import get_choices
+    entity_types = get_choices("entity_type")
+    if entity_types:
+        type_list = ", ".join(f'"{val}"' for val, _label in entity_types)
+        stats_lines.append(f"Valid stakeholder entity_type values: {type_list}")
 
     for key, value in stats.items():
         label = key.replace("_", " ").title()
