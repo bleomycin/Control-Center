@@ -28,8 +28,15 @@ class AssistantSettingsForm(TailwindFormMixin, forms.ModelForm):
         max_length=255,
         required=False,
         widget=forms.PasswordInput(attrs={"placeholder": "sk-ant-..."}),
-        help_text="Your Anthropic API key. Leave blank to use the ANTHROPIC_API_KEY environment variable.",
+        help_text="Your Anthropic API key. Leave blank to keep the current key (or use the ANTHROPIC_API_KEY environment variable).",
     )
+
+    def clean_api_key(self):
+        """Preserve existing key when the password field is submitted empty."""
+        key = self.cleaned_data.get("api_key", "")
+        if not key and self.instance and self.instance.pk:
+            return self.instance.api_key
+        return key
 
     class Meta:
         model = AssistantSettings
