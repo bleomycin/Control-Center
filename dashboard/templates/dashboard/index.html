@@ -26,7 +26,7 @@
 <!-- Three-column layout: independent stacking, no row-height coupling -->
 <div class="lg:flex lg:gap-6 space-y-4 lg:space-y-0 mb-6">
     <!-- Left Column: Action items -->
-    <div class="lg:w-1/3 space-y-4">
+    <div class="lg:w-1/3 min-w-0 space-y-4">
         <div class="{% if not overdue_tasks %}hidden lg:block{% endif %}">
             {% include "dashboard/partials/_overdue_tasks.html" %}
         </div>
@@ -42,7 +42,7 @@
     </div>
 
     <!-- Middle Column: Status -->
-    <div class="lg:w-1/3 space-y-4">
+    <div class="lg:w-1/3 min-w-0 space-y-4">
         <div class="{% if not active_legal_matters %}hidden lg:block{% endif %}">
             {% include "dashboard/partials/_active_legal_matters.html" %}
         </div>
@@ -55,7 +55,7 @@
     </div>
 
     <!-- Right Column: Overview -->
-    <div class="lg:w-1/3 space-y-4">
+    <div class="lg:w-1/3 min-w-0 space-y-4">
         {% include "dashboard/partials/_asset_summary.html" %}
         <div class="{% if not recent_activity %}hidden lg:block{% endif %}">
             {% include "dashboard/partials/_recent_activity.html" %}
