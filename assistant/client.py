@@ -18,8 +18,11 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 25
 MAX_MESSAGES_TO_SEND = 50
+CACHE_BREAKPOINT_INTERVAL = 15  # Add cache breakpoint every N messages
+CACHE_CONTROL = {"type": "ephemeral"}
 DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8192
+TITLE_MODEL = "claude-haiku-4-5-20251001"
 
 SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a personal management system. You help the user manage their stakeholders, legal matters, assets, tasks, notes, cash flow, healthcare records, documents, and checklists.
 
@@ -198,6 +201,10 @@ def _build_api_messages(chat_messages):
 
     Messages with tool_data are formatted as content blocks.
     Plain text messages use simple string content.
+
+    Adds explicit cache_control breakpoints every CACHE_BREAKPOINT_INTERVAL
+    messages to ensure cache hits on long conversations (the API has a
+    20-block lookback limit for automatic caching).
     """
     api_messages = []
 
@@ -214,7 +221,29 @@ def _build_api_messages(chat_messages):
                 "content": msg.content,
             })
 
-    return api_messages[-MAX_MESSAGES_TO_SEND:]
+    truncated = api_messages[-MAX_MESSAGES_TO_SEND:]
+
+    # Add cache breakpoints at regular intervals for long conversations.
+    # This prevents cache misses when the conversation exceeds the
+    # 20-block lookback window. Max 4 explicit breakpoints allowed.
+    if len(truncated) > CACHE_BREAKPOINT_INTERVAL:
+        breakpoints_added = 0
+        for i in range(CACHE_BREAKPOINT_INTERVAL - 1, len(truncated) - 1, CACHE_BREAKPOINT_INTERVAL):
+            if breakpoints_added >= 3:  # Reserve 1 for automatic on last block
+                break
+            msg = truncated[i]
+            content = msg.get("content")
+            # Only add breakpoints to plain text messages (not tool_data blocks)
+            if isinstance(content, str):
+                truncated[i] = {
+                    "role": msg["role"],
+                    "content": [
+                        {"type": "text", "text": content, "cache_control": CACHE_CONTROL},
+                    ],
+                }
+                breakpoints_added += 1
+
+    return truncated
 
 
 def _strip_empty(obj):
@@ -225,6 +254,60 @@ def _strip_empty(obj):
     if isinstance(obj, list):
         return [_strip_empty(item) for item in obj]
     return obj
+
+
+def _tool_summary(name, tool_input):
+    """One-line summary of tool call parameters for streaming UI."""
+    if name == "search":
+        q = tool_input.get("query", "")
+        s = f'"{q[:40]}"'
+        models = tool_input.get("models")
+        if models:
+            s += f", models={models}"
+        return s
+    elif name == "query":
+        s = tool_input.get("model_name", "")
+        filters = tool_input.get("filters") or {}
+        if filters:
+            items = list(filters.items())[:2]
+            s += ", " + ", ".join(f"{k}={v}" for k, v in items)
+        return s
+    elif name == "get_record":
+        return f'{tool_input.get("model_name", "")} #{tool_input.get("record_id", "")}'
+    elif name in ("create_record", "update_record"):
+        s = tool_input.get("model_name", "")
+        if tool_input.get("dry_run"):
+            s += ", dry_run"
+        if name == "update_record":
+            s = f'{s} #{tool_input.get("record_id", "")}'
+        return s
+    elif name == "delete_record":
+        return f'{tool_input.get("model_name", "")} #{tool_input.get("record_id", "")}'
+    return ""
+
+
+def _result_summary(name, tool_input, result):
+    """Brief result description for streaming UI."""
+    if isinstance(result, dict):
+        if "error" in result:
+            return str(result["error"])[:60]
+        if name == "search":
+            return f'{result.get("count", 0)} result(s)'
+        elif name == "query":
+            return f'{result.get("count", 0)} record(s)'
+        elif name == "get_record":
+            return "found"
+        elif name == "create_record":
+            return "preview ready" if result.get("dry_run") else "created"
+        elif name == "update_record":
+            return "preview ready" if result.get("dry_run") else "updated"
+        elif name == "delete_record":
+            return "preview ready" if result.get("dry_run") else "deleted"
+        elif name == "list_models":
+            return f'{result.get("count", 0)} models'
+        elif name == "summarize":
+            return "done"
+    return "done"
 
 
 def _execute_tool(name, tool_input):
@@ -239,6 +322,37 @@ def _execute_tool(name, tool_input):
     except Exception as e:
         logger.exception(f"Tool {name} failed: {e}")
         return json.dumps({"error": str(e)})
+
+
+def _generate_title(client, user_text, assistant_text):
+    """Generate a concise session title using a fast model.
+
+    Falls back to truncated user text on any failure.
+    """
+    try:
+        response = client.messages.create(
+            model=TITLE_MODEL,
+            max_tokens=20,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Generate a 3-6 word title for this conversation. "
+                    "Return ONLY the title, nothing else.\n\n"
+                    f"User: {user_text[:200]}\n"
+                    f"Assistant: {assistant_text[:200]}"
+                ),
+            }],
+        )
+        title = response.content[0].text.strip().strip('"').strip("'")
+        if title:
+            return title[:80]
+    except Exception:
+        logger.debug("Title generation failed, using fallback")
+
+    title = user_text[:60]
+    if len(user_text) > 60:
+        title = title[:57] + "..."
+    return title
 
 
 def send_message(session, user_text):
@@ -287,6 +401,7 @@ def send_message(session, user_text):
             response = client.messages.create(
                 model=model_name,
                 max_tokens=max_tokens,
+                cache_control=CACHE_CONTROL,
                 system=system_prompt,
                 tools=TOOL_DEFINITIONS,
                 messages=api_messages,
@@ -370,12 +485,9 @@ def send_message(session, user_text):
             )
             new_messages.append(assistant_msg)
 
-            # Update session title from first exchange
+            # Update session title from first exchange (AI-generated)
             if session.title == "New Chat" and final_text:
-                title = user_text[:60]
-                if len(user_text) > 60:
-                    title = title[:57] + "..."
-                session.title = title
+                session.title = _generate_title(client, user_text, final_text)
                 session.save(update_fields=["title", "updated_at"])
 
             return new_messages
@@ -445,6 +557,7 @@ def stream_message(session, user_text):
                 with client.messages.stream(
                     model=model_name,
                     max_tokens=max_tokens,
+                    cache_control=CACHE_CONTROL,
                     system=system_prompt,
                     tools=TOOL_DEFINITIONS,
                     messages=api_messages,
@@ -507,14 +620,25 @@ def stream_message(session, user_text):
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    yield sse("tool_start", {"name": block.name})
+                    summary = _tool_summary(block.name, block.input)
+                    yield sse("tool_start", {"name": block.name, "summary": summary})
                     result_str = _execute_tool(block.name, block.input)
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": result_str,
                     })
-                    yield sse("tool_done", {"name": block.name})
+                    # Parse result for summary, truncate large output
+                    try:
+                        result_obj = json.loads(result_str)
+                    except (json.JSONDecodeError, TypeError):
+                        result_obj = {}
+                    r_summary = _result_summary(block.name, block.input, result_obj)
+                    if len(result_str) > 2000:
+                        output = {"_truncated": True, "preview": result_str[:2000]}
+                    else:
+                        output = result_obj
+                    yield sse("tool_done", {"name": block.name, "result_summary": r_summary, "output": output})
 
             ChatMessage.objects.create(
                 session=session, role="user", content="",
@@ -535,13 +659,11 @@ def stream_message(session, user_text):
             session=session, role="assistant", content=final_text,
         )
 
-        # Update session title
+        # Update session title (AI-generated)
         if session.title == "New Chat" and final_text:
-            title = user_text[:60]
-            if len(user_text) > 60:
-                title = title[:57] + "..."
-            session.title = title
+            session.title = _generate_title(client, user_text, final_text)
             session.save(update_fields=["title", "updated_at"])
+            yield sse("title", {"title": session.title})
 
         yield sse("done", {"message_id": assistant_msg.pk})
         return

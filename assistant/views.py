@@ -24,11 +24,9 @@ def chat_page(request, session_id=None):
         return redirect("assistant:chat_session", session_id=session.pk)
 
     messages = session.messages.all()
-    # Filter to only display-worthy messages (skip tool_data-only messages)
-    display_messages = [
-        m for m in messages
-        if m.content or (m.tool_data and m.role == "assistant")
-    ]
+    # Only show messages with visible content (tool-only messages served
+    # their purpose during streaming and don't need permanent display)
+    display_messages = [m for m in messages if m.content]
 
     form = ChatInputForm()
 
@@ -53,11 +51,7 @@ def send_message_view(request, session_id):
 
     new_messages = assistant_client.send_message(session, user_text)
 
-    # Filter to display-worthy messages
-    display_messages = [
-        m for m in new_messages
-        if m.content or (m.tool_data and m.role == "assistant")
-    ]
+    display_messages = [m for m in new_messages if m.content]
 
     response = render(request, "assistant/partials/_message_list.html", {
         "chat_messages": display_messages,
@@ -131,6 +125,50 @@ def rename_session(request, session_id):
     return redirect("assistant:chat_session", session_id=session.pk)
 
 
+def retry_message(request, session_id, message_id):
+    """Retry from an assistant message: delete it and everything after, return preceding user text."""
+    if request.method != "POST":
+        return HttpResponse(status=405)
+
+    session = get_object_or_404(ChatSession, pk=session_id)
+    msg = get_object_or_404(ChatMessage, pk=message_id, session=session)
+
+    if msg.role != "assistant":
+        return JsonResponse({"error": "Can only retry assistant messages"}, status=400)
+
+    # Find the user message immediately before this assistant message
+    user_msg = (
+        session.messages.filter(role="user", created_at__lt=msg.created_at)
+        .order_by("-created_at")
+        .first()
+    )
+    user_text = user_msg.content if user_msg else ""
+
+    # Delete this message and everything after it
+    session.messages.filter(created_at__gte=msg.created_at).delete()
+
+    return JsonResponse({"user_text": user_text, "action": "retry"})
+
+
+def edit_message(request, session_id, message_id):
+    """Edit a user message: delete it and everything after, return its text."""
+    if request.method != "POST":
+        return HttpResponse(status=405)
+
+    session = get_object_or_404(ChatSession, pk=session_id)
+    msg = get_object_or_404(ChatMessage, pk=message_id, session=session)
+
+    if msg.role != "user":
+        return JsonResponse({"error": "Can only edit user messages"}, status=400)
+
+    user_text = msg.content
+
+    # Delete this message and everything after it
+    session.messages.filter(created_at__gte=msg.created_at).delete()
+
+    return JsonResponse({"user_text": user_text, "action": "edit"})
+
+
 def prune_history(request, session_id):
     """Delete older messages, keeping the last N."""
     session = get_object_or_404(ChatSession, pk=session_id)
@@ -142,10 +180,7 @@ def prune_history(request, session_id):
     ChatMessage.objects.filter(pk__in=message_ids).delete()
 
     messages = session.messages.all()
-    display_messages = [
-        m for m in messages
-        if m.content or (m.tool_data and m.role == "assistant")
-    ]
+    display_messages = [m for m in messages if m.content]
 
     return render(request, "assistant/partials/_message_list.html", {
         "chat_messages": display_messages,
