@@ -52,6 +52,7 @@ SEARCH_FIELDS = {
     "Condition": ["name"],
     "Tag": ["name"],
     "Folder": ["name"],
+    "ScratchPad": ["title", "content", "participants_text"],
     "Checklist": ["name"],
     "ChecklistItem": ["title"],
     "FollowUp": ["notes_text", "response_notes"],

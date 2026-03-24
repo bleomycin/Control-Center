@@ -16,7 +16,7 @@ from assets.models import (
 from legal.models import CaseLog, LegalChecklistItem, LegalCommunication, LegalMatter, Evidence
 from tasks.models import Task, FollowUp
 from cashflow.models import CashFlowEntry
-from notes.models import Folder, Note, Tag
+from notes.models import Folder, Note, ScratchPad, Tag
 from healthcare.models import (
     Provider, Condition, Prescription, Supplement, TestResult,
     Visit, Advice, Appointment,
@@ -64,7 +64,7 @@ SECTION_DELETION_ORDER = {
         "healthcare.testresult", "healthcare.supplement", "healthcare.prescription",
         "healthcare.condition", "healthcare.provider",
     ],
-    "notes": ["notes.note", "notes.tag", "notes.folder"],
+    "notes": ["notes.note", "notes.tag", "notes.folder", "notes.scratchpad"],
     "cashflow": ["cashflow.cashflowentry"],
     "tasks": ["tasks.followup", "tasks.task"],
     "legal": ["legal.legalcommunication", "legal.evidence", "legal.legalmatter"],
@@ -1739,10 +1739,32 @@ class Command(BaseCommand):
                 if tag_slug in tags:
                     note.tags.add(tags[tag_slug])
 
+        # Scratch pads
+        self.stdout.write("Creating scratch pads...")
+        scratchpad_data = [
+            ("Call with Marcus - Holston update", "draft", today - timedelta(days=1),
+             "Marcus called re: Holston eviction\n- hearing set for April 8\n- need bank stmts last 12mo\n- judge typically rules in 3-4 weeks\n- total exposure ~$7700\n- Marcus wants retainer topped up before hearing\n\nTODO:\n- pull bank stmts\n- send to Marcus\n- check if ins covers legal fees",
+             "Marcus Reed"),
+            ("Property walk - Cedar Lane", "processed", today - timedelta(days=7),
+             "walked cedar lane w/ Sandra\n- fence is clearly on our side per survey\n- neighbor's fence post is rotting need photos\n- asked Sandra to get 3rd party surveyor quote\n- ~$2k for new survey\n- mediation date TBD\n\nfollow up w/ Sandra on surveyor",
+             "Sandra Liu"),
+            ("Derek portfolio call", "draft", today,
+             "Derek - quarterly check-in\n- BTC near 70k target\n- trim 10% equities -> bonds\n- max IRA before april 15\n- review muni bond ladder\n- tax loss harvesting opp in taxable acct\n\nasks:\n- send me updated allocation breakdown\n- what's the fee on the new bond fund?",
+             "Derek Vasquez"),
+        ]
+        scratchpad_pks = []
+        for title, status, meeting_date, content, participants in scratchpad_data:
+            pad = ScratchPad.objects.create(
+                title=title, status=status, meeting_date=meeting_date,
+                content=content, participants_text=participants,
+            )
+            scratchpad_pks.append(pad.pk)
+
         return {
             "notes.tag": [t.pk for t in tags.values()],
             "notes.folder": [f.pk for f in folders.values()],
             "notes.note": note_pks,
+            "notes.scratchpad": scratchpad_pks,
         }
 
     # -----------------------------------------------------------------------

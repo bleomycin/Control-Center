@@ -1,0 +1,433 @@
+{% extends "base.html" %}
+{% block title %}Scratch Pad — Control Center{% endblock %}
+
+{% block page_context %}Scratch Pad: {{ pad.title }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    {# Header #}
+    <div class="flex items-center justify-between mb-4 gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+            <a href="{% url 'notes:list' %}" class="text-gray-400 hover:text-white transition-colors shrink-0" title="Back to Notes">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                </svg>
+            </a>
+            <h1 class="text-xl font-bold text-white truncate">Scratch Pad</h1>
+            <span id="save-status" class="flex items-center gap-1.5 text-xs text-gray-500 shrink-0">
+                <span id="save-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+                <span id="save-text">Ready</span>
+            </span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+            <button onclick="processWithAssistant()" class="px-3 py-1.5 text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white rounded-md transition-colors flex items-center gap-1.5" title="Process notes with AI Assistant">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                </svg>
+                <span class="hidden sm:inline">Process</span>
+            </button>
+            <a href="{% url 'notes:scratchpad_new' %}" class="px-3 py-1.5 text-xs font-medium bg-green-600 hover:bg-green-500 text-white rounded-md transition-colors flex items-center gap-1.5" title="New scratch pad">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                <span class="hidden sm:inline">New</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-4">
+        {# Sidebar: recent pads #}
+        <div class="lg:w-56 shrink-0 order-2 lg:order-1">
+            <div class="bg-gray-800 rounded-lg border border-gray-700">
+                {# Desktop: static header #}
+                <div class="hidden lg:block px-3 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                    Pads ({{ recent_pads|length }})
+                </div>
+                {# Mobile: collapsible toggle #}
+                <button onclick="togglePadList()" class="lg:hidden w-full flex items-center justify-between px-3 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-200 transition-colors">
+                    <span>Pads ({{ recent_pads|length }})</span>
+                    <svg id="pad-list-chevron" class="w-4 h-4 transition-transform -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </button>
+                <div id="pad-list" class="hidden lg:block border-t border-gray-700 max-h-[60vh] overflow-y-auto">
+                    {% for p in recent_pads %}
+                    <a href="{% url 'notes:scratchpad_edit' p.pk %}"
+                       class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-700/50 transition-colors border-b border-gray-700/50 last:border-b-0 {% if p.pk == pad.pk %}bg-gray-700/50 text-white{% else %}text-gray-400{% endif %}">
+                        <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if p.status == 'draft' %}bg-blue-400{% elif p.status == 'processed' %}bg-green-400{% else %}bg-gray-600{% endif %}"></span>
+                        <span class="truncate flex-1">{{ p.title }}</span>
+                        <span class="text-[10px] text-gray-600 shrink-0">{{ p.updated_at|date:"M j" }}</span>
+                    </a>
+                    {% empty %}
+                    <p class="px-3 py-3 text-xs text-gray-600 text-center">No pads yet</p>
+                    {% endfor %}
+                    {% if archived_pads %}
+                    <button onclick="document.getElementById('archived-list').classList.toggle('hidden');this.querySelector('svg').classList.toggle('rotate-0');this.querySelector('svg').classList.toggle('-rotate-90')"
+                            class="w-full flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-400 transition-colors border-t border-gray-700">
+                        <span>Archived ({{ archived_pads|length }})</span>
+                        <svg class="w-3 h-3 transition-transform -rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div id="archived-list" class="hidden">
+                        {% for p in archived_pads %}
+                        <a href="{% url 'notes:scratchpad_edit' p.pk %}"
+                           class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-700/50 transition-colors border-b border-gray-700/50 last:border-b-0 {% if p.pk == pad.pk %}bg-gray-700/50 text-white{% else %}text-gray-500{% endif %}">
+                            <span class="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-600"></span>
+                            <span class="truncate flex-1">{{ p.title }}</span>
+                            <span class="text-[10px] text-gray-600 shrink-0">{{ p.updated_at|date:"M j" }}</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {# Editor #}
+        <div class="flex-1 order-1 lg:order-2">
+            <div class="bg-gray-800 rounded-lg border border-gray-700">
+                {# Title & metadata bar #}
+                <div class="px-4 py-3 border-b border-gray-700 space-y-2">
+                    <input type="text" id="pad-title" value="{{ pad.title }}"
+                           placeholder="Title..."
+                           class="w-full bg-transparent text-lg font-semibold text-white placeholder-gray-600 border-none focus:outline-none focus:ring-0 p-0">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <div class="flex items-center gap-1.5">
+                            <label class="text-xs text-gray-500">Date:</label>
+                            <input type="date" id="pad-date" value="{{ pad.meeting_date|date:'Y-m-d' }}"
+                                   class="bg-gray-700 border border-gray-600 rounded px-2 py-0.5 text-xs text-gray-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-xs px-1.5 py-0.5 rounded {% if pad.status == 'draft' %}bg-blue-900/40 text-blue-300{% elif pad.status == 'processed' %}bg-green-900/40 text-green-300{% else %}bg-gray-700 text-gray-500{% endif %}">{{ pad.get_status_display }}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 w-full sm:w-auto sm:flex-1 sm:min-w-0">
+                            <label class="text-xs text-gray-500 shrink-0">Who:</label>
+                            <input type="text" id="pad-participants" value="{{ pad.participants_text }}"
+                                   placeholder="Names of participants..."
+                                   class="flex-1 min-w-0 bg-gray-700 border border-gray-600 rounded px-2 py-0.5 text-xs text-gray-300 placeholder-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                {# Content area #}
+                <div class="p-4">
+                    <textarea id="pad-content"
+                              placeholder="Start typing your notes..."
+                              class="w-full bg-transparent text-gray-200 placeholder-gray-600 border-none focus:outline-none focus:ring-0 p-0 resize-none text-sm leading-relaxed"
+                              style="min-height: 50vh;">{{ pad.content }}</textarea>
+                </div>
+
+                {# Footer actions #}
+                <div class="px-4 py-3 border-t border-gray-700 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <form method="post" action="{% url 'notes:scratchpad_archive' pad.pk %}" class="inline"
+                              onsubmit="window._padNavigating=true">
+                            {% csrf_token %}
+                            <button type="submit" class="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                                {% if pad.status == 'archived' %}Unarchive{% else %}Archive{% endif %}
+                            </button>
+                        </form>
+                        <span class="text-gray-700">|</span>
+                        <form method="post" action="{% url 'notes:scratchpad_delete' pad.pk %}" class="inline"
+                              onsubmit="if(!confirm('Delete this scratch pad? This cannot be undone.')){return false;}window._padNavigating=true">
+                            {% csrf_token %}
+                            <button type="submit" class="text-xs text-gray-500 hover:text-red-400 transition-colors">Delete</button>
+                        </form>
+                    </div>
+                    <span class="text-[10px] text-gray-600">Last saved: <span id="last-saved-time">{{ pad.updated_at|date:"M j, g:i A" }}</span></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // --- Config ---
+    var PAD_ID = {{ pad.pk }};
+    var SAVE_URL = "{% url 'notes:scratchpad_save' pad.pk %}";
+    var CSRF = "{{ csrf_token }}";
+    var LS_KEY = "scratchpad_" + PAD_ID;
+    var SERVER_UPDATED = "{{ pad.updated_at|date:'c' }}";
+    var SYNC_INTERVAL = 5000;
+    var DEBOUNCE_MS = 400;
+
+    // --- Elements ---
+    var titleEl = document.getElementById("pad-title");
+    var contentEl = document.getElementById("pad-content");
+    var dateEl = document.getElementById("pad-date");
+    var participantsEl = document.getElementById("pad-participants");
+    var dotEl = document.getElementById("save-dot");
+    var textEl = document.getElementById("save-text");
+    var lastSavedEl = document.getElementById("last-saved-time");
+
+    // --- State ---
+    var dirty = false;
+    var syncing = false;
+
+    // --- Status indicator ---
+    function setStatus(state) {
+        dotEl.className = "w-2 h-2 rounded-full";
+        if (state === "synced") {
+            dotEl.classList.add("bg-green-400");
+            textEl.textContent = "Saved";
+        } else if (state === "local") {
+            dotEl.classList.add("bg-yellow-400");
+            textEl.textContent = "Saved locally";
+        } else if (state === "syncing") {
+            dotEl.classList.add("bg-yellow-400", "animate-pulse");
+            textEl.textContent = "Saving...";
+        } else if (state === "error") {
+            dotEl.classList.add("bg-red-400");
+            textEl.textContent = "Save failed";
+        } else {
+            dotEl.classList.add("bg-gray-600");
+            textEl.textContent = "Ready";
+        }
+    }
+
+    // --- localStorage save ---
+    function saveLocal() {
+        var data = {
+            title: titleEl.value,
+            content: contentEl.value,
+            meeting_date: dateEl.value,
+            participants_text: participantsEl.value,
+            savedAt: new Date().toISOString()
+        };
+        try {
+            localStorage.setItem(LS_KEY, JSON.stringify(data));
+        } catch(e) {
+            // Storage full or unavailable — degrade gracefully
+        }
+        dirty = true;
+        setStatus("local");
+    }
+
+    // --- Debounced input handler ---
+    var inputTimer;
+    function onInput() {
+        clearTimeout(inputTimer);
+        inputTimer = setTimeout(saveLocal, DEBOUNCE_MS);
+    }
+
+    titleEl.addEventListener("input", onInput);
+    contentEl.addEventListener("input", onInput);
+    dateEl.addEventListener("change", onInput);
+    participantsEl.addEventListener("input", onInput);
+
+    // --- Auto-resize textarea ---
+    function autoResize() {
+        contentEl.style.height = "auto";
+        var newHeight = Math.max(contentEl.scrollHeight, window.innerHeight * 0.5);
+        contentEl.style.height = newHeight + "px";
+    }
+    contentEl.addEventListener("input", autoResize);
+
+    // --- Server sync ---
+    function syncToServer() {
+        if (!dirty || syncing) return;
+        syncing = true;
+        setStatus("syncing");
+
+        var payload = {
+            title: titleEl.value,
+            content: contentEl.value,
+            meeting_date: dateEl.value || null,
+            participants_text: participantsEl.value,
+            client_updated_at: new Date().toISOString()
+        };
+
+        fetch(SAVE_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": CSRF
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(function(resp) {
+            if (resp.ok) return resp.json();
+            throw new Error("Save failed: " + resp.status);
+        })
+        .then(function(data) {
+            dirty = false;
+            // Clear localStorage — server has latest
+            try { localStorage.removeItem(LS_KEY); } catch(e) {}
+            setStatus("synced");
+            // Update last saved time
+            var now = new Date();
+            lastSavedEl.textContent = now.toLocaleDateString("en-US", {month: "short", day: "numeric"}) + ", " +
+                now.toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit"});
+            SERVER_UPDATED = data.updated_at;
+        })
+        .catch(function() {
+            setStatus("error");
+            // Still saved locally
+            setTimeout(function() { if (dirty) setStatus("local"); }, 3000);
+        })
+        .finally(function() {
+            syncing = false;
+        });
+    }
+
+    // --- Periodic sync ---
+    setInterval(syncToServer, SYNC_INTERVAL);
+
+    // --- Visibility change: sync immediately when tab goes background ---
+    document.addEventListener("visibilitychange", function() {
+        if (document.hidden && dirty) {
+            saveLocal();  // Ensure localStorage is current
+            syncToServer();
+        }
+    });
+
+    // --- Before unload: save to localStorage and warn ---
+    window.addEventListener("beforeunload", function(e) {
+        if (dirty && !window._padNavigating) {
+            saveLocal();  // Ensure localStorage has latest
+            e.preventDefault();
+            e.returnValue = "";
+        }
+    });
+
+    // --- Recovery: check localStorage on load ---
+    (function recover() {
+        var saved;
+        try { saved = localStorage.getItem(LS_KEY); } catch(e) { return; }
+        if (!saved) return;
+
+        var data;
+        try { data = JSON.parse(saved); } catch(e) { return; }
+
+        var localTime = new Date(data.savedAt).getTime();
+        var serverTime = new Date(SERVER_UPDATED).getTime();
+
+        if (localTime > serverTime) {
+            // localStorage is newer — restore
+            titleEl.value = data.title || "";
+            contentEl.value = data.content || "";
+            if (data.meeting_date) dateEl.value = data.meeting_date;
+            if (data.participants_text) participantsEl.value = data.participants_text;
+            dirty = true;
+            setStatus("local");
+            autoResize();
+            // Sync to server immediately
+            setTimeout(syncToServer, 500);
+        } else {
+            // Server is current — clear stale local data
+            try { localStorage.removeItem(LS_KEY); } catch(e) {}
+        }
+    })();
+
+    // --- Process with Assistant ---
+    window._processDeferred = false;
+
+    window.processWithAssistant = function() {
+        var content = contentEl.value.trim();
+        if (!content) {
+            alert("Write some notes first before processing.");
+            return;
+        }
+
+        var padTitle = titleEl.value.trim() || "Meeting Notes";
+        var participants = participantsEl.value.trim();
+        var date = dateEl.value;
+
+        var prompt = "Process these meeting notes";
+        if (padTitle !== "Untitled") prompt += ' titled "' + padTitle + '"';
+        if (date) prompt += " from " + date;
+        if (participants) prompt += " (participants: " + participants + ")";
+        prompt += ":\n\n" + content;
+
+        // Open the drawer panel visually — no session created yet
+        var panel = document.getElementById("assistant-drawer");
+        panel.classList.remove("translate-x-full");
+        panel.classList.add("translate-x-0");
+        drawerOpen = true;
+        if (window.innerWidth >= 1024) {
+            document.querySelector("main").style.marginRight = "28rem";
+        }
+        var fab = document.getElementById("assistant-fab");
+        if (fab) fab.classList.add("hidden");
+
+        // Clear old messages visually
+        document.getElementById("drawer-message-list").innerHTML = "";
+        var emptyState = document.getElementById("drawer-empty-state");
+        if (emptyState) emptyState.style.display = "";
+        var sessionTitle = document.getElementById("drawer-session-title");
+        if (sessionTitle) sessionTitle.classList.add("hidden");
+
+        // Pre-fill input
+        setTimeout(function() {
+            var input = document.getElementById("drawer-chat-input");
+            if (input) {
+                input.value = prompt;
+                input.style.height = "auto";
+                input.style.height = Math.min(input.scrollHeight, 120) + "px";
+                input.focus();
+            }
+        }, 100);
+
+        // Flag: defer session creation until user actually sends
+        window._processDeferred = true;
+    };
+
+    // --- Toggle pad list (mobile) ---
+    window.togglePadList = function() {
+        var list = document.getElementById("pad-list");
+        var chevron = document.getElementById("pad-list-chevron");
+        list.classList.toggle("hidden");
+        if (list.classList.contains("hidden")) {
+            chevron.style.transform = "rotate(-90deg)";
+        } else {
+            chevron.style.transform = "rotate(0deg)";
+        }
+    };
+
+    // Focus content on load for immediate typing
+    contentEl.focus();
+    autoResize();
+    setStatus("synced");
+})();
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Intercept drawer form submit: if process is deferred, create session on send
+// (Must be in extra_js so the drawer form exists in the DOM)
+(function() {
+    var form = document.getElementById("drawer-chat-form");
+    if (!form) return;
+    form.addEventListener("submit", function(e) {
+        if (!window._processDeferred) return;
+
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window._processDeferred = false;
+
+        var input = document.getElementById("drawer-chat-input");
+        var text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+        input.style.height = "auto";
+
+        // NOW create the fresh session and send
+        drawerEngine = null;
+        document.getElementById("drawer-message-list").innerHTML = "";
+        initDrawer("?new=1");
+
+        // Wait for engine to initialize, then send the message
+        (function waitAndSend() {
+            if (drawerEngine) {
+                drawerEngine.doSend(text);
+            } else {
+                setTimeout(waitAndSend, 100);
+            }
+        })();
+    }, true);
+})();
+</script>
+{% endblock %}

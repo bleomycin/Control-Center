@@ -12,7 +12,7 @@ from django.views.generic import CreateView, DeleteView, DetailView, ListView, U
 from dashboard.choices import get_choice_label, get_choices
 from stakeholders.models import Stakeholder
 from .forms import AttachmentForm, FolderForm, LinkForm, NoteForm, QuickNoteForm, TagForm
-from .models import Attachment, Folder, Link, Note, Tag
+from .models import Attachment, Folder, Link, Note, ScratchPad, Tag
 
 
 def export_csv(request):
@@ -700,3 +700,98 @@ def folder_delete(request, pk):
     if request.method == "POST":
         folder.delete()
     return _folder_list_response(request)
+
+
+# --- Scratch Pad ---
+
+import json
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+
+
+def scratchpad_page(request, pk=None):
+    """Scratch pad editor. Opens the most recent draft or creates a new one."""
+    if pk:
+        pad = get_object_or_404(ScratchPad, pk=pk)
+    else:
+        pad = ScratchPad.objects.filter(status="draft").first()
+        if not pad:
+            pad = ScratchPad.objects.create()
+            return redirect("notes:scratchpad_edit", pk=pad.pk)
+        return redirect("notes:scratchpad_edit", pk=pad.pk)
+
+    recent_pads = ScratchPad.objects.exclude(status="archived")[:20]
+    archived_pads = ScratchPad.objects.filter(status="archived").order_by("-updated_at")[:20]
+    return render(request, "notes/scratchpad.html", {
+        "pad": pad,
+        "recent_pads": recent_pads,
+        "archived_pads": archived_pads,
+    })
+
+
+@require_POST
+def scratchpad_save(request, pk):
+    """Auto-save endpoint. Accepts JSON with title, content, client_updated_at."""
+    pad = get_object_or_404(ScratchPad, pk=pk)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    if "title" in data:
+        pad.title = data["title"] or "Untitled"
+    if "content" in data:
+        pad.content = data["content"]
+    if "participants_text" in data:
+        pad.participants_text = data["participants_text"]
+    if "meeting_date" in data:
+        pad.meeting_date = data["meeting_date"] or None
+
+    if data.get("client_updated_at"):
+        from django.utils.dateparse import parse_datetime
+        pad.client_updated_at = parse_datetime(data["client_updated_at"])
+
+    pad.save()
+    return JsonResponse({
+        "ok": True,
+        "updated_at": pad.updated_at.isoformat(),
+        "title": pad.title,
+    })
+
+
+def scratchpad_new(request):
+    """Create a new scratch pad and redirect to it."""
+    pad = ScratchPad.objects.create()
+    return redirect("notes:scratchpad_edit", pk=pad.pk)
+
+
+@require_POST
+def scratchpad_delete(request, pk):
+    """Delete a scratch pad."""
+    pad = get_object_or_404(ScratchPad, pk=pk)
+    pad.delete()
+    remaining = ScratchPad.objects.filter(status="draft").first()
+    if remaining:
+        return redirect("notes:scratchpad_edit", pk=remaining.pk)
+    return redirect("notes:scratchpad")
+
+
+@require_POST
+def scratchpad_archive(request, pk):
+    """Toggle archive status on a scratch pad."""
+    pad = get_object_or_404(ScratchPad, pk=pk)
+    if pad.status == "archived":
+        pad.status = "draft"
+    else:
+        pad.status = "archived"
+    pad.save(update_fields=["status"])
+    return redirect("notes:scratchpad")
+
+
+@require_POST
+def scratchpad_mark_processed(request, pk):
+    """Mark a scratch pad as processed."""
+    pad = get_object_or_404(ScratchPad, pk=pk)
+    pad.status = "processed"
+    pad.save(update_fields=["status"])
+    return JsonResponse({"ok": True, "status": "processed"})

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Note, Attachment, Folder, Link, Tag
+from .models import Note, Attachment, Folder, Link, ScratchPad, Tag
 
 
 class AttachmentInline(admin.TabularInline):
@@ -40,3 +40,10 @@ class TagAdmin(admin.ModelAdmin):
 class FolderAdmin(admin.ModelAdmin):
     list_display = ["name", "color", "sort_order", "created_at"]
     search_fields = ["name"]
+
+
+@admin.register(ScratchPad)
+class ScratchPadAdmin(admin.ModelAdmin):
+    list_display = ["title", "status", "meeting_date", "updated_at"]
+    list_filter = ["status"]
+    search_fields = ["title", "content"]

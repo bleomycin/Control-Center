@@ -8,26 +8,44 @@
         <a href="{% url 'dashboard:index' %}" class="text-xl font-bold text-white tracking-wide">Control Center</a>
     </div>
 
-    <!-- Quick Capture -->
-    <div class="px-3 pt-4 pb-2 shrink-0 space-y-2">
-        <button hx-get="{% url 'notes:quick_capture' %}"
-                hx-target="#modal-content"
-                hx-swap="innerHTML"
-                class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
-            Quick Note
-        </button>
-        <button hx-get="{% url 'tasks:quick_create' %}"
-                hx-target="#modal-content"
-                hx-swap="innerHTML"
-                class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium rounded-md transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
-            </svg>
-            Quick Task
-        </button>
+    <!-- Quick Capture: icon row on mobile, stacked buttons on desktop -->
+    <div class="px-3 pt-4 pb-2 shrink-0">
+        {# Mobile: compact icon row #}
+        <div class="lg:hidden flex gap-2">
+            <button hx-get="{% url 'notes:quick_capture' %}" hx-target="#modal-content" hx-swap="innerHTML"
+                    class="flex-1 flex items-center justify-center py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors gap-1.5" title="Quick Note">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Note
+            </button>
+            <button hx-get="{% url 'tasks:quick_create' %}" hx-target="#modal-content" hx-swap="innerHTML"
+                    class="flex-1 flex items-center justify-center py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium rounded-md transition-colors gap-1.5" title="Quick Task">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                Task
+            </button>
+            <a href="{% url 'notes:scratchpad' %}"
+               class="flex-1 flex items-center justify-center py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-md transition-colors gap-1.5" title="Scratch Pad">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                Pad
+            </a>
+        </div>
+        {# Desktop: full stacked buttons #}
+        <div class="hidden lg:flex flex-col space-y-2">
+            <button hx-get="{% url 'notes:quick_capture' %}" hx-target="#modal-content" hx-swap="innerHTML"
+                    class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                Quick Note
+            </button>
+            <button hx-get="{% url 'tasks:quick_create' %}" hx-target="#modal-content" hx-swap="innerHTML"
+                    class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium rounded-md transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                Quick Task
+            </button>
+            <a href="{% url 'notes:scratchpad' %}"
+               class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-md transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                Scratch Pad
+            </a>
+        </div>
     </div>
 
     <!-- Search -->

@@ -36,4 +36,12 @@ urlpatterns = [
     path("folders/add/", views.folder_add, name="folder_add"),
     path("folders/<int:pk>/edit/", views.folder_edit, name="folder_edit"),
     path("folders/<int:pk>/delete/", views.folder_delete, name="folder_delete"),
+    # Scratch pad
+    path("scratchpad/", views.scratchpad_page, name="scratchpad"),
+    path("scratchpad/new/", views.scratchpad_new, name="scratchpad_new"),
+    path("scratchpad/<int:pk>/", views.scratchpad_page, name="scratchpad_edit"),
+    path("scratchpad/<int:pk>/save/", views.scratchpad_save, name="scratchpad_save"),
+    path("scratchpad/<int:pk>/delete/", views.scratchpad_delete, name="scratchpad_delete"),
+    path("scratchpad/<int:pk>/archive/", views.scratchpad_archive, name="scratchpad_archive"),
+    path("scratchpad/<int:pk>/processed/", views.scratchpad_mark_processed, name="scratchpad_processed"),
 ]

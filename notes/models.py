@@ -154,3 +154,29 @@ class Link(models.Model):
 
     def get_absolute_url(self):
         return reverse("notes:detail", kwargs={"pk": self.note.pk})
+
+
+class ScratchPad(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("processed", "Processed"),
+        ("archived", "Archived"),
+    ]
+
+    title = models.CharField(max_length=255, default="Untitled")
+    content = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    meeting_date = models.DateField(null=True, blank=True)
+    participants_text = models.TextField(blank=True, help_text="Raw participant names before linking")
+    client_updated_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self):
+        return self.title
+
+    def get_absolute_url(self):
+        return reverse("notes:scratchpad_edit", kwargs={"pk": self.pk})
