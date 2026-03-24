@@ -9,8 +9,44 @@
     <div class="hidden lg:flex flex-col w-64 border-r border-gray-700 bg-gray-800/50 shrink-0">
         <div class="p-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Chats</h2>
-            <a href="{% url 'assistant:new_session' %}"
-               class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            <div class="flex items-center gap-2">
+                <button type="button" id="select-mode-toggle"
+                        class="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+                        onclick="toggleSelectMode()">Select</button>
+                <a href="{% url 'assistant:new_session' %}"
+                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+            </div>
+        </div>
+        {# Bulk action bar - shown when in select mode with items selected #}
+        <div id="session-bulk-bar" class="hidden px-2 py-1.5 border-b border-gray-700/50 bg-gray-800 flex items-center gap-2">
+            <label class="flex items-center gap-1.5 text-[11px] text-gray-400 cursor-pointer select-none">
+                <input type="checkbox" id="session-select-all"
+                       class="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 w-3.5 h-3.5"
+                       onchange="toggleSelectAllSessions(this.checked)">
+                All
+            </label>
+            <span class="text-[11px] text-gray-500"><span id="session-bulk-count">0</span> selected</span>
+            <div class="ml-auto">
+                <button type="button" id="session-bulk-delete-btn"
+                        class="text-[11px] px-2 py-0.5 bg-red-600/80 hover:bg-red-500 text-white rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled
+                        onclick="bulkDeleteSessions()">Delete</button>
+            </div>
+        </div>
+        {# Search input #}
+        <div class="px-2 py-2 border-b border-gray-700/50">
+            <div class="relative">
+                <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                <input type="text" id="session-search"
+                       placeholder="Search chats..."
+                       class="w-full bg-gray-700/50 border border-gray-600/50 rounded pl-7 pr-7 py-1 text-xs text-gray-300 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                       oninput="filterSessions(this.value)">
+                <button type="button" id="session-search-clear"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 hidden"
+                        onclick="clearSessionSearch()">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
         </div>
         <div id="session-list" class="flex-1 overflow-y-auto"
              hx-get="{% url 'assistant:session_list' %}?current={{ session.pk }}"
@@ -88,7 +124,7 @@
                 <textarea id="chat-input" name="message"
                           rows="1"
                           placeholder="Ask anything about your data..."
-                          class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                          class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-base text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
                           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('chat-form').dispatchEvent(new Event('submit'))}else if(event.key==='Escape'){cancelEdit()}"
                           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"
                 ></textarea>
@@ -350,5 +386,287 @@ function cancelSidebarRename(pk) {
 if (typeof closeDrawer === 'function' && typeof drawerOpen !== 'undefined' && drawerOpen) {
     closeDrawer();
 }
+
+// ---- Session Search (client-side filter) ----
+function filterSessions(query) {
+    var clearBtn = document.getElementById('session-search-clear');
+    if (clearBtn) clearBtn.classList.toggle('hidden', !query);
+    var q = query.toLowerCase().trim();
+    var rows = document.querySelectorAll('#session-list .session-row');
+    var pinnedSection = document.getElementById('pinned-section');
+    var unpinnedSection = document.getElementById('unpinned-section');
+    var pinnedVisible = 0, unpinnedVisible = 0;
+
+    rows.forEach(function(row) {
+        var titleEl = row.querySelector('[id^="session-title-"]');
+        var title = titleEl ? titleEl.textContent.toLowerCase() : '';
+        var match = !q || title.indexOf(q) !== -1;
+        row.style.display = match ? '' : 'none';
+        if (match) {
+            if (row.dataset.pinned === 'true') pinnedVisible++;
+            else unpinnedVisible++;
+        }
+    });
+    // Hide section headers when no matches
+    if (pinnedSection) pinnedSection.style.display = pinnedVisible ? '' : 'none';
+    if (unpinnedSection) unpinnedSection.style.display = unpinnedVisible ? '' : 'none';
+}
+
+function clearSessionSearch() {
+    var input = document.getElementById('session-search');
+    if (input) { input.value = ''; filterSessions(''); input.focus(); }
+}
+
+// Re-apply search filter after HTMX swaps the session list
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id === 'session-list') {
+        var input = document.getElementById('session-search');
+        if (input && input.value) filterSessions(input.value);
+        initSessionDragDrop();
+    }
+});
+
+// ---- Pin Toggle ----
+function toggleSessionPin(pk) {
+    var formData = new FormData();
+    formData.append('current', SESSION_PK);
+    htmx.ajax('POST', '/assistant/' + pk + '/pin/', {
+        target: '#session-list',
+        swap: 'innerHTML',
+        values: {current: SESSION_PK}
+    });
+}
+
+// ---- Pointer-based Sortable (in-place swap) ----
+var sort = { row: null, list: null, moved: false, lastSwap: 0 };
+
+function initSessionDragDrop() {
+    document.querySelectorAll('#session-list .drag-handle').forEach(function(handle) {
+        handle.onpointerdown = onSortStart;
+    });
+}
+
+function onSortStart(e) {
+    e.preventDefault();
+    var row = e.target.closest('.session-row');
+    if (!row) return;
+    var list = row.closest('.session-drop-zone');
+    if (!list) return;
+
+    sort.row = row;
+    sort.list = list;
+    sort.moved = false;
+    sort.lastSwap = Date.now();
+
+    row.style.background = '#334155';
+    row.style.outline = '1px solid #3b82f6';
+    row.style.outlineOffset = '-1px';
+
+    document.addEventListener('pointermove', onSortMove);
+    document.addEventListener('pointerup', onSortEnd);
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'grabbing';
+}
+
+function onSortMove(e) {
+    if (!sort.row) return;
+
+    // Cooldown: at least 150ms between swaps to prevent rapid-fire
+    if (Date.now() - sort.lastSwap < 150) return;
+
+    var row = sort.row;
+    var rowRect = row.getBoundingClientRect();
+    var rowMidY = rowRect.top + rowRect.height / 2;
+    var siblings = Array.from(sort.list.querySelectorAll('.session-row'));
+    var idx = siblings.indexOf(row);
+
+    // Swap UP: cursor is above the midpoint of the previous row
+    if (idx > 0) {
+        var prev = siblings[idx - 1];
+        var prevRect = prev.getBoundingClientRect();
+        var prevMid = prevRect.top + prevRect.height / 2;
+        if (e.clientY < prevMid) {
+            sort.list.insertBefore(row, prev);
+            sort.moved = true;
+            sort.lastSwap = Date.now();
+            return;
+        }
+    }
+
+    // Swap DOWN: cursor is below the midpoint of the next row
+    if (idx < siblings.length - 1) {
+        var next = siblings[idx + 1];
+        var nextRect = next.getBoundingClientRect();
+        var nextMid = nextRect.top + nextRect.height / 2;
+        if (e.clientY > nextMid) {
+            sort.list.insertBefore(next, row);
+            sort.moved = true;
+            sort.lastSwap = Date.now();
+            return;
+        }
+    }
+
+    // Auto-scroll the session list near edges
+    var sc = document.getElementById('session-list');
+    if (sc) {
+        var scRect = sc.getBoundingClientRect();
+        if (e.clientY < scRect.top + 40) sc.scrollTop -= 4;
+        else if (e.clientY > scRect.bottom - 40) sc.scrollTop += 4;
+    }
+}
+
+function onSortEnd() {
+    document.removeEventListener('pointermove', onSortMove);
+    document.removeEventListener('pointerup', onSortEnd);
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+
+    if (sort.row) {
+        sort.row.style.background = '';
+        sort.row.style.outline = '';
+        sort.row.style.outlineOffset = '';
+    }
+
+    if (sort.moved) saveSessionOrder();
+    sort.row = null;
+    sort.list = null;
+    sort.moved = false;
+}
+
+function saveSessionOrder() {
+    var pinnedIds = [];
+    var unpinnedIds = [];
+    document.querySelectorAll('[data-section="pinned"] .session-row').forEach(function(r) {
+        pinnedIds.push(parseInt(r.dataset.sessionId));
+    });
+    document.querySelectorAll('[data-section="unpinned"] .session-row').forEach(function(r) {
+        unpinnedIds.push(parseInt(r.dataset.sessionId));
+    });
+
+    // Save to server — do NOT refresh the session list afterward.
+    // The DOM is already in the correct order; an HTMX refresh would
+    // race with the DB write and revert the visual state.
+    fetch('/assistant/sessions/reorder/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+        body: JSON.stringify({ pinned: pinnedIds, unpinned: unpinnedIds })
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() { initSessionDragDrop(); });
+
+// ---- Select Mode for Bulk Delete ----
+var selectModeActive = false;
+
+function toggleSelectMode() {
+    selectModeActive = !selectModeActive;
+    var toggle = document.getElementById('select-mode-toggle');
+    var bulkBar = document.getElementById('session-bulk-bar');
+    var checkboxes = document.querySelectorAll('#session-list .session-checkbox-wrap');
+    var handles = document.querySelectorAll('#session-list .drag-handle');
+
+    if (selectModeActive) {
+        toggle.textContent = 'Done';
+        toggle.classList.add('text-blue-400');
+        toggle.classList.remove('text-gray-500');
+        bulkBar.classList.remove('hidden');
+        checkboxes.forEach(function(c) { c.classList.remove('hidden'); });
+        handles.forEach(function(h) { h.classList.add('hidden'); });
+    } else {
+        toggle.textContent = 'Select';
+        toggle.classList.remove('text-blue-400');
+        toggle.classList.add('text-gray-500');
+        bulkBar.classList.add('hidden');
+        checkboxes.forEach(function(c) {
+            c.classList.add('hidden');
+            c.querySelector('input').checked = false;
+        });
+        handles.forEach(function(h) { h.classList.remove('hidden'); });
+        var selectAll = document.getElementById('session-select-all');
+        if (selectAll) selectAll.checked = false;
+        updateSessionBulkCount();
+    }
+}
+
+function toggleSelectAllSessions(checked) {
+    var boxes = document.querySelectorAll('#session-list input[name="session-select"]');
+    boxes.forEach(function(cb) {
+        // Only toggle visible (not filtered out by search)
+        var row = cb.closest('.session-row');
+        if (row && row.style.display !== 'none') {
+            cb.checked = checked;
+        }
+    });
+    updateSessionBulkCount();
+}
+
+function updateSessionBulkCount() {
+    var checked = document.querySelectorAll('#session-list input[name="session-select"]:checked');
+    var countEl = document.getElementById('session-bulk-count');
+    var deleteBtn = document.getElementById('session-bulk-delete-btn');
+    if (countEl) countEl.textContent = checked.length;
+    if (deleteBtn) deleteBtn.disabled = checked.length === 0;
+
+    // Update select-all indeterminate state
+    var all = document.querySelectorAll('#session-list input[name="session-select"]');
+    var selectAll = document.getElementById('session-select-all');
+    if (selectAll) {
+        var visibleAll = Array.from(all).filter(function(cb) {
+            var row = cb.closest('.session-row');
+            return row && row.style.display !== 'none';
+        });
+        var visibleChecked = visibleAll.filter(function(cb) { return cb.checked; });
+        selectAll.checked = visibleAll.length > 0 && visibleChecked.length === visibleAll.length;
+        selectAll.indeterminate = visibleChecked.length > 0 && visibleChecked.length < visibleAll.length;
+    }
+}
+
+function bulkDeleteSessions() {
+    var checked = document.querySelectorAll('#session-list input[name="session-select"]:checked');
+    var count = checked.length;
+    if (count === 0) return;
+    if (!confirm('Delete ' + count + ' conversation' + (count > 1 ? 's' : '') + '?')) return;
+
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{% url "assistant:bulk_delete_sessions" %}';
+    form.style.display = 'none';
+
+    var csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrfmiddlewaretoken';
+    csrf.value = CSRF_TOKEN;
+    form.appendChild(csrf);
+
+    var current = document.createElement('input');
+    current.type = 'hidden';
+    current.name = 'current';
+    current.value = SESSION_PK;
+    form.appendChild(current);
+
+    checked.forEach(function(cb) {
+        var h = document.createElement('input');
+        h.type = 'hidden';
+        h.name = 'selected';
+        h.value = cb.value;
+        form.appendChild(h);
+    });
+
+    // Use HTMX-style submission for proper redirect handling
+    form.setAttribute('hx-post', '{% url "assistant:bulk_delete_sessions" %}');
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Re-apply select mode after HTMX swaps
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target.id === 'session-list' && selectModeActive) {
+        var checkboxes = document.querySelectorAll('#session-list .session-checkbox-wrap');
+        var handles = document.querySelectorAll('#session-list .drag-handle');
+        checkboxes.forEach(function(c) { c.classList.remove('hidden'); });
+        handles.forEach(function(h) { h.classList.add('hidden'); });
+    }
+});
 </script>
 {% endblock %}

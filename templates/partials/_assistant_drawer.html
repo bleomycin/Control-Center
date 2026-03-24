@@ -54,7 +54,7 @@
         </div>
         <form id="drawer-chat-form" class="flex gap-2">
             <textarea id="drawer-chat-input" rows="1" placeholder="Ask about your data..."
-                      class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                      class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-base text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
                       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('drawer-chat-form').dispatchEvent(new Event('submit'))}"
                       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
             <button type="submit" id="drawer-send-btn"

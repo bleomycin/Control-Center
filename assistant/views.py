@@ -1,8 +1,10 @@
+import json
 import logging
 
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_POST
 
 from . import client as assistant_client
 from .forms import AssistantSettingsForm, ChatInputForm
@@ -30,9 +32,14 @@ def chat_page(request, session_id=None):
 
     form = ChatInputForm()
 
+    pinned = ChatSession.objects.filter(is_pinned=True).order_by("sort_order", "-updated_at")
+    unpinned = ChatSession.objects.filter(is_pinned=False).order_by("sort_order", "-updated_at")
+
     return render(request, "assistant/chat.html", {
         "session": session,
         "sessions": sessions,
+        "pinned_sessions": pinned,
+        "unpinned_sessions": unpinned,
         "chat_messages": display_messages,
         "form": form,
     })
@@ -89,6 +96,30 @@ def new_session(request):
     return redirect("assistant:chat_session", session_id=session.pk)
 
 
+@require_POST
+def bulk_delete_sessions(request):
+    """Delete multiple chat sessions at once."""
+    ids = request.POST.getlist("selected")
+    if ids:
+        # Don't delete the current session if it's in the list
+        current_id = request.POST.get("current")
+        ChatSession.objects.filter(pk__in=ids).exclude(pk=current_id).delete()
+        # Also delete current if selected (handle redirect)
+        if current_id in ids:
+            ChatSession.objects.filter(pk=current_id).delete()
+
+    if request.headers.get("HX-Request"):
+        remaining = ChatSession.objects.first()
+        if remaining:
+            response = HttpResponse(status=200)
+            response["HX-Redirect"] = remaining.get_absolute_url()
+        else:
+            response = HttpResponse(status=200)
+            response["HX-Redirect"] = "/assistant/"
+        return response
+    return redirect("assistant:chat")
+
+
 def delete_session(request, session_id):
     """Delete a chat session."""
     session = get_object_or_404(ChatSession, pk=session_id)
@@ -117,9 +148,11 @@ def rename_session(request, session_id):
         session.save(update_fields=["title"])
 
     if request.headers.get("HX-Request"):
-        sessions = ChatSession.objects.all()
+        pinned = ChatSession.objects.filter(is_pinned=True).order_by("sort_order", "-updated_at")
+        unpinned = ChatSession.objects.filter(is_pinned=False).order_by("sort_order", "-updated_at")
         return render(request, "assistant/partials/_session_list.html", {
-            "sessions": sessions,
+            "pinned_sessions": pinned,
+            "unpinned_sessions": unpinned,
             "session": session,
         })
     return redirect("assistant:chat_session", session_id=session.pk)
@@ -189,7 +222,6 @@ def prune_history(request, session_id):
 
 def session_list(request):
     """Return the session list partial (for HTMX refresh)."""
-    sessions = ChatSession.objects.all()
     current_id = request.GET.get("current")
     session = None
     if current_id:
@@ -197,10 +229,63 @@ def session_list(request):
             session = ChatSession.objects.get(pk=current_id)
         except ChatSession.DoesNotExist:
             pass
+    pinned = ChatSession.objects.filter(is_pinned=True).order_by("sort_order", "-updated_at")
+    unpinned = ChatSession.objects.filter(is_pinned=False).order_by("sort_order", "-updated_at")
     return render(request, "assistant/partials/_session_list.html", {
-        "sessions": sessions,
+        "pinned_sessions": pinned,
+        "unpinned_sessions": unpinned,
         "session": session,
     })
+
+
+@require_POST
+def toggle_pin(request, session_id):
+    """Toggle pin status of a chat session."""
+    s = get_object_or_404(ChatSession, pk=session_id)
+    s.is_pinned = not s.is_pinned
+    if s.is_pinned:
+        # Place at the end of pinned list
+        max_order = ChatSession.objects.filter(is_pinned=True).exclude(pk=s.pk).count()
+        s.sort_order = max_order
+    else:
+        s.sort_order = 0
+    s.save(update_fields=["is_pinned", "sort_order"])
+
+    if request.headers.get("HX-Request"):
+        pinned = ChatSession.objects.filter(is_pinned=True).order_by("sort_order", "-updated_at")
+        unpinned = ChatSession.objects.filter(is_pinned=False).order_by("sort_order", "-updated_at")
+        current_id = request.POST.get("current")
+        current = None
+        if current_id:
+            try:
+                current = ChatSession.objects.get(pk=current_id)
+            except ChatSession.DoesNotExist:
+                pass
+        return render(request, "assistant/partials/_session_list.html", {
+            "pinned_sessions": pinned,
+            "unpinned_sessions": unpinned,
+            "session": current,
+        })
+    return JsonResponse({"pinned": s.is_pinned})
+
+
+@require_POST
+def reorder_sessions(request):
+    """Reorder sessions via drag-and-drop. Expects JSON body with ordered IDs."""
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    pinned_ids = data.get("pinned", [])
+    for i, pk in enumerate(pinned_ids):
+        ChatSession.objects.filter(pk=pk).update(sort_order=i, is_pinned=True)
+
+    unpinned_ids = data.get("unpinned", [])
+    for i, pk in enumerate(unpinned_ids):
+        ChatSession.objects.filter(pk=pk).update(is_pinned=False, sort_order=i)
+
+    return JsonResponse({"ok": True})
 
 
 def process_email_form(request):
