@@ -30,7 +30,7 @@
     {% include "partials/_sidebar.html" %}
 
     <!-- Main content -->
-    <main class="lg:ml-64 pt-14 lg:pt-0 min-h-screen" data-page-context="{% block page_context %}{% endblock %}">
+    <main class="lg:ml-64 pt-14 lg:pt-0 min-h-screen transition-[margin] duration-200" data-page-context="{% block page_context %}{% endblock %}">
         <div class="p-4 sm:p-6 lg:p-8">
             {% include "partials/_messages.html" %}
             {% block content %}{% endblock %}
@@ -116,11 +116,15 @@
                 if (overlay) overlay.classList.add('hidden');
             }
 
-            document.getElementById('drawer-backdrop').classList.remove('hidden');
             var panel = document.getElementById('assistant-drawer');
             panel.classList.remove('translate-x-full');
             panel.classList.add('translate-x-0');
             drawerOpen = true;
+
+            // Desktop: push main content left so page reflows beside the drawer
+            if (window.innerWidth >= 1024) {
+                document.querySelector('main').style.marginRight = '28rem';
+            }
 
             // Hide FAB while drawer is open
             var fab = document.getElementById('assistant-fab');
@@ -147,11 +151,13 @@
         }
 
         function closeDrawer() {
-            document.getElementById('drawer-backdrop').classList.add('hidden');
             var panel = document.getElementById('assistant-drawer');
             panel.classList.remove('translate-x-0');
             panel.classList.add('translate-x-full');
             drawerOpen = false;
+
+            // Remove desktop margin push
+            document.querySelector('main').style.marginRight = '';
 
             // Show FAB again
             var fab = document.getElementById('assistant-fab');
