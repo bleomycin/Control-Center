@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels static %}
+{% block page_context %}viewing Stakeholder #{{ stakeholder.pk }} {{ stakeholder.name }}{% endblock %}
 {% block title %}{{ stakeholder.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-3 sm:mb-6">

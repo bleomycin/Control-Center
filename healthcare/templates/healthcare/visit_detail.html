@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Visit #{{ visit.pk }}{% endblock %}
 {% block title %}{{ visit.get_visit_type_display }} Visit - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

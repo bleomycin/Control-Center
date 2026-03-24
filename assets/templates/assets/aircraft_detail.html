@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Aircraft #{{ aircraft.pk }} {{ aircraft.name }}{% endblock %}
 {% block title %}{{ aircraft.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

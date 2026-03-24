@@ -313,6 +313,30 @@ def gmail_thread_fetch(request):
     return JsonResponse({"formatted_text": "\n".join(parts), "subject": subject})
 
 
+def drawer_session(request):
+    """Return or create a session for the drawer.
+
+    ?new=1 forces a fresh session.  Otherwise returns the most recent.
+    """
+    if request.GET.get("new"):
+        session = ChatSession.objects.create()
+    else:
+        session = ChatSession.objects.first()
+        if not session:
+            session = ChatSession.objects.create()
+    return JsonResponse({"session_id": session.pk, "title": session.title})
+
+
+def drawer_messages(request, session_id):
+    """Return rendered messages for the drawer."""
+    session = get_object_or_404(ChatSession, pk=session_id)
+    all_msgs = session.messages.all()
+    display_messages = [m for m in all_msgs if m.content]
+    return render(request, "assistant/partials/_message_list.html", {
+        "chat_messages": display_messages,
+    })
+
+
 def assistant_settings(request):
     """Configure AI assistant API key and model."""
     instance = AssistantSettings.load()

@@ -30,12 +30,26 @@
     {% include "partials/_sidebar.html" %}
 
     <!-- Main content -->
-    <main class="lg:ml-64 pt-14 lg:pt-0 min-h-screen">
+    <main class="lg:ml-64 pt-14 lg:pt-0 min-h-screen" data-page-context="{% block page_context %}{% endblock %}">
         <div class="p-4 sm:p-6 lg:p-8">
             {% include "partials/_messages.html" %}
             {% block content %}{% endblock %}
         </div>
     </main>
+
+    <!-- Assistant drawer -->
+    {% include "partials/_assistant_drawer.html" %}
+
+    <!-- Mobile assistant FAB (floating action button) -->
+    {% block assistant_fab %}
+    <button id="assistant-fab" onclick="openDrawer()"
+            class="lg:hidden fixed bottom-5 right-5 z-40 w-12 h-12 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-lg shadow-blue-900/40 flex items-center justify-center transition-all active:scale-95"
+            aria-label="Open assistant">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+        </svg>
+    </button>
+    {% endblock %}
 
     <!-- Modal container -->
     <div id="modal-container" class="fixed inset-0 z-50 hidden">
@@ -85,6 +99,153 @@
         });
     </script>
     <script src="{% static 'js/bulk-actions.js' %}"></script>
+    <script src="{% static 'vendor/marked.umd.js' %}"></script>
+    <script src="{% static 'js/assistant-chat.js' %}"></script>
+    <script>var CSRF_TOKEN_GLOBAL = "{{ csrf_token }}";</script>
+    <script>
+        // Assistant drawer controller
+        var drawerEngine = null;
+        var drawerSessionPk = null;
+        var drawerOpen = false;
+
+        function openDrawer() {
+            // On mobile, close the sidebar first so it doesn't linger behind the drawer
+            if (window.innerWidth < 1024) {
+                document.getElementById('sidebar').classList.add('-translate-x-full');
+                var overlay = document.getElementById('sidebar-overlay');
+                if (overlay) overlay.classList.add('hidden');
+            }
+
+            document.getElementById('drawer-backdrop').classList.remove('hidden');
+            var panel = document.getElementById('assistant-drawer');
+            panel.classList.remove('translate-x-full');
+            panel.classList.add('translate-x-0');
+            drawerOpen = true;
+
+            // Hide FAB while drawer is open
+            var fab = document.getElementById('assistant-fab');
+            if (fab) fab.classList.add('hidden');
+
+            // Update context badge
+            var ctx = document.querySelector('main').getAttribute('data-page-context');
+            var badge = document.getElementById('drawer-context-badge');
+            if (ctx) {
+                document.getElementById('drawer-context-label').textContent = ctx;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+
+            // Initialize engine on first open
+            if (!drawerEngine) {
+                initDrawer();
+            }
+
+            setTimeout(function() {
+                document.getElementById('drawer-chat-input').focus();
+            }, 200);
+        }
+
+        function closeDrawer() {
+            document.getElementById('drawer-backdrop').classList.add('hidden');
+            var panel = document.getElementById('assistant-drawer');
+            panel.classList.remove('translate-x-0');
+            panel.classList.add('translate-x-full');
+            drawerOpen = false;
+
+            // Show FAB again
+            var fab = document.getElementById('assistant-fab');
+            if (fab) fab.classList.remove('hidden');
+        }
+
+        var drawerFormWired = false;
+
+        function initDrawer(query) {
+            var url = '/assistant/drawer-session/' + (query || '');
+            fetch(url, {
+                headers: {'X-CSRFToken': CSRF_TOKEN_GLOBAL}
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                drawerSessionPk = data.session_id;
+                // Show session title if it has one
+                var titleEl = document.getElementById('drawer-session-title');
+                if (titleEl) {
+                    if (data.title && data.title !== 'New Chat') {
+                        titleEl.textContent = '— ' + data.title;
+                        titleEl.classList.remove('hidden');
+                    } else {
+                        titleEl.classList.add('hidden');
+                    }
+                }
+                drawerEngine = createChatEngine({
+                    streamUrl: '/assistant/' + drawerSessionPk + '/stream/',
+                    csrfToken: CSRF_TOKEN_GLOBAL,
+                    messageListEl: document.getElementById('drawer-message-list'),
+                    scrollEl: document.getElementById('drawer-scroll'),
+                    inputEl: document.getElementById('drawer-chat-input'),
+                    sendBtnEl: document.getElementById('drawer-send-btn'),
+                    emptyStateEl: document.getElementById('drawer-empty-state'),
+                    sessionPk: drawerSessionPk,
+                    messagesUrl: '/assistant/' + drawerSessionPk + '/messages/',
+                    getPageContext: function() {
+                        return document.querySelector('main').getAttribute('data-page-context') || null;
+                    },
+                    onFinish: function() {
+                        drawerEngine.refreshMessages();
+                    },
+                    onTitle: function(title) {
+                        var el = document.getElementById('drawer-session-title');
+                        if (el && title) {
+                            el.textContent = '— ' + title;
+                            el.classList.remove('hidden');
+                        }
+                    },
+                });
+                // Wire up form submit once
+                if (!drawerFormWired) {
+                    drawerFormWired = true;
+                    document.getElementById('drawer-chat-form').addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        var input = document.getElementById('drawer-chat-input');
+                        var text = input.value.trim();
+                        if (!text || drawerEngine.isStreaming()) return;
+                        input.value = '';
+                        input.style.height = 'auto';
+                        drawerEngine.doSend(text);
+                    });
+                }
+                // Load existing messages
+                drawerEngine.loadMessages();
+            });
+        }
+
+        function drawerNewSession() {
+            // Clear current messages and create a fresh session
+            document.getElementById('drawer-message-list').innerHTML = '';
+            var emptyState = document.getElementById('drawer-empty-state');
+            if (emptyState) emptyState.style.display = '';
+            var titleEl = document.getElementById('drawer-session-title');
+            if (titleEl) titleEl.classList.add('hidden');
+            initDrawer('?new=1');
+            document.getElementById('drawer-chat-input').focus();
+        }
+
+        // Keyboard shortcut: Cmd+K / Ctrl+K to toggle drawer
+        document.addEventListener('keydown', function(e) {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault();
+                if (drawerOpen) {
+                    closeDrawer();
+                } else {
+                    openDrawer();
+                }
+            }
+            if (e.key === 'Escape' && drawerOpen) {
+                closeDrawer();
+            }
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

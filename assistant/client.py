@@ -142,6 +142,9 @@ Use the `assigned_to` field (FK to Stakeholder) for the person responsible for t
 - Individual person with no clear role → "contact"
 When creating a firm and its employees, create the firm first (entity_type="firm"), then create each person with `parent_organization` set to the firm's ID. This links them as team members under the firm.
 
+## Page context hints
+When the user sends a message from the quick assistant drawer, the message may begin with a context hint like `[Context: viewing Stakeholder #482 "Thomas Wright"]`. This tells you what page the user is currently looking at. Use this context to understand what entity they're referring to (e.g., "what tasks does this person have?" means the stakeholder in the context). Do NOT repeat the context hint back to the user — just use it to inform your response.
+
 ## Data model
 The system contains the following models and fields:
 """

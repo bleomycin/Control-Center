@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize %}
+{% block page_context %}viewing Investment #{{ investment.pk }} {{ investment.name }}{% endblock %}
 {% block title %}{{ investment.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

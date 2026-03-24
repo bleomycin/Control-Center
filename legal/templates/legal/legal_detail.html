@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Legal Matter #{{ matter.pk }} {{ matter.title }}{% endblock %}
 {% block title %}{{ matter.title }} - Control Center{% endblock %}
 {% block content %}
 <style>.case-info-summary > span + span::before { content: "·"; margin: 0 0.5rem; color: rgb(75 85 99); }</style>

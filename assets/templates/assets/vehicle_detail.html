@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Vehicle #{{ vehicle.pk }} {{ vehicle.name }}{% endblock %}
 {% block title %}{{ vehicle.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

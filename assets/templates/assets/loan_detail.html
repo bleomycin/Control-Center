@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize %}
+{% block page_context %}viewing Loan #{{ loan.pk }} {{ loan.name }}{% endblock %}
 {% block title %}{{ loan.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

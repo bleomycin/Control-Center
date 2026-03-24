@@ -76,5 +76,14 @@ class ChatMessage(models.Model):
     class Meta:
         ordering = ["created_at"]
 
+    @property
+    def display_content(self):
+        """Strip the [Context: ...] prefix injected by the drawer for display."""
+        if self.content and self.content.startswith("[Context:"):
+            idx = self.content.find("]")
+            if idx > -1:
+                return self.content[idx + 1 :].strip()
+        return self.content
+
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"

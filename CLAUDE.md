@@ -15,7 +15,9 @@ This file provides guidance to Claude Code when working with code in this reposi
      - **Desktop Split** (4K half-screen): `{ width: 960, height: 1080 }`, `deviceScaleFactor: 2`
    - (d) After HTMX swaps: verify elements OUTSIDE the swap target (counters, progress bars, styling) are intact.
    - (e) `make tailwind-build` if any CSS classes changed.
-   - **This is NOT optional. Do NOT report done without completing a–e.**
+   - (f) **Headed mode pass**: Run Playwright with `headless=False` to verify keyboard shortcuts, hover states, and real browser behavior. This catches bugs invisible to headless (e.g., Cmd+K, hover-revealed buttons, clipboard, animations).
+   - (g) **WebKit pass**: Run key verification tests with `p.webkit.launch()` (not just Chromium) to catch Safari-specific rendering and JS differences. Primary browser is Safari.
+   - **This is NOT optional. Do NOT report done without completing a–g.**
 4. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`.
 5. **Sample data**: After implementing any new feature/model, ALWAYS update `load_sample_data.py` to exercise it.
 6. **iOS Safari**: Do NOT attempt CSS/JS workarounds for native input behaviors. If a first approach fails, stop and discuss alternatives.

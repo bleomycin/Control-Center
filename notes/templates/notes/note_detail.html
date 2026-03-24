@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load choice_labels markdown_filter tag_colors static %}
+{% block page_context %}viewing Note #{{ note.pk }} {{ note.title }}{% endblock %}
 {% block title %}{{ note.title }} - Control Center{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'vendor/easymde.min.css' %}">

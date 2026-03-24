@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block page_context %}viewing Task #{{ task.pk }} {{ task.title }}{% endblock %}
 {% block title %}{{ task.title }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

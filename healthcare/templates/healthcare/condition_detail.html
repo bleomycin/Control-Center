@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Condition #{{ condition.pk }} {{ condition.name }}{% endblock %}
 {% block title %}{{ condition.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

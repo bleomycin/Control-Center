@@ -373,9 +373,9 @@ class ViewTests(TestCase):
             reverse("assistant:chat_session", kwargs={"session_id": session.pk})
         )
         self.assertEqual(response.status_code, 200)
-        # Script src has a hash suffix from WhiteNoise, so check for the base name
+        # marked.umd.js and assistant-chat.js are loaded globally via base.html
         self.assertContains(response, "marked.umd")
-        self.assertContains(response, "marked.setOptions")
+        self.assertContains(response, "assistant-chat")
 
     def test_prune_history(self):
         session = ChatSession.objects.create()
@@ -645,3 +645,66 @@ class ResultSummaryTests(TestCase):
             _result_summary("summarize", {}, {"Task_count": 5}),
             "done",
         )
+
+
+class DrawerViewTests(TestCase):
+    def test_drawer_session_returns_most_recent(self):
+        s1 = ChatSession.objects.create(title="Old")
+        s2 = ChatSession.objects.create(title="New")
+        response = self.client.get(reverse("assistant:drawer_session"))
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        # Most recent by updated_at (s2 was created last)
+        self.assertEqual(data["session_id"], s2.pk)
+        self.assertEqual(data["title"], "New")
+
+    def test_drawer_session_creates_when_none(self):
+        self.assertEqual(ChatSession.objects.count(), 0)
+        response = self.client.get(reverse("assistant:drawer_session"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ChatSession.objects.count(), 1)
+
+    def test_drawer_messages_returns_html(self):
+        session = ChatSession.objects.create()
+        ChatMessage.objects.create(session=session, role="user", content="Hello")
+        ChatMessage.objects.create(session=session, role="assistant", content="Hi")
+        response = self.client.get(
+            reverse("assistant:drawer_messages", kwargs={"session_id": session.pk})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Hello")
+        self.assertContains(response, "Hi")
+
+    def test_drawer_messages_excludes_empty(self):
+        session = ChatSession.objects.create()
+        ChatMessage.objects.create(session=session, role="assistant", content="", tool_data=[{"type": "tool_use"}])
+        ChatMessage.objects.create(session=session, role="assistant", content="Real answer")
+        response = self.client.get(
+            reverse("assistant:drawer_messages", kwargs={"session_id": session.pk})
+        )
+        self.assertContains(response, "Real answer")
+        self.assertNotContains(response, "tool_use")
+
+    def test_drawer_messages_404_bad_session(self):
+        response = self.client.get(
+            reverse("assistant:drawer_messages", kwargs={"session_id": 999})
+        )
+        self.assertEqual(response.status_code, 404)
+
+
+class DisplayContentTests(TestCase):
+    def test_strips_context_prefix(self):
+        msg = ChatMessage(role="user", content='[Context: viewing Task #1 "Test"]\nWhat is this?')
+        self.assertEqual(msg.display_content, "What is this?")
+
+    def test_no_context_unchanged(self):
+        msg = ChatMessage(role="user", content="Hello there")
+        self.assertEqual(msg.display_content, "Hello there")
+
+    def test_empty_content(self):
+        msg = ChatMessage(role="user", content="")
+        self.assertEqual(msg.display_content, "")
+
+    def test_context_only_message(self):
+        msg = ChatMessage(role="user", content='[Context: viewing Stakeholder #5 "Bob"]')
+        self.assertEqual(msg.display_content, "")

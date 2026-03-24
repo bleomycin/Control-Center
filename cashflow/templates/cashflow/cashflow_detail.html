@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Cash Flow #{{ entry.pk }} {{ entry.description }}{% endblock %}
 {% block title %}{{ entry.description }} - Cash Flow - Control Center{% endblock %}
 {% block content %}
 <div class="max-w-3xl mx-auto">

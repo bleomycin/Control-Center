@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Lease #{{ lease.pk }} {{ lease.name }}{% endblock %}
 {% block title %}{{ lease.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

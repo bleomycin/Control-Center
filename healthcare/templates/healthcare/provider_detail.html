@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize choice_labels %}
+{% block page_context %}viewing Provider #{{ provider.pk }} {{ provider.name }}{% endblock %}
 {% block title %}{{ provider.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

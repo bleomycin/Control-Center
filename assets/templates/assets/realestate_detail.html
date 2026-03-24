@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load humanize %}
+{% block page_context %}viewing Property #{{ property.pk }} {{ property.name }}{% endblock %}
 {% block title %}{{ property.name }} - Control Center{% endblock %}
 {% block content %}
 <div class="mb-6">

@@ -19,5 +19,7 @@ urlpatterns = [
     path("process-email/", views.process_email_form, name="process_email"),
     path("gmail-search/", views.gmail_thread_search, name="gmail_thread_search"),
     path("gmail-thread/", views.gmail_thread_fetch, name="gmail_thread_fetch"),
+    path("drawer-session/", views.drawer_session, name="drawer_session"),
+    path("<int:session_id>/messages/", views.drawer_messages, name="drawer_messages"),
     path("settings/", views.assistant_settings, name="settings"),
 ]
