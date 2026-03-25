@@ -28,6 +28,16 @@
                 {{ form.duration_minutes }}
             </div>
         </div>
+        <div id="qt-meeting-link-wrapper" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.meeting_url.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting Link</label>
+                {{ form.meeting_url }}
+            </div>
+            <div>
+                <label for="{{ form.location.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Location</label>
+                {{ form.location }}
+            </div>
+        </div>
         <div id="qt-provider-wrapper" class="hidden">
             <label for="{{ form.provider.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">{{ form.provider.label }}</label>
             {{ form.provider }}
@@ -76,6 +86,7 @@
                     var notesToggle = document.getElementById('qt-notes-toggle');
                     var notesLabel = document.getElementById('qt-notes-label');
                     var submitBtn = document.getElementById('qt-submit-btn');
+                    var meetingLinkWrapper = document.getElementById('qt-meeting-link-wrapper');
                     var val = typeSelect.value;
                     if (val === 'meeting' || val === 'appointment') {
                         timeWrapper.classList.remove('hidden');
@@ -85,9 +96,11 @@
                             notesWrapper.classList.remove('hidden');
                             notesToggle.textContent = '− Hide notes';
                         }
+                        if (val === 'meeting' && meetingLinkWrapper) meetingLinkWrapper.classList.remove('hidden');
                     } else {
                         timeWrapper.classList.add('hidden');
                         durationWrapper.classList.add('hidden');
+                        if (meetingLinkWrapper) meetingLinkWrapper.classList.add('hidden');
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
                         document.getElementById('{{ form.duration_minutes.id_for_label }}').value = '';
                         if (dateLabel) dateLabel.textContent = 'Due date';
@@ -95,6 +108,7 @@
                     if (val === 'appointment') {
                         providerWrapper.classList.remove('hidden');
                         priorityWrapper.classList.add('hidden');
+                        if (meetingLinkWrapper) meetingLinkWrapper.classList.add('hidden');
                         if (notesLabel) notesLabel.textContent = 'Purpose';
                         if (notesToggle) {
                             notesToggle.textContent = notesWrapper.classList.contains('hidden') ? '+ Add details' : '− Hide details';

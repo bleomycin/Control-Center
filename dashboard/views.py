@@ -728,9 +728,16 @@ def calendar_feed(request):
                 alarm.add("description", f"Reminder: {task.title}")
                 alarm.add("trigger", task.reminder_date)
                 ev.add_component(alarm)
+            desc_parts = []
             if task.description:
-                ev.add("description", task.description)
-            ev.add("url", f"{base_url}{task.get_absolute_url()}")
+                desc_parts.append(task.description)
+            if task.meeting_url:
+                desc_parts.append(f"Join: {task.meeting_url}")
+            if desc_parts:
+                ev.add("description", "\n\n".join(desc_parts))
+            if task.location:
+                ev.add("location", task.location)
+            ev.add("url", task.meeting_url or f"{base_url}{task.get_absolute_url()}")
             ev.add("uid", f"task-{task.pk}@controlcenter")
             cal.add_component(ev)
 
@@ -1024,7 +1031,9 @@ def calendar_events(request):
                 "url": task.get_absolute_url(),
                 "color": "#3b82f6",
                 "display": "block",
-                "extendedProps": {"type": "meeting"},
+                "extendedProps": {"type": "meeting",
+                                  "meeting_url": task.meeting_url or "",
+                                  "location": task.location or ""},
             }
             if task.due_time:
                 event["allDay"] = False

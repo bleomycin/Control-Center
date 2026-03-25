@@ -1502,7 +1502,9 @@ class Command(BaseCommand):
         if meeting_task:
             meeting_task.due_time = t_time(14, 0)
             meeting_task.duration_minutes = 60
-            meeting_task.save(update_fields=["due_time", "duration_minutes"])
+            meeting_task.meeting_url = "https://zoom.us/j/98765432100?pwd=example"
+            meeting_task.location = "Zoom"
+            meeting_task.save(update_fields=["due_time", "duration_minutes", "meeting_url", "location"])
 
         self.stdout.write("Creating follow-ups...")
         followup_data = [

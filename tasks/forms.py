@@ -42,6 +42,7 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Task
         fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "duration_minutes",
+                  "meeting_url", "location",
                   "reminder_date", "status",
                   "priority", "assigned_to", "related_stakeholders",
                   "related_legal_matter", "related_property",
@@ -87,12 +88,14 @@ class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
 
     class Meta:
         model = Task
-        fields = ["title", "due_date", "due_time", "duration_minutes", "priority", "description"]
+        fields = ["title", "due_date", "due_time", "duration_minutes", "meeting_url", "location", "priority", "description"]
         widgets = {
             "due_date": forms.DateInput(attrs={"type": "date"}),
             "due_time": forms.TimeInput(attrs={"type": "time"}),
             "duration_minutes": forms.Select(choices=DURATION_CHOICES),
-            "description": forms.Textarea(attrs={"rows": 2, "placeholder": "Location, link, or other details..."}),
+            "meeting_url": forms.URLInput(attrs={"placeholder": "https://zoom.us/j/..."}),
+            "location": forms.TextInput(attrs={"placeholder": "Zoom, Teams, office..."}),
+            "description": forms.Textarea(attrs={"rows": 2}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -101,7 +104,7 @@ class QuickTaskForm(TailwindFormMixin, forms.ModelForm):
         self.fields["provider"].queryset = Provider.objects.filter(status="active")
         # Reorder so task_type appears after title
         self.order_fields(["title", "task_type", "due_date", "due_time", "duration_minutes",
-                           "provider", "priority", "description"])
+                           "meeting_url", "location", "provider", "priority", "description"])
 
     def clean(self):
         cleaned = super().clean()

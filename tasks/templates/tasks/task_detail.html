@@ -29,6 +29,13 @@
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">{% if task.is_meeting %}Meeting Time{% else %}Due Date{% endif %}</p>
         <p class="text-sm text-gray-200">{{ task.due_date|date:"F j, Y"|default:"Not set" }}{% if task.due_time %} <span class="text-blue-400">at {{ task.due_time|time:"g:i A" }}</span>{% endif %}{% if task.duration_minutes %} <span class="text-gray-400">({{ task.duration_minutes }} min)</span>{% endif %}</p>
+        {% if task.location %}<p class="text-xs text-gray-400 mt-1">{{ task.location }}</p>{% endif %}
+        {% if task.meeting_url %}
+        <a href="{{ task.meeting_url }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 mt-2 px-2.5 py-1 bg-blue-600/20 text-blue-400 hover:text-blue-300 text-xs font-medium rounded border border-blue-500/30 hover:border-blue-500/50 transition-colors">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l-4 4m0 0l-4-4m4 4V3m0 17a9 9 0 110-18 9 9 0 010 18z"/></svg>
+            Join Meeting
+        </a>
+        {% endif %}
     </div>
     <div class="bg-gray-800 rounded-lg border border-gray-700 p-4">
         <p class="text-xs text-gray-400 uppercase tracking-wide mb-1">Assigned To</p>

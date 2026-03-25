@@ -69,6 +69,20 @@
             </div>
         </div>
 
+        <!-- Meeting link + Location (meeting-only) -->
+        <div id="meeting-link-wrapper" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+                <label for="{{ form.meeting_url.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting Link</label>
+                {{ form.meeting_url }}
+                {% if form.meeting_url.errors %}<p class="mt-1 text-sm text-red-400">{{ form.meeting_url.errors.0 }}</p>{% endif %}
+            </div>
+            <div>
+                <label for="{{ form.location.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Location</label>
+                {{ form.location }}
+                {% if form.location.errors %}<p class="mt-1 text-sm text-red-400">{{ form.location.errors.0 }}</p>{% endif %}
+            </div>
+        </div>
+
         <!-- Status + Priority (2-col on desktop) -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -195,14 +209,17 @@
                 function updateMeetingTimeVisibility() {
                     var wrapper = document.getElementById('due-time-wrapper');
                     var durationWrapper = document.getElementById('duration-wrapper');
+                    var meetingLinkWrapper = document.getElementById('meeting-link-wrapper');
                     var dateLabel = document.getElementById('due-date-label');
                     if (taskTypeSelect.value === 'meeting') {
                         wrapper.classList.remove('hidden');
                         durationWrapper.classList.remove('hidden');
+                        if (meetingLinkWrapper) meetingLinkWrapper.classList.remove('hidden');
                         if (dateLabel) dateLabel.textContent = 'Meeting date';
                     } else {
                         wrapper.classList.add('hidden');
                         durationWrapper.classList.add('hidden');
+                        if (meetingLinkWrapper) meetingLinkWrapper.classList.add('hidden');
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
                         document.getElementById('{{ form.duration_minutes.id_for_label }}').value = '';
                         if (dateLabel) dateLabel.textContent = 'Due date';
