@@ -731,6 +731,11 @@ def calendar_feed(request):
             desc_parts = []
             if task.description:
                 desc_parts.append(task.description)
+            if task.meeting_id:
+                id_line = f"Meeting ID: {task.meeting_id}"
+                if task.meeting_passcode:
+                    id_line += f"  Passcode: {task.meeting_passcode}"
+                desc_parts.append(id_line)
             if task.meeting_url:
                 desc_parts.append(f"Join: {task.meeting_url}")
             if desc_parts:

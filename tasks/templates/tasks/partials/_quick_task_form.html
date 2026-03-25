@@ -28,14 +28,26 @@
                 {{ form.duration_minutes }}
             </div>
         </div>
-        <div id="qt-meeting-link-wrapper" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-                <label for="{{ form.meeting_url.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting Link</label>
-                {{ form.meeting_url }}
+        <div id="qt-meeting-link-wrapper" class="hidden space-y-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.meeting_url.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting Link</label>
+                    {{ form.meeting_url }}
+                </div>
+                <div>
+                    <label for="{{ form.location.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Location</label>
+                    {{ form.location }}
+                </div>
             </div>
-            <div>
-                <label for="{{ form.location.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Location</label>
-                {{ form.location }}
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label for="{{ form.meeting_id.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Meeting ID</label>
+                    {{ form.meeting_id }}
+                </div>
+                <div>
+                    <label for="{{ form.meeting_passcode.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Passcode</label>
+                    {{ form.meeting_passcode }}
+                </div>
             </div>
         </div>
         <div id="qt-provider-wrapper" class="hidden">

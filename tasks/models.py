@@ -64,6 +64,8 @@ class Task(models.Model):
         null=True, blank=True, related_name="assigned_tasks",
     )
     meeting_url = models.URLField(max_length=2000, blank=True, verbose_name="Meeting link")
+    meeting_id = models.CharField(max_length=50, blank=True, verbose_name="Meeting ID")
+    meeting_passcode = models.CharField(max_length=50, blank=True, verbose_name="Passcode")
     location = models.CharField(max_length=255, blank=True)
     is_recurring = models.BooleanField(default=False)
     recurrence_rule = models.CharField(max_length=15, choices=RECURRENCE_CHOICES, blank=True)
