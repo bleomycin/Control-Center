@@ -133,6 +133,8 @@
                 document.getElementById('sidebar').classList.add('-translate-x-full');
                 var overlay = document.getElementById('sidebar-overlay');
                 if (overlay) overlay.classList.add('hidden');
+                // Lock body scroll so iOS keyboard open/close doesn't create ghost scroll space
+                document.body.classList.add('overflow-hidden');
             }
 
             var panel = document.getElementById('assistant-drawer');
@@ -177,6 +179,10 @@
 
             // Remove desktop margin push
             document.querySelector('main').style.marginRight = '';
+
+            // Unlock body scroll (mobile)
+            document.body.classList.remove('overflow-hidden');
+            window.scrollTo(0, 0);
 
             // Show FAB again
             var fab = document.getElementById('assistant-fab');

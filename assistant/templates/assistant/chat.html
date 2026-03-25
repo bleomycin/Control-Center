@@ -3,7 +3,7 @@
 {% block title %}Assistant - Control Center{% endblock %}
 {% block assistant_fab %}{% endblock %}
 {% block content %}
-<div class="flex h-[calc(100vh-3.5rem)] lg:h-[calc(100vh)] -m-4 sm:-m-6 lg:-m-8">
+<div class="flex -m-4 sm:-m-6 lg:-m-8" style="height:calc(100vh - 3.5rem);height:calc(100dvh - 3.5rem)" id="assistant-container">
 
     <!-- Session Sidebar -->
     <div class="hidden lg:flex flex-col w-64 border-r border-gray-700 bg-gray-800/50 shrink-0">
@@ -127,6 +127,7 @@
                           class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-base text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
                           onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();document.getElementById('chat-form').dispatchEvent(new Event('submit'))}else if(event.key==='Escape'){cancelEdit()}"
                           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"
+                          onblur="window.scrollTo(0,0)"
                 ></textarea>
                 <button type="submit" id="send-btn"
                         class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors shrink-0">
