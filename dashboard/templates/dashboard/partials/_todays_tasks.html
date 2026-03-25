@@ -1,0 +1,31 @@
+{% if todays_tasks %}
+<div class="mb-6 bg-gray-800 rounded-lg border border-amber-900/50">
+    <div class="px-4 py-3 border-b border-amber-900/50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold text-amber-300 uppercase tracking-wide">Due Today</h2>
+            <span class="text-xs px-1.5 py-0.5 rounded-full bg-amber-900/50 text-amber-300">{{ todays_tasks|length }}</span>
+        </div>
+        <a href="{% url 'tasks:list' %}" class="text-xs text-amber-400 hover:text-amber-300 transition-colors">All Tasks &rarr;</a>
+    </div>
+    <div class="divide-y divide-gray-700/50">
+        {% for task in todays_tasks %}
+        <a href="{{ task.get_absolute_url }}" class="flex items-center px-4 py-3 hover:bg-gray-750 transition-colors gap-3">
+            <div class="flex-shrink-0 w-16 text-center">
+                {% if task.due_time %}
+                <p class="text-xs font-medium text-amber-400">{{ task.due_time|time:"g:i A" }}</p>
+                {% else %}
+                <p class="text-xs text-gray-500">All day</p>
+                {% endif %}
+            </div>
+            <div class="min-w-0 flex-1">
+                <p class="text-sm text-gray-200 truncate">{{ task.title }}</p>
+                {% if task.assigned_to %}
+                <p class="text-xs text-gray-500 truncate">{{ task.assigned_to.name }}</p>
+                {% endif %}
+            </div>
+            <span class="flex-shrink-0 text-xs px-1.5 py-0.5 rounded-full {% if task.priority == 'critical' %}bg-red-900/50 text-red-300{% elif task.priority == 'high' %}bg-orange-900/50 text-orange-300{% else %}bg-gray-700 text-gray-400{% endif %}">{{ task.get_priority_display }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}

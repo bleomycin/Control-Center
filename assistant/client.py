@@ -83,10 +83,14 @@ Show the user a clear summary organized as follows:
 |---|-------|----------|----------|-----|-----------|
 | 1 | ... | ... | ... | ... | outbound/personal/inbound |
 
-**Subtasks** (grouped under parent):
-- Parent task title
-  - [ ] Subtask 1
-  - [ ] Subtask 2
+**Checklists** (grouped under entity):
+- Checklist name → on [entity type] "[name]"
+  - [ ] Item 1
+  - [ ] Item 2
+
+**Action items to add to existing meeting** (if a meeting exists at the same time):
+- Meeting: [meeting title]
+  - [ ] Action item (as ChecklistItem on a Checklist linked to the meeting task)
 
 **Note to save:**
 - Title: [email subject or descriptive summary]
@@ -101,10 +105,9 @@ Records must be created in this order because later records reference earlier on
 1. **Stakeholders** — people and organizations (need their IDs for everything else)
 2. **Assets** — RealEstate, Investment, Loan, Vehicle, Aircraft (link stakeholders via ownership through models where applicable)
 3. **Legal matters** — if referenced (link related_stakeholders and related assets)
-4. **Tasks** — link to related_stakeholders, related_property, related_legal_matter as appropriate
-5. **SubTasks** — under their parent tasks
-6. **Checklists** — named checklists on stakeholders, properties, or other entities. Use a Checklist (model: Checklist) with a name and the appropriate FK (related_stakeholder, related_task, related_note, related_property, related_legal_matter), then create ChecklistItem records under it. Example: "items to request from Thomas: W-9, operating agreement, bank statements" → create a Checklist named "Items to request" on Thomas's stakeholder (related_stakeholder=Thomas's ID), with 3 ChecklistItems. Also create a companion Task for the follow-up workflow ("Follow up with Thomas on document request", direction=inbound, status=waiting, assigned_to=Thomas).
-7. **Note** — the email/meeting content itself, linked to all created and found entities via participants, related_stakeholders, related_properties, related_investments, related_loans, related_legal_matters, etc.
+4. **Tasks** — link to related_stakeholders, related_property, related_legal_matter as appropriate. **Before creating a new task, search for existing meetings at the same date/time.** If a meeting already exists at the same time, create the action item as a ChecklistItem on that meeting (via a Checklist linked to the meeting task) instead of a separate standalone task. This keeps the calendar clean and groups related items.
+5. **Checklists** — named checklists on any entity. Use a Checklist (model: Checklist) with a name and the appropriate FK (related_stakeholder, related_task, related_note, related_property, related_legal_matter), then create ChecklistItem records under it. Example: "items to request from Thomas: W-9, operating agreement, bank statements" → create a Checklist named "Items to request" on Thomas's stakeholder (related_stakeholder=Thomas's ID), with 3 ChecklistItems. Also create a companion Task for the follow-up workflow ("Follow up with Thomas on document request", direction=inbound, status=waiting, assigned_to=Thomas).
+6. **Note** — the email/meeting content itself, linked to all created and found entities via participants, related_stakeholders, related_properties, related_investments, related_loans, related_legal_matters, etc.
 
 Use `create_record` with `dry_run=true` for the batch. After the user confirms, execute all with `dry_run=false`.
 
@@ -164,9 +167,20 @@ def _build_system_prompt():
     from django.utils import timezone
     stats_lines.append(f"Today: {timezone.localdate().isoformat()}")
 
-    # Include owner identity if configured
+    # Include assistant settings
     from .models import AssistantSettings
-    owner_name = AssistantSettings.load().owner_name
+    settings = AssistantSettings.load()
+    owner_name = settings.owner_name
+    reminder_mins = settings.default_reminder_minutes
+    if reminder_mins:
+        stats_lines.append(f"Default task reminder: {reminder_mins} minutes before due time")
+        stats_lines.append(
+            "When creating a task with a due_date and due_time, automatically set "
+            f"reminder_date to {reminder_mins} minutes before the due datetime. "
+            "For example, if due_date=2026-04-01 and due_time=14:00, set "
+            f"reminder_date to the datetime {reminder_mins} minutes earlier. "
+            "Skip this for tasks without a due_time."
+        )
     if owner_name:
         stats_lines.append(f"System owner: {owner_name}")
         stats_lines.append(

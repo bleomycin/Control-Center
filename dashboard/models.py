@@ -142,7 +142,7 @@ class CalendarFeedSettings(models.Model):
     REMINDER_DEFAULTS = {
         "meetings": [60, 15],
         "appointments": [60, 15],
-        "tasks": [],
+        "tasks": [60],
         "payments": [],
         "followups": [],
         "legal": [],

@@ -100,7 +100,7 @@
                 Advanced
             </summary>
             <div class="space-y-4 pt-2">
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                         <label for="{{ form.max_tokens.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
                             Max Tokens
@@ -116,6 +116,14 @@
                         {{ form.temperature }}
                         {% if form.temperature.errors %}<p class="mt-1 text-sm text-red-400">{{ form.temperature.errors.0 }}</p>{% endif %}
                         <p class="mt-1 text-xs text-gray-500">{{ form.temperature.help_text }}</p>
+                    </div>
+                    <div>
+                        <label for="{{ form.default_reminder_minutes.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
+                            Task Reminder
+                        </label>
+                        {{ form.default_reminder_minutes }}
+                        {% if form.default_reminder_minutes.errors %}<p class="mt-1 text-sm text-red-400">{{ form.default_reminder_minutes.errors.0 }}</p>{% endif %}
+                        <p class="mt-1 text-xs text-gray-500">{{ form.default_reminder_minutes.help_text }}</p>
                     </div>
                 </div>
             </div>

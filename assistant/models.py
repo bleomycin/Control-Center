@@ -21,6 +21,10 @@ class AssistantSettings(models.Model):
         max_digits=3, decimal_places=2, default=0.0,
         help_text="0.0 = deterministic, 1.0 = default, 2.0 = maximum creativity",
     )
+    default_reminder_minutes = models.PositiveIntegerField(
+        default=60,
+        help_text="Default reminder (minutes before due time) when creating tasks. 0 = no auto-reminder.",
+    )
 
     class Meta:
         verbose_name = "Assistant Settings"

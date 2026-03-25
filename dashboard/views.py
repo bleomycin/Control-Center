@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, time, timedelta
 from datetime import datetime as dt
 
 from django.contrib import messages
@@ -87,6 +87,18 @@ def dashboard(request):
         total=Sum("current_balance"),
     )["total"] or 0
     active_loan_count = active_loans_qs.count()
+
+    # Today's tasks: non-meeting tasks due today, sorted by time (timed first)
+    todays_tasks = sorted(
+        Task.objects.filter(
+            due_date=today,
+        ).exclude(
+            status="complete",
+        ).exclude(
+            task_type="meeting",
+        ).select_related("assigned_to"),
+        key=lambda t: (t.due_time is None, t.due_time or time(23, 59)),
+    )
 
     # Upcoming meetings (next 14 days)
     upcoming_meetings = Task.objects.filter(
@@ -200,6 +212,7 @@ def dashboard(request):
         "active_loan_count": active_loan_count,
         "loan_balance": total_liabilities,
         "upcoming_meetings": upcoming_meetings,
+        "todays_tasks": todays_tasks,
         "today": today,
         "upcoming_deadlines": upcoming_deadlines,
         "at_risk_properties": at_risk_properties,
@@ -711,15 +724,16 @@ def calendar_feed(request):
             prefix = direction_prefixes.get(task.direction, "")
             ev = Event()
             ev.add("summary", f"{prefix}{task.title}")
-            if task.is_meeting and task.due_time:
+            event_type = "meetings" if task.is_meeting else "tasks"
+            if task.due_time:
                 start = datetime.combine(task.due_date, task.due_time)
                 ev.add("dtstart", start)
                 if task.duration_minutes:
                     ev.add("dtend", start + timedelta(minutes=task.duration_minutes))
-                _add_alarms(ev, "meetings")
+                _add_alarms(ev, event_type)
             else:
                 ev.add("dtstart", task.due_date)
-                _add_alarms(ev, "meetings" if task.is_meeting else "tasks")
+                _add_alarms(ev, event_type)
             # Add VALARM for task-level reminder_date if set
             if task.reminder_date:
                 from icalendar import Alarm
@@ -1054,6 +1068,12 @@ def calendar_events(request):
                 "color": priority_colors.get(task.priority, "#9ca3af"),
                 "extendedProps": {"type": "task"},
             }
+            if task.due_time:
+                event["allDay"] = False
+                if task.duration_minutes:
+                    from datetime import datetime as dt_cls
+                    end_dt = dt_cls.combine(task.due_date, task.due_time) + timedelta(minutes=task.duration_minutes)
+                    event["end"] = end_dt.isoformat()
         events.append(event)
 
     # Loan payment events (red)
