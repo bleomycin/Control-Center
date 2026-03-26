@@ -131,14 +131,54 @@ function createChatEngine(config) {
         }
     }
 
+    // Pending quick-reply state: set during finish, injected after refresh
+    var pendingQuickReply = false;
+
+    function _injectQuickReplyButtons() {
+        // Find the last assistant message bubble and append buttons after it
+        var bubbles = config.messageListEl.querySelectorAll('.bg-gray-700');
+        if (bubbles.length === 0) return;
+        var lastBubble = bubbles[bubbles.length - 1];
+
+        var btnContainer = document.createElement('div');
+        btnContainer.className = 'flex gap-2 mt-2 quick-reply-buttons';
+        btnContainer.innerHTML =
+            '<button class="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-xs font-medium rounded-md transition-colors">Confirm</button>' +
+            '<button class="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-xs font-medium rounded-md transition-colors">Deny</button>';
+        lastBubble.parentNode.after(btnContainer);
+
+        btnContainer.querySelectorAll('button').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var reply = btn.textContent.toLowerCase();
+                config.inputEl.value = reply;
+                config.inputEl.focus();
+                document.querySelectorAll('.quick-reply-buttons').forEach(function(el) { el.remove(); });
+                config.inputEl.form.dispatchEvent(new Event('submit'));
+            });
+        });
+    }
+
     function finish() {
         if (inactivityTimer) clearTimeout(inactivityTimer);
         streaming = false;
         config.sendBtnEl.disabled = false;
         config.sendBtnEl.textContent = 'Send';
+
+        // Check if the response looks like a confirmation prompt
+        pendingQuickReply = false;
+        if (collectedText) {
+            var lastChunk = collectedText.toLowerCase().slice(-200);
+            if (lastChunk.match(/\bconfirm|\bapprove|\bproceed|\blook right|\blook good|\bshall i|\bgo ahead|\bready to (execute|create|update|delete)/)) {
+                pendingQuickReply = true;
+            }
+        }
+
         currentStreamContent = null;
         currentStreamTools = null;
-        if (config.onFinish) config.onFinish();
+        // Delay onFinish slightly so the server saves the message before we refresh
+        if (config.onFinish) {
+            setTimeout(function() { config.onFinish(); }, 300);
+        }
     }
 
     function doSend(text) {
@@ -155,6 +195,9 @@ function createChatEngine(config) {
         streaming = true;
         config.sendBtnEl.disabled = true;
         config.sendBtnEl.textContent = '...';
+
+        // Remove any quick-reply buttons from previous messages
+        document.querySelectorAll('.quick-reply-buttons').forEach(function(el) { el.remove(); });
 
         // Hide empty state
         if (config.emptyStateEl) config.emptyStateEl.style.display = 'none';
@@ -251,6 +294,11 @@ function createChatEngine(config) {
         }).then(function(r) { return r.text(); })
         .then(function(html) {
             config.messageListEl.innerHTML = html;
+            // Inject quick-reply buttons after refresh if pending
+            if (pendingQuickReply) {
+                pendingQuickReply = false;
+                _injectQuickReplyButtons();
+            }
             if (config.emptyStateEl) {
                 config.emptyStateEl.style.display = config.messageListEl.innerHTML.trim() ? 'none' : '';
             }
