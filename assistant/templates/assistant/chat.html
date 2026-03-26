@@ -168,6 +168,8 @@ var chatEngine = createChatEngine({
                 var serverMessages = doc.getElementById('message-list');
                 if (serverMessages) messageList.innerHTML = serverMessages.innerHTML;
                 chatEngine.autoScroll();
+                // Trigger quick-reply button injection via engine's refreshMessages
+                chatEngine.refreshMessages();
             }).catch(function() { chatEngine.autoScroll(); });
     },
     onTitle: function(title) {

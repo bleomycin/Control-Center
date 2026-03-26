@@ -517,7 +517,6 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {},
         },
-        "cache_control": {"type": "ephemeral"},
     },
 ]
 

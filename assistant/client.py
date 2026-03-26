@@ -247,7 +247,7 @@ def _build_api_messages(chat_messages):
     if len(truncated) > CACHE_BREAKPOINT_INTERVAL:
         breakpoints_added = 0
         for i in range(CACHE_BREAKPOINT_INTERVAL - 1, len(truncated) - 1, CACHE_BREAKPOINT_INTERVAL):
-            if breakpoints_added >= 3:  # Reserve 1 for automatic on last block
+            if breakpoints_added >= 3:  # Max 4 total: 1 system + 3 messages
                 break
             msg = truncated[i]
             content = msg.get("content")
@@ -419,7 +419,6 @@ def send_message(session, user_text):
             response = client.messages.create(
                 model=model_name,
                 max_tokens=max_tokens,
-                cache_control=CACHE_CONTROL,
                 system=system_prompt,
                 tools=TOOL_DEFINITIONS,
                 messages=api_messages,
@@ -575,7 +574,6 @@ def stream_message(session, user_text):
                 with client.messages.stream(
                     model=model_name,
                     max_tokens=max_tokens,
-                    cache_control=CACHE_CONTROL,
                     system=system_prompt,
                     tools=TOOL_DEFINITIONS,
                     messages=api_messages,
