@@ -8,6 +8,13 @@
                 <span id="drawer-session-title" class="text-xs text-gray-500 truncate hidden"></span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
+                <button hx-get="/assistant/process-email/"
+                        hx-target="#modal-content"
+                        hx-swap="innerHTML"
+                        class="p-1 text-green-400 hover:text-green-300 rounded transition-colors"
+                        title="Process Email">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                </button>
                 <button onclick="drawerNewSession()" class="px-2 py-1 text-xs text-blue-400 hover:text-white hover:bg-blue-600/30 border border-blue-500/40 rounded-md flex items-center gap-1 transition-colors" title="New chat">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>

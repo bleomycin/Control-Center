@@ -166,12 +166,7 @@ function submitGmailEmail() {
         message += '\n\nAdditional context: ' + context;
     }
     closeModal();
-    var chatInput = document.getElementById('chat-input');
-    if (chatInput) {
-        chatInput.value = message;
-        chatInput.dispatchEvent(new Event('input', {bubbles: true}));
-        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
-    }
+    _sendToActiveChat(message);
 }
 
 // --- Paste tab (unchanged) ---
@@ -187,11 +182,20 @@ function submitProcessEmail() {
         message += '\n\nAdditional context: ' + context;
     }
     closeModal();
-    var chatInput = document.getElementById('chat-input');
-    if (chatInput) {
+    _sendToActiveChat(message);
+}
+
+function _sendToActiveChat(message) {
+    // If the drawer is open, send to drawer; otherwise send to full-page chat
+    var useDrawer = typeof drawerOpen !== 'undefined' && drawerOpen && document.getElementById('drawer-chat-input');
+    var inputId = useDrawer ? 'drawer-chat-input' : 'chat-input';
+    var formId = useDrawer ? 'drawer-chat-form' : 'chat-form';
+    var chatInput = document.getElementById(inputId);
+    var chatForm = document.getElementById(formId);
+    if (chatInput && chatForm) {
         chatInput.value = message;
         chatInput.dispatchEvent(new Event('input', {bubbles: true}));
-        document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+        chatForm.dispatchEvent(new Event('submit'));
     }
 }
 </script>
