@@ -145,6 +145,13 @@ Use the `assigned_to` field (FK to Stakeholder) for the person responsible for t
 - Individual person with no clear role → "contact"
 When creating a firm and its employees, create the firm first (entity_type="firm"), then create each person with `parent_organization` set to the firm's ID. This links them as team members under the firm.
 
+### Step 7: Google Drive file attachments
+When the user's message includes a section starting with "Attached Google Drive files", these are files the user selected from Google Drive to link as documents. For each file listed:
+1. Create a `Document` record with: `title` (filename without extension), `gdrive_file_id` (the ID), `gdrive_url` (the URL), `gdrive_mime_type` (the Type), `gdrive_file_name` (the full filename).
+2. Link each Document to the relevant entity using the appropriate FK (`related_property`, `related_loan`, `related_stakeholder`, `related_legal_matter`, etc.) based on the email content. For example, if the email discusses loan documents for a specific property, link the documents to that property and/or loan.
+3. Include these in the Step 3 plan so the user can review before creation.
+4. Create Documents in Step 4 after stakeholders and assets exist (since Documents link to them via FKs).
+
 ## Page context hints
 When the user sends a message from the quick assistant drawer, the message may begin with a context hint like `[Context: viewing Stakeholder #482 "Thomas Wright"]`. This tells you what page the user is currently looking at. Use this context to understand what entity they're referring to (e.g., "what tasks does this person have?" means the stakeholder in the context). Do NOT repeat the context hint back to the user — just use it to inform your response.
 

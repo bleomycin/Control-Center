@@ -249,6 +249,29 @@ def verify_connection():
         return False, str(exc)
 
 
+def list_folder_contents(folder_id, page_size=100):
+    """
+    List files inside a Google Drive folder.
+    Returns a list of dicts with keys: id, name, mimeType, webViewLink.
+    Returns None on failure.
+    """
+    service = get_service()
+    if not service:
+        return None
+    try:
+        safe_id = folder_id.replace("'", "\\'")
+        result = service.files().list(
+            q=f"'{safe_id}' in parents and trashed = false",
+            pageSize=page_size,
+            fields="files(id,name,mimeType,webViewLink)",
+            orderBy="name",
+        ).execute()
+        return result.get("files", [])
+    except Exception:
+        logger.exception("Failed to list folder contents for %s", folder_id)
+        return None
+
+
 def get_picker_access_token():
     """
     Return a fresh access token string for use with the Google Picker widget.

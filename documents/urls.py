@@ -40,4 +40,5 @@ urlpatterns = [
     path("gdrive/verify/", views.gdrive_verify, name="gdrive_verify"),
     path("api/picker-token/", views.picker_token, name="picker_token"),
     path("api/gdrive-search/", views.gdrive_search, name="gdrive_search"),
+    path("api/gdrive-folder/", views.gdrive_folder_contents, name="gdrive_folder_contents"),
 ]

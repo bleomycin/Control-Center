@@ -291,11 +291,18 @@ def reorder_sessions(request):
 def process_email_form(request):
     """Return the Process Email modal form."""
     from email_links import gmail
+    from documents import gdrive
     gmail_available = gmail.is_available()
     labels = gmail.get_labels() if gmail_available else []
+    drive_connected = gdrive.is_connected()
+    drive_settings = None
+    if drive_connected:
+        drive_settings = gdrive._get_settings()
     return render(request, "assistant/partials/_process_email_form.html", {
         "gmail_available": gmail_available,
         "labels": labels,
+        "drive_connected": drive_connected,
+        "drive_settings": drive_settings,
     })
 
 

@@ -538,3 +538,17 @@ def gdrive_search(request):
     if files is None:
         return JsonResponse({"error": "Failed to search Drive"}, status=500)
     return JsonResponse({"files": files})
+
+
+def gdrive_folder_contents(request):
+    """Return the contents of a Google Drive folder as JSON."""
+    from . import gdrive
+    if not gdrive.is_connected():
+        return JsonResponse({"error": "Not connected"}, status=403)
+    folder_id = request.GET.get("folder_id", "")
+    if not folder_id:
+        return JsonResponse({"error": "Missing folder_id"}, status=400)
+    files = gdrive.list_folder_contents(folder_id)
+    if files is None:
+        return JsonResponse({"error": "Failed to list folder"}, status=500)
+    return JsonResponse({"files": files})

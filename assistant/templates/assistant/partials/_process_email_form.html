@@ -98,7 +98,27 @@
             Process
         </button>
     </div>
+
+    {% if drive_connected %}
+    <!-- Drive Files Section (shared across both tabs) -->
+    <div class="mt-4 pt-4 border-t border-gray-700">
+        <div class="flex items-center justify-between mb-2">
+            <label class="text-sm font-medium text-gray-300">Link Drive Files <span class="text-gray-500">(optional)</span></label>
+            <button type="button" id="drive-pick-btn" onclick="openDrivePicker()"
+                    class="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                Pick from Drive
+            </button>
+        </div>
+        <div id="drive-file-list" class="space-y-1"></div>
+        <p id="drive-empty-hint" class="text-xs text-gray-500">Select files or a folder from Google Drive to link as documents.</p>
+    </div>
+    {% endif %}
 </div>
+
+{% if drive_connected %}
+<script src="https://apis.google.com/js/api.js" async defer></script>
+{% endif %}
 
 <script>
 // --- Tab switching ---
@@ -165,11 +185,12 @@ function submitGmailEmail() {
     if (context) {
         message += '\n\nAdditional context: ' + context;
     }
+    message += _buildDriveFilesBlock();
     closeModal();
     _sendToActiveChat(message);
 }
 
-// --- Paste tab (unchanged) ---
+// --- Paste tab ---
 function submitProcessEmail() {
     var content = document.getElementById('email-content').value.trim();
     if (!content) {
@@ -181,12 +202,12 @@ function submitProcessEmail() {
     if (context) {
         message += '\n\nAdditional context: ' + context;
     }
+    message += _buildDriveFilesBlock();
     closeModal();
     _sendToActiveChat(message);
 }
 
 function _sendToActiveChat(message) {
-    // If the drawer is open, send to drawer; otherwise send to full-page chat
     var useDrawer = typeof drawerOpen !== 'undefined' && drawerOpen && document.getElementById('drawer-chat-input');
     var inputId = useDrawer ? 'drawer-chat-input' : 'chat-input';
     var formId = useDrawer ? 'drawer-chat-form' : 'chat-form';
@@ -198,4 +219,190 @@ function _sendToActiveChat(message) {
         chatForm.dispatchEvent(new Event('submit'));
     }
 }
+
+// --- Drive file picker ---
+var _driveFiles = [];  // [{id, name, mimeType, url}]
+
+function _buildDriveFilesBlock() {
+    if (_driveFiles.length === 0) return '';
+    var block = '\n\n---\n\nAttached Google Drive files (create a Document record for each and link to relevant entities):\n';
+    for (var i = 0; i < _driveFiles.length; i++) {
+        var f = _driveFiles[i];
+        block += '- ' + f.name + ' | ID: ' + f.id + ' | URL: ' + f.url + ' | Type: ' + f.mimeType + '\n';
+    }
+    return block;
+}
+
+function _renderDriveFiles() {
+    var listEl = document.getElementById('drive-file-list');
+    var hint = document.getElementById('drive-empty-hint');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    if (_driveFiles.length === 0) {
+        if (hint) hint.classList.remove('hidden');
+        return;
+    }
+    if (hint) hint.classList.add('hidden');
+    for (var i = 0; i < _driveFiles.length; i++) {
+        (function(idx) {
+            var f = _driveFiles[idx];
+            var row = document.createElement('div');
+            row.className = 'flex items-center justify-between bg-gray-700/50 border border-gray-600 rounded px-2 py-1.5';
+            row.innerHTML = '<div class="min-w-0 flex-1">'
+                + '<p class="text-xs text-gray-200 truncate">' + _escHtml(f.name) + '</p>'
+                + '<p class="text-[10px] text-gray-500 truncate">' + _escHtml(f.mimeType) + '</p>'
+                + '</div>'
+                + '<button type="button" class="text-gray-500 hover:text-red-400 ml-2 shrink-0" title="Remove">'
+                + '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>'
+                + '</button>';
+            row.querySelector('button').addEventListener('click', function() {
+                _driveFiles.splice(idx, 1);
+                _renderDriveFiles();
+            });
+            listEl.appendChild(row);
+        })(i);
+    }
+}
+
+function _escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function _addDriveFile(file) {
+    // Deduplicate by ID
+    for (var i = 0; i < _driveFiles.length; i++) {
+        if (_driveFiles[i].id === file.id) return;
+    }
+    _driveFiles.push(file);
+    _renderDriveFiles();
+}
+
+{% if drive_connected %}
+var _pickerApiLoaded = false;
+
+function openDrivePicker() {
+    var btn = document.getElementById('drive-pick-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+
+    _loadPickerApi().then(function() {
+        return _fetchPickerToken();
+    }).then(function(token) {
+        _showPicker(token);
+    }).catch(function(err) {
+        console.error('Drive picker error:', err);
+    }).finally(function() {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Pick from Drive'; }
+    });
+}
+
+function _loadPickerApi() {
+    return new Promise(function(resolve, reject) {
+        if (_pickerApiLoaded) { resolve(); return; }
+        if (typeof gapi === 'undefined') {
+            // Wait for script to load
+            var tries = 0;
+            var check = setInterval(function() {
+                tries++;
+                if (typeof gapi !== 'undefined') { clearInterval(check); _doLoadPicker(resolve, reject); }
+                else if (tries > 30) { clearInterval(check); reject(new Error('Google APIs not loaded')); }
+            }, 200);
+            return;
+        }
+        _doLoadPicker(resolve, reject);
+    });
+}
+
+function _doLoadPicker(resolve, reject) {
+    gapi.load('picker', {
+        callback: function() { _pickerApiLoaded = true; resolve(); },
+        onerror: function() { reject(new Error('Failed to load Picker API')); }
+    });
+}
+
+function _fetchPickerToken() {
+    return fetch('/documents/api/picker-token/', { headers: {'X-Requested-With': 'XMLHttpRequest'} })
+        .then(function(r) { if (!r.ok) throw new Error('Token request failed'); return r.json(); })
+        .then(function(d) { if (d.error) throw new Error(d.error); return d.access_token; });
+}
+
+function _showPicker(accessToken) {
+    var view = new google.picker.DocsView()
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true)
+        .setParent('root')
+        .setMode(google.picker.DocsViewMode.LIST);
+
+    var builder = new google.picker.PickerBuilder()
+        .addView(view)
+        .setOAuthToken(accessToken)
+        .setCallback(_pickerCb)
+        .setTitle('Select files or a folder')
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED);
+
+    {% if drive_settings.api_key %}
+    builder.setDeveloperKey('{{ drive_settings.api_key }}');
+    {% endif %}
+    {% if drive_settings.project_number %}
+    builder.setAppId('{{ drive_settings.project_number }}');
+    {% endif %}
+
+    builder.build().setVisible(true);
+}
+
+function _pickerCb(data) {
+    if (data.action !== google.picker.Action.PICKED) return;
+    var docs = data.docs || [];
+    for (var i = 0; i < docs.length; i++) {
+        var doc = docs[i];
+        if (doc.mimeType === 'application/vnd.google-apps.folder') {
+            // Expand folder contents
+            _expandFolder(doc.id, doc.name);
+        } else {
+            _addDriveFile({
+                id: doc.id,
+                name: doc.name || '',
+                mimeType: doc.mimeType || '',
+                url: doc.url || ('https://drive.google.com/file/d/' + doc.id + '/view'),
+            });
+        }
+    }
+}
+
+function _expandFolder(folderId, folderName) {
+    // Show loading indicator
+    var listEl = document.getElementById('drive-file-list');
+    var loading = document.createElement('div');
+    loading.className = 'text-xs text-gray-500 py-1';
+    loading.textContent = 'Loading files from ' + folderName + '...';
+    loading.id = 'folder-loading';
+    if (listEl) listEl.appendChild(loading);
+
+    fetch('/documents/api/gdrive-folder/?folder_id=' + encodeURIComponent(folderId))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var el = document.getElementById('folder-loading');
+            if (el) el.remove();
+            if (data.error) { console.error(data.error); return; }
+            var files = data.files || [];
+            for (var i = 0; i < files.length; i++) {
+                var f = files[i];
+                // Skip sub-folders
+                if (f.mimeType === 'application/vnd.google-apps.folder') continue;
+                _addDriveFile({
+                    id: f.id,
+                    name: f.name || '',
+                    mimeType: f.mimeType || '',
+                    url: f.webViewLink || ('https://drive.google.com/file/d/' + f.id + '/view'),
+                });
+            }
+        })
+        .catch(function(err) {
+            var el = document.getElementById('folder-loading');
+            if (el) el.textContent = 'Failed to load folder';
+            console.error(err);
+        });
+}
+{% endif %}
 </script>
