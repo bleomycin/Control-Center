@@ -346,6 +346,27 @@ _REPLY_MARKERS = [
     re.compile(r"^_{5,}$|^-{5,}$", re.MULTILINE),
 ]
 
+# Known boilerplate blocks to strip entirely from email bodies.
+# These are specific recurring disclaimers that waste tokens and
+# contain no useful contact or entity information.
+_BOILERPLATE_PATTERNS = [
+    # Armanino confidentiality + entity structure disclaimer
+    re.compile(
+        r"CONFIDENTIALITY AND PRIVACY NOTICE.*?subsidiary entities provide tax, advisory, and business consulting services\."
+        r".*?not licensed CPA firms\.",
+        re.DOTALL,
+    ),
+]
+
+
+def _strip_boilerplate(body):
+    """Remove known boilerplate blocks from email bodies."""
+    if not body:
+        return body
+    for pattern in _BOILERPLATE_PATTERNS:
+        body = pattern.sub("", body)
+    return body.rstrip()
+
 
 def _strip_quoted_reply(body):
     """Remove the trailing quoted reply block from an email body.
@@ -392,7 +413,7 @@ def gmail_thread_fetch(request):
         parts.append(f"--- Message {i} ---")
         parts.append(f"From: {msg.get('from_name', '')} <{msg.get('from_email', '')}>")
         parts.append(f"Date: {msg.get('date', '')}")
-        body = _strip_quoted_reply(msg.get("body", "").strip())
+        body = _strip_boilerplate(_strip_quoted_reply(msg.get("body", "").strip()))
         parts.append(body)
         parts.append("")
     return JsonResponse({"formatted_text": "\n".join(parts), "subject": subject})
