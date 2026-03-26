@@ -3,7 +3,12 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 from django.views.static import serve
 
+from dashboard.views import pwa_manifest, pwa_offline, pwa_service_worker
+
 urlpatterns = [
+    path('manifest.json', pwa_manifest, name='manifest'),
+    path('sw.js', pwa_service_worker, name='service_worker'),
+    path('offline/', pwa_offline, name='offline'),
     path('admin/', admin.site.urls),
     path('', include('dashboard.urls')),
     path('stakeholders/', include('stakeholders.urls')),

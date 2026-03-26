@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* PWA standalone mode */
+html, body { overscroll-behavior: none; }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #1e293b; }

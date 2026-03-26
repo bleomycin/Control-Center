@@ -4,7 +4,7 @@ from datetime import datetime as dt
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.db.models import Q, Sum
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -1812,3 +1812,51 @@ def backup_restore(request, filename=None):
     return render(request, "dashboard/partials/_backup_list.html", {
         "backups": backups, "message": message, "msg_type": msg_type,
     })
+
+
+def pwa_manifest(request):
+    """Serve the PWA manifest with resolved static file URLs."""
+    from django.templatetags.static import static
+    import json
+
+    manifest = {
+        "name": "Control Center",
+        "short_name": "Control Center",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#111827",
+        "theme_color": "#111827",
+        "icons": [
+            {"src": static("icons/icon-192x192.png"), "sizes": "192x192", "type": "image/png"},
+            {"src": static("icons/icon-512x512.png"), "sizes": "512x512", "type": "image/png"},
+        ],
+    }
+    return HttpResponse(
+        json.dumps(manifest),
+        content_type="application/manifest+json",
+    )
+
+
+def pwa_offline(request):
+    """Offline fallback page for the service worker."""
+    return render(request, "offline.html")
+
+
+def pwa_service_worker(request):
+    """Serve the service worker from root scope with correct headers."""
+    from django.contrib.staticfiles.finders import find
+
+    sw_path = find("sw.js")
+    if sw_path:
+        with open(sw_path) as f:
+            content = f.read()
+    else:
+        # Fallback: try staticfiles (post-collectstatic)
+        import os
+        sw_path = os.path.join(settings.STATIC_ROOT, "sw.js")
+        with open(sw_path) as f:
+            content = f.read()
+    response = HttpResponse(content, content_type="application/javascript")
+    response["Service-Worker-Allowed"] = "/"
+    response["Cache-Control"] = "no-cache"
+    return response

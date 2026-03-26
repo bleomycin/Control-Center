@@ -168,7 +168,7 @@ function createChatEngine(config) {
         pendingQuickReply = false;
         if (collectedText) {
             var lastChunk = collectedText.toLowerCase().slice(-200);
-            if (lastChunk.match(/\bconfirm|\bapprove|\bproceed|\blook right|\blook good|\bshall i|\bgo ahead|\bready to (execute|create|update|delete)/)) {
+            if (lastChunk.match(/\bconfirm|\bapprove|\bproceed|\blook right|\blook good|\bshall i|\bshould i|\bgo ahead|\bwant me to|\bwould you like|\bgood to (create|update|delete|go|proceed)|\bready to (execute|create|update|delete)|\b(create|update|delete) (it|this)\?/)) {
                 pendingQuickReply = true;
             }
         }
