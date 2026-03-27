@@ -19,6 +19,6 @@
 </div>
 <form hx-post="{% url 'checklists:item_add' cl_data.checklist.pk %}" hx-target="#checklists-{{ entity_type }}-{{ entity_obj.pk }}" hx-swap="outerHTML"
       class="flex items-center gap-2 px-4 py-3 border-t border-gray-700">
-    {{ cl_data.item_form.title }}
-    <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors whitespace-nowrap">Add</button>
+    <div class="flex-1 min-w-0">{{ cl_data.item_form.title }}</div>
+    <button type="submit" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors whitespace-nowrap shrink-0">Add</button>
 </form>
