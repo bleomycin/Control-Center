@@ -61,7 +61,7 @@
     {% if note.participants.exists %}
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700">
-            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Participants</h2>
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide cursor-help" title="People directly in the conversation — email senders/recipients, meeting attendees">Participants <span class="text-gray-500 text-[10px] align-middle">&#9432;</span></h2>
         </div>
         <div class="divide-y divide-gray-700">
             {% for s in note.participants.all %}
@@ -74,7 +74,7 @@
     {% if note.related_stakeholders.exists %}
     <div class="bg-gray-800 rounded-lg border border-gray-700">
         <div class="px-4 py-3 border-b border-gray-700">
-            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Related Stakeholders</h2>
+            <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide cursor-help" title="People mentioned or referenced in the note but not directly part of the conversation">Related Stakeholders <span class="text-gray-500 text-[10px] align-middle">&#9432;</span></h2>
         </div>
         <div class="divide-y divide-gray-700">
             {% for s in note.related_stakeholders.all %}

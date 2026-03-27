@@ -134,7 +134,7 @@
                     {% if field.name in form.ENTITY_FIELDS %}
                     <div>
                         <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">
-                            {{ field.label }}
+                            {{ field.label }}{% if field.name == "participants" %} <span class="cursor-help text-gray-500 text-[10px]" title="People directly in the conversation — email senders/recipients, meeting attendees">&#9432;</span>{% elif field.name == "related_stakeholders" %} <span class="cursor-help text-gray-500 text-[10px]" title="People mentioned or referenced but not directly part of the conversation">&#9432;</span>{% endif %}
                         </label>
                         {{ field }}
                         {% if field.errors %}<p class="mt-1 text-sm text-red-400">{{ field.errors.0 }}</p>{% endif %}

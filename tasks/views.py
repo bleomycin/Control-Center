@@ -13,7 +13,7 @@ from datetime import date as _date, timedelta
 from dashboard.choices import get_choice_label
 from stakeholders.models import Stakeholder
 from .forms import FollowUpForm, QuickTaskForm, SubTaskForm, TaskForm
-from .models import FollowUp, SubTask, Task
+from .models import FollowUp, SubTask, Task, TaskLink
 
 
 def _build_grouped_tasks(tasks, group_by):
@@ -746,3 +746,23 @@ def inline_edit_metadata(request, pk):
         "stakeholders": Stakeholder.objects.order_by("name"),
     }
     return render(request, "tasks/partials/_detail_metadata_editor.html", ctx)
+
+
+@require_POST
+def link_add(request, pk):
+    """Add a link to a task (HTMX)."""
+    task = get_object_or_404(Task, pk=pk)
+    url = request.POST.get("url", "").strip()
+    label = request.POST.get("label", "").strip()
+    if url:
+        TaskLink.objects.create(task=task, url=url, label=label)
+    return render(request, "tasks/partials/_link_list.html", {"task": task})
+
+
+@require_POST
+def link_delete(request, pk):
+    """Delete a task link (HTMX)."""
+    link = get_object_or_404(TaskLink, pk=pk)
+    task = link.task
+    link.delete()
+    return render(request, "tasks/partials/_link_list.html", {"task": task})

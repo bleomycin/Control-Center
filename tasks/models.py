@@ -67,7 +67,6 @@ class Task(models.Model):
     meeting_id = models.CharField(max_length=50, blank=True, verbose_name="Meeting ID")
     meeting_passcode = models.CharField(max_length=50, blank=True, verbose_name="Passcode")
     location = models.CharField(max_length=255, blank=True)
-    reference_url = models.URLField(max_length=2000, blank=True, verbose_name="Reference link")
     is_recurring = models.BooleanField(default=False)
     recurrence_rule = models.CharField(max_length=15, choices=RECURRENCE_CHOICES, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -208,3 +207,17 @@ class FollowUp(models.Model):
 
     class Meta:
         ordering = ["-outreach_date"]
+
+
+class TaskLink(models.Model):
+    """A reference link attached to a task."""
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name="links")
+    url = models.URLField(max_length=2000)
+    label = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.label or self.url
+
+    class Meta:
+        ordering = ["created_at"]
