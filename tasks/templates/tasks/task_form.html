@@ -95,6 +95,13 @@
             </div>
         </div>
 
+        <!-- Reference link (any task type) -->
+        <div>
+            <label for="{{ form.reference_url.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-1">Reference Link</label>
+            {{ form.reference_url }}
+            {% if form.reference_url.errors %}<p class="mt-1 text-sm text-red-400">{{ form.reference_url.errors.0 }}</p>{% endif %}
+        </div>
+
         <!-- Status + Priority (2-col on desktop) -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>

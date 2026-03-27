@@ -43,7 +43,7 @@ class TaskForm(TailwindFormMixin, forms.ModelForm):
         model = Task
         fields = ["title", "direction", "description", "task_type", "due_date", "due_time", "duration_minutes",
                   "meeting_url", "meeting_id", "meeting_passcode", "location",
-                  "reminder_date", "status",
+                  "reference_url", "reminder_date", "status",
                   "priority", "assigned_to", "related_stakeholders",
                   "related_legal_matter", "related_property",
                   "is_recurring", "recurrence_rule"]
