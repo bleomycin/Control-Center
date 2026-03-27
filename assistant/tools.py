@@ -402,9 +402,11 @@ def summarize():
 TOOL_DEFINITIONS = [
     {
         "name": "search",
+        "strict": True,
         "description": "Search across all models in Control Center for records matching a text query. Returns matching records with their model type, ID, name, and URL. Use this for broad searches when you don't know which model to query.",
         "input_schema": {
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "query": {"type": "string", "description": "Search text to match against record names, titles, descriptions, etc."},
                 "models": {
@@ -444,9 +446,11 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "get_record",
+        "strict": True,
         "description": "Get a single record by ID with all its fields and related data expanded. Use this to see full details of a specific record including its relationships.",
         "input_schema": {
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "model": {"type": "string", "description": "Model name (e.g. 'Task', 'LegalMatter')"},
                 "id": {"type": "integer", "description": "Record primary key (ID)"},
@@ -491,9 +495,11 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "delete_record",
+        "strict": True,
         "description": "Delete a record. IMPORTANT: Always call with dry_run=true first to see what would be deleted (including cascade deletes), show the user, and get their confirmation before calling with dry_run=false.",
         "input_schema": {
             "type": "object",
+            "additionalProperties": False,
             "properties": {
                 "model": {"type": "string", "description": "Model name"},
                 "id": {"type": "integer", "description": "Record ID to delete"},
@@ -504,17 +510,21 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "list_models",
+        "strict": True,
         "description": "List all available data models with their fields, types, and relationships. Use this to discover the data schema when you need to understand what models and fields are available for querying.",
         "input_schema": {
             "type": "object",
+            "additionalProperties": False,
             "properties": {},
         },
     },
     {
         "name": "summarize",
+        "strict": True,
         "description": "Get an overview of the current system state: record counts, overdue tasks, active legal matters, upcoming appointments, and other key metrics. Use this to answer broad questions about the overall state of affairs.",
         "input_schema": {
             "type": "object",
+            "additionalProperties": False,
             "properties": {},
         },
     },

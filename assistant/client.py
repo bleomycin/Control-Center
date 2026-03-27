@@ -7,6 +7,7 @@ and the tool-use loop.
 
 import json
 import logging
+import time
 
 import anthropic
 from django.conf import settings
@@ -220,6 +221,46 @@ def _build_system_prompt():
     ]
 
 
+def _validate_tool_pairs(messages):
+    """
+    Ensure tool_use and tool_result messages are properly paired.
+
+    Fixes two edge cases:
+    1. Truncation sliced off a tool_use, leaving an orphaned tool_result at the start.
+    2. Connection dropped after saving tool_use but before tool_result (orphan at the end).
+
+    Returns a cleaned copy of the message list.
+    """
+    if not messages:
+        return messages
+
+    def _has_tool_use(msg):
+        content = msg.get("content")
+        if isinstance(content, list):
+            return any(b.get("type") == "tool_use" for b in content)
+        return False
+
+    def _has_tool_result(msg):
+        content = msg.get("content")
+        if isinstance(content, list):
+            return any(b.get("type") == "tool_result" for b in content)
+        return False
+
+    result = list(messages)
+
+    # Strip orphaned tool_result at the start (its tool_use was truncated away)
+    while result and result[0].get("role") == "user" and _has_tool_result(result[0]):
+        logger.warning("Stripping orphaned tool_result at start of message list")
+        result.pop(0)
+
+    # Strip orphaned tool_use at the end (tool_result was never saved)
+    while result and result[-1].get("role") == "assistant" and _has_tool_use(result[-1]):
+        logger.warning("Stripping orphaned tool_use at end of message list")
+        result.pop()
+
+    return result
+
+
 def _build_api_messages(chat_messages):
     """
     Convert ChatMessage queryset to Anthropic API message format.
@@ -247,6 +288,11 @@ def _build_api_messages(chat_messages):
             })
 
     truncated = api_messages[-MAX_MESSAGES_TO_SEND:]
+
+    # Validate tool_use / tool_result pairing after truncation.
+    # Strip orphaned tool_result at the start (truncation cut its tool_use)
+    # and orphaned tool_use at the end (connection dropped before tool_result).
+    truncated = _validate_tool_pairs(truncated)
 
     # Add cache breakpoints at regular intervals for long conversations.
     # This prevents cache misses when the conversation exceeds the
@@ -540,6 +586,14 @@ def stream_message(session, user_text):
     """
     from .models import AssistantSettings, ChatMessage
 
+    def _safe_create_message(sess, content, **kwargs):
+        """Create a ChatMessage, logging but not crashing on DB errors."""
+        try:
+            return ChatMessage.objects.create(session=sess, role="assistant", content=content, **kwargs)
+        except Exception:
+            logger.exception("Failed to save assistant message to DB")
+            return None
+
     def sse(event, data):
         return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
@@ -592,30 +646,52 @@ def stream_message(session, user_text):
                                 yield sse("token", {"text": event.delta.text})
 
                     response = stream.get_final_message()
+
+                # Log request_id for debugging API issues
+                if hasattr(response, '_request_id'):
+                    logger.info(f"Anthropic request_id: {response._request_id}")
+
                 break  # Success — exit retry loop
             except anthropic.APIStatusError as e:
+                # Log request_id if available
+                req_id = getattr(e, 'request_id', None) or (e.response.headers.get('request-id') if hasattr(e, 'response') else None)
+                if req_id:
+                    logger.warning(f"Anthropic request_id: {req_id}")
+
+                # Retryable: 429 rate limit, 5xx server errors
                 if (e.status_code >= 500 or e.status_code == 429) and attempt < 4:
-                    wait = 2 ** attempt  # 1, 2, 4, 8, 16 seconds
+                    # Respect retry-after header if present, otherwise exponential backoff
+                    retry_after = None
+                    if hasattr(e, 'response') and e.response:
+                        retry_after = e.response.headers.get('retry-after')
+                    if retry_after:
+                        try:
+                            wait = min(float(retry_after), 30)
+                        except (ValueError, TypeError):
+                            wait = 2 ** attempt
+                    else:
+                        wait = 2 ** attempt
                     logger.warning(f"Anthropic API {e.status_code} (attempt {attempt + 1}/5), retrying in {wait}s")
-                    import time
-                    time.sleep(wait)
+                    # Send keepalive during wait so client watchdog doesn't fire
+                    deadline = time.monotonic() + wait
+                    while time.monotonic() < deadline:
+                        yield ": keepalive\n\n"
+                        time.sleep(min(5, deadline - time.monotonic()))
                     continue
-                # Final attempt or non-retryable error
-                logger.error(f"Anthropic API error: {e}")
-                ChatMessage.objects.create(
-                    session=session, role="assistant",
-                    content="The AI service is temporarily unavailable. Please try again in a minute.",
-                )
-                yield sse("error", {"message": "Service temporarily unavailable. Please try again."})
+                # Non-retryable (400, 401, 403, etc.) or final retry exhausted
+                logger.error(f"Anthropic API error {e.status_code}: {e}")
+                if e.status_code >= 500 or e.status_code == 429:
+                    error_msg = "The AI service is temporarily unavailable. Please try again in a minute."
+                else:
+                    error_msg = f"Request error ({e.status_code}). Try sending your message again."
+                _safe_create_message(session, error_msg)
+                yield sse("error", {"message": error_msg})
                 return
             except anthropic.APIError as e:
                 logger.error(f"Anthropic API error: {e}")
-                ChatMessage.objects.create(
-                    session=session, role="assistant", content=f"API error: {e}",
-                )
+                _safe_create_message(session, f"API error: {e}")
                 yield sse("error", {"message": str(e)})
                 return
-            return
 
         has_tool_use = any(block.type == "tool_use" for block in response.content)
 
@@ -623,7 +699,7 @@ def stream_message(session, user_text):
             # Clear any text that streamed before tool_use was detected
             yield sse("clear", {})
 
-            # Save tool_use message
+            # Build assistant content blocks (saved to DB after tools complete)
             assistant_content = []
             for block in response.content:
                 if block.type == "text":
@@ -634,12 +710,7 @@ def stream_message(session, user_text):
                         "name": block.name, "input": block.input,
                     })
 
-            ChatMessage.objects.create(
-                session=session, role="assistant", content="",
-                tool_data=assistant_content,
-            )
-
-            # Execute tools
+            # Execute tools (SSE events stream live to client)
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
@@ -663,10 +734,21 @@ def stream_message(session, user_text):
                         output = result_obj
                     yield sse("tool_done", {"name": block.name, "result_summary": r_summary, "output": output})
 
-            ChatMessage.objects.create(
-                session=session, role="user", content="",
-                tool_data=tool_results,
-            )
+            # Save both messages together — if execution crashed above,
+            # neither is saved, preventing orphaned tool_use messages.
+            try:
+                ChatMessage.objects.create(
+                    session=session, role="assistant", content="",
+                    tool_data=assistant_content,
+                )
+                ChatMessage.objects.create(
+                    session=session, role="user", content="",
+                    tool_data=tool_results,
+                )
+            except Exception:
+                logger.exception("Failed to save tool messages to DB")
+                yield sse("error", {"message": "Failed to save tool results. Try again."})
+                return
 
             api_messages.append({"role": "assistant", "content": assistant_content})
             api_messages.append({"role": "user", "content": tool_results})
@@ -678,22 +760,30 @@ def stream_message(session, user_text):
         )
 
         # Save the final message
-        assistant_msg = ChatMessage.objects.create(
-            session=session, role="assistant", content=final_text,
-        )
+        try:
+            assistant_msg = ChatMessage.objects.create(
+                session=session, role="assistant", content=final_text,
+            )
+        except Exception:
+            logger.exception("Failed to save final assistant message to DB")
+            yield sse("error", {"message": "Failed to save response. Try again."})
+            return
 
         # Update session title (AI-generated)
         if session.title == "New Chat" and final_text:
-            session.title = _generate_title(client, user_text, final_text)
-            session.save(update_fields=["title", "updated_at"])
-            yield sse("title", {"title": session.title})
+            try:
+                session.title = _generate_title(client, user_text, final_text)
+                session.save(update_fields=["title", "updated_at"])
+                yield sse("title", {"title": session.title})
+            except Exception:
+                logger.exception("Failed to generate/save session title")
 
         yield sse("done", {"message_id": assistant_msg.pk})
         return
 
     # Max iterations reached (for-else)
-    ChatMessage.objects.create(
-        session=session, role="assistant",
-        content="I reached the maximum number of tool calls for this message. Please try a more specific question.",
+    _safe_create_message(
+        session,
+        "I reached the maximum number of tool calls for this message. Please try a more specific question.",
     )
     yield sse("error", {"message": "Max tool iterations reached"})
