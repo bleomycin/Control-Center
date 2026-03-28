@@ -8,19 +8,20 @@ This file provides guidance to Claude Code when working with code in this reposi
 2. **Git identity**: ALL commits MUST use `bleomycin <bleomycin@users.noreply.github.com>`. Verify with `git config user.name && git config user.email` before first commit.
 3. **Definition of Done** — ALL of these before reporting ANY work complete:
    - (a) `make test-unit` (in Docker) + `make test-e2e` (local) — all pass. NEVER run bare `python manage.py test` inside Docker.
-   - (b) Playwright interactive verification against Docker on :8000 — click every new/changed button, link, HTMX action, form, toggle, collapsible. Verify they **work**, not just that they render.
-   - (c) Playwright screenshots at all three viewport profiles — verify layout, empty states, edge cases:
-     - **Mobile** (iPhone Air): `{ width: 420, height: 912 }`, `deviceScaleFactor: 3`, `isMobile: true`, `hasTouch: true`
+   - (b) Interactive verification against Docker on :8000 — click every new/changed button, link, HTMX action, form, toggle. After HTMX swaps, verify elements OUTSIDE the swap target (counters, progress bars, styling) are intact.
+   - (c) Desktop screenshots via Playwright at both profiles — verify layout, empty states, edge cases:
      - **Desktop** (MacBook Pro): `{ width: 1512, height: 982 }`, `deviceScaleFactor: 2`
      - **Desktop Split** (4K half-screen): `{ width: 960, height: 1080 }`, `deviceScaleFactor: 2`
-   - (d) After HTMX swaps: verify elements OUTSIDE the swap target (counters, progress bars, styling) are intact.
-   - (e) `make tailwind-build` if any CSS classes changed.
-   - (f) **Headed mode pass**: Run Playwright with `headless=False` to verify keyboard shortcuts, hover states, and real browser behavior. This catches bugs invisible to headless (e.g., Cmd+K, hover-revealed buttons, clipboard, animations).
-   - (g) **WebKit pass**: Run key verification tests with `p.webkit.launch()` (not just Chromium) to catch Safari-specific rendering and JS differences. Primary browser is Safari.
-   - **This is NOT optional. Do NOT report done without completing a–g.**
+   - (d) **Desktop headed pass**: Playwright with `headless=False` — verify hover states, keyboard shortcuts (Cmd+K), hover-revealed buttons, clipboard, animations.
+   - (e) **Mobile: iOS Simulator (real Safari)** via safaridriver on BOTH devices:
+     - **iPhone 16e** (user's iPhone Air)
+     - **iPhone 16 Pro Max** (user's iPhone 17 Pro Max)
+     Navigate to every changed page. Scroll through changed sections. Screenshot. Verify layout, no overflow, touch behavior.
+   - (f) `make tailwind-build` if any CSS classes changed.
+   - **NO EXCEPTIONS. Every step a–f must be completed. Do NOT report done with any step skipped.**
 4. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`.
 5. **Sample data**: After implementing any new feature/model, ALWAYS update `load_sample_data.py` to exercise it.
-6. **iOS Safari**: Do NOT attempt CSS/JS workarounds for native input behaviors. If a first approach fails, stop and discuss alternatives.
+6. **iOS Safari**: Prefer standard CSS solutions over JS hacks for iOS quirks (e.g., `font-size: 16px` to prevent auto-zoom is fine; fighting native date pickers is not). If a first approach fails, stop and discuss. Always verify mobile changes on the iOS Simulator before shipping.
 7. **Plan-first**: For any feature touching 3+ files, read the most similar existing feature and present a plan BEFORE writing code. Match the dynamic, DB-backed, editable pattern — not a simplified static version.
 
 ## Project Overview
@@ -42,6 +43,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 | Background Jobs | Django-Q2 (ORM broker) |
 | Static Files | WhiteNoise 6.9.0 |
 | E2E Testing | Playwright (dev-only, in `requirements-dev.txt`) |
+| Mobile Testing | iOS Simulator (Xcode 16.4) + safaridriver + Selenium |
 | Deployment | Docker (Gunicorn + WhiteNoise) |
 
 ## Build & Run Commands
@@ -155,56 +157,62 @@ Eight Django apps + one e2e test package, all relationally linked:
 - **Always work in parallel**: Maximize parallel tool calls and background agents. Run independent operations concurrently (tests + Docker rebuild, multiple file reads, research agents). Ask: "How many workers can I usefully run right now?"
 - For detailed feature-specific patterns (Insurance, Loans, Calendar, Tasks, Notes, etc.), see `.claude/docs/ARCHITECTURE.md`.
 
-## cmux Browser (Visual Verification)
+## cmux Browser (Quick Dev Checks)
 
-When running inside cmux, use the built-in browser for visual verification during development. **Always check availability first** — cmux may not be present in all environments.
+Use cmux for fast desktop-width visual checks during development. NOT for mobile testing (use iOS Simulator) or automated testing (use Playwright/e2e).
 
-### Availability Check
+### Usage
 ```bash
-cmux ping  # Returns "pong" if available. If this fails, fall back to Playwright for verification.
+cmux ping                                          # Check availability
+cmux browser open http://localhost:8000             # Open in split pane
+cmux browser --surface surface:N screenshot --out /tmp/shot.png  # Screenshot
+cmux browser --surface surface:N snapshot --compact # DOM tree
+cmux browser --surface surface:N click "ref"        # Click element
+cmux browser --surface surface:N fill "sel" "text"  # Fill input
+cmux browser --surface surface:N scroll --dy 500    # Scroll
+cmux set-progress 0.75 --label "Testing 3/4"        # Sidebar progress
+cmux notify --title "Done" --body "All tests passed" # Notification
 ```
 
-### Common Commands
+If cmux is unavailable (`cmux ping` fails), fall back to Playwright for desktop visual checks. Surface IDs persist within a session — use `cmux tree` to list them.
+
+## iOS Simulator (Mobile Verification)
+
+Real Safari on real iOS via Xcode's simulator. Use for ALL mobile layout and behavior verification — replaces Playwright mobile emulation and WebKit pass.
+
+### Devices
+- **iPhone 16e** — matches user's iPhone Air (375pt width)
+- **iPhone 16 Pro Max** — matches user's iPhone 17 Pro Max (440pt width)
+
+### Quick commands
 ```bash
-# Open browser in split pane
-cmux browser open http://localhost:8000
-
-# Navigate
-cmux browser --surface surface:N navigate http://localhost:8000/legal/149/
-
-# Screenshot (save to file, then Read it to see the result)
-cmux browser --surface surface:N screenshot --out /tmp/screenshot.png
-
-# DOM snapshot (compact tree of elements with ref IDs for clicking)
-cmux browser --surface surface:N snapshot --compact
-
-# Interact
-cmux browser --surface surface:N click "selector-or-ref"
-cmux browser --surface surface:N fill "selector" "text"
-cmux browser --surface surface:N scroll --dy 500
-
-# Check console/errors
-cmux browser --surface surface:N console list
-cmux browser --surface surface:N errors list
-
-# Sidebar status (show progress during long operations)
-cmux set-status "key" "value" --icon "name" --color "#hex"
-cmux set-progress 0.75 --label "Testing 3/4 apps"
-cmux notify --title "Build Complete" --body "All tests passed"
+xcrun simctl boot "iPhone 16e"                      # Boot device
+xcrun simctl ui booted appearance dark               # Dark mode
+xcrun simctl openurl booted http://localhost:8000    # Open URL
+xcrun simctl io booted screenshot /tmp/ios.png       # Screenshot
+xcrun simctl shutdown all                            # Shutdown all
 ```
 
-### When to Use
-- **During development**: quick visual checks after code changes (faster than Playwright)
-- **UI verification**: screenshot + read to verify layout, styling, responsiveness
-- **Interactive testing**: click buttons, fill forms, verify HTMX swaps work
-- **Progress feedback**: sidebar status/progress during long builds/test runs
+### Automated testing via safaridriver (scrolling, clicking, screenshotting)
+```python
+from selenium import webdriver
+from selenium.webdriver.safari.options import Options
 
-### When NOT to Use
-- **Automated test suites**: use `make test-e2e` (Playwright) — cmux is for interactive dev, not CI
-- **If cmux is unavailable**: fall back to Playwright for all browser verification
-- **Viewport testing**: cmux browser is WKWebView, viewport is tied to pane size (use Playwright for precise viewport profiles)
+opts = Options()
+opts.set_capability("platformName", "iOS")
+opts.set_capability("browserName", "Safari")
+opts.set_capability("safari:useSimulator", True)
+opts.set_capability("safari:deviceName", "iPhone 16e")  # or "iPhone 16 Pro Max"
 
-### Key Notes
-- The cmux browser is **WKWebView (Safari/WebKit)** — gives cross-browser coverage vs Playwright (Chromium)
-- Surface IDs persist within a session. Use `cmux tree` to see current surfaces.
-- Browser state persists between navigations. Use `cmux browser --surface surface:N state save/load` to preserve auth cookies across Docker rebuilds.
+driver = webdriver.Safari(options=opts)
+driver.get("http://localhost:8000")
+driver.execute_script("window.scrollBy(0, 600)")
+driver.save_screenshot("/tmp/ios.png")
+scale = driver.execute_script("return window.visualViewport.scale")  # check zoom
+driver.quit()
+```
+
+### Key notes
+- `simctl` has NO touch/scroll input — use safaridriver + Selenium for interaction
+- Leave simulators booted during dev sessions to avoid boot overhead
+- Xcode 16.4 at `/Applications/Xcode.app` — iOS 18 runtime, iPhone 16 devices
