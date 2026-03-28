@@ -107,6 +107,8 @@ def search_threads(query="", max_results=15, page_token=None, label_ids=None):
             raw_date = last_headers.get("Date", "")
             try:
                 parsed_date = parsedate_to_datetime(raw_date)
+                if parsed_date.tzinfo is None:
+                    parsed_date = parsed_date.replace(tzinfo=timezone.utc)
             except (ValueError, TypeError):
                 parsed_date = None
 
