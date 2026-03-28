@@ -49,6 +49,10 @@ class EmailLink(models.Model):
         "legal.LegalMatter", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="email_links",
     )
+    related_task = models.ForeignKey(
+        "tasks.Task", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="email_links",
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -85,4 +89,6 @@ class EmailLink(models.Model):
             links.append(("Stakeholder", self.related_stakeholder))
         if self.related_legal_matter:
             links.append(("Legal Matter", self.related_legal_matter))
+        if self.related_task:
+            links.append(("Task", self.related_task))
         return links

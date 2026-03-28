@@ -266,6 +266,7 @@ class TaskDetailView(DetailView):
         ctx["subtask_form"] = SubTaskForm()
         ctx["subtask_count"] = subtasks.count()
         ctx["subtask_done"] = subtasks.filter(is_completed=True).count()
+        ctx["entity_email_links"] = self.object.email_links.all()
         from checklists.views import get_checklists_context
         ctx.update(get_checklists_context(self.object, "task"))
         return ctx

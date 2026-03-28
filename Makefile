@@ -45,7 +45,7 @@ restic-install:
 test: test-unit test-e2e
 
 test-unit:
-	docker compose exec web python manage.py test dashboard stakeholders assets legal tasks cashflow notes healthcare documents assistant
+	docker compose exec web python manage.py test dashboard stakeholders assets legal tasks cashflow notes healthcare documents assistant email_links
 
 test-e2e:
 	. venv/bin/activate && python manage.py test e2e

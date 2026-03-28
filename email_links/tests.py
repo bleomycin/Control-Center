@@ -120,6 +120,75 @@ class EmailLinkUnlinkTest(TestCase):
         self.assertEqual(self.email.related_legal_matter, self.matter)
 
 
+class TaskEmailLinkUnlinkTest(TestCase):
+    def setUp(self):
+        from tasks.models import Task
+        self.task = Task.objects.create(
+            title="Test Task", direction="personal",
+        )
+        self.email = EmailLink.objects.create(
+            message_id="task_test_123",
+            subject="Test Task Email",
+            from_email="test@example.com",
+            date=timezone.now(),
+            related_task=self.task,
+        )
+
+    def test_unlink_removes_fk(self):
+        resp = self.client.post(
+            reverse("email_links:task_email_unlink",
+                    args=[self.task.pk, self.email.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.email.refresh_from_db()
+        self.assertIsNone(self.email.related_task)
+
+    def test_link_form_get(self):
+        resp = self.client.get(
+            reverse("email_links:task_email_link", args=[self.task.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_link_post_creates_and_links(self):
+        resp = self.client.post(
+            reverse("email_links:task_email_link", args=[self.task.pk]),
+            {
+                "message_id": "task_new_msg_789",
+                "subject": "New Task Email",
+                "from_name": "Sender",
+                "from_email": "sender@example.com",
+                "date": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        el = EmailLink.objects.get(message_id="task_new_msg_789")
+        self.assertEqual(el.related_task, self.task)
+        self.assertEqual(el.subject, "New Task Email")
+
+    def test_link_post_reuses_existing_message(self):
+        resp = self.client.post(
+            reverse("email_links:task_email_link", args=[self.task.pk]),
+            {
+                "message_id": "task_test_123",
+                "subject": "Different Subject",
+                "from_name": "",
+                "from_email": "",
+                "date": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(EmailLink.objects.filter(message_id="task_test_123").count(), 1)
+        self.email.refresh_from_db()
+        self.assertEqual(self.email.subject, "Test Task Email")
+        self.assertEqual(self.email.related_task, self.task)
+
+    def test_linked_entities_includes_task(self):
+        el = EmailLink.objects.create(
+            message_id="task_le_test", related_task=self.task,
+        )
+        self.assertEqual(el.linked_entities, [("Task", self.task)])
+
+
 class GmailSearchViewIntegrationTest(TestCase):
     """Hit the actual view with mocked gmail, inspect rendered HTML."""
 

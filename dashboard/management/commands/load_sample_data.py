@@ -53,7 +53,7 @@ SECTION_DEPS = {
     "notes": [],
     "healthcare": [],
     "documents": ["stakeholders", "assets", "legal"],
-    "email_links": ["stakeholders", "assets", "legal"],
+    "email_links": ["stakeholders", "assets", "legal", "tasks"],
     "checklists": ["stakeholders", "assets", "legal", "tasks"],
 }
 
@@ -2128,47 +2128,55 @@ class Command(BaseCommand):
         legal_matters = _get_sample_legal_matters()
         stakeholders = _get_sample_stakeholders()
         investments = _get_sample_investments()
+        tasks = _get_sample_tasks()
 
         self.stdout.write("Creating email links...")
         el_pks = []
 
         email_data = [
             # (message_id, subject, from_name, from_email, date_offset_days,
-            #  message_count, property_name, investment_name, legal_name, stakeholder_name)
+            #  message_count, property_name, investment_name, legal_name,
+            #  stakeholder_name, task_name)
             ("sample_email_001", "Oak Ave Lease Renewal Discussion",
              "Tom Driscoll", "tom.driscoll@example.com", -5, 4,
-             "1200 Oak Avenue", None, None, "Tom Driscoll"),
+             "1200 Oak Avenue", None, None, "Tom Driscoll",
+             "Oak Ave bathroom renovation check-in"),
             ("sample_email_002", "RE: Magnolia Blvd Due Diligence Checklist",
              "Sandra Liu", "sandra.liu@example.com", -3, 3,
-             "3300 Magnolia Blvd", None, "Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu"),
+             "3300 Magnolia Blvd", None, "Magnolia Blvd Acquisition - Due Diligence", "Sandra Liu",
+             "Review Magnolia closing documents"),
             ("sample_email_003", "Elm St Q4 Operating Statement Attached",
              "Tom Driscoll", "tom.driscoll@example.com", -12, 1,
-             "450 Elm Street", None, None, "Tom Driscoll"),
+             "450 Elm Street", None, None, "Tom Driscoll",
+             "Request 2024 Elm St transaction review"),
             ("sample_email_004", "Holston Eviction - Court Date Confirmed",
              "James Calloway", "calloway@lawfirm.example.com", -8, 2,
-             "1200 Oak Avenue", None, "Holston Eviction - 1200 Oak Ave", "James Calloway"),
+             "1200 Oak Avenue", None, "Holston Eviction - 1200 Oak Ave", "James Calloway",
+             "Follow up with Marcus on Holston hearing date"),
             ("sample_email_005", "NP Fund II - Q4 Distribution Notice",
              "Derek Vasquez", "derek@npinvest.example.com", -15, 1,
-             None, "NP Investments LP - Fund II", None, "Derek Vasquez"),
+             None, "NP Investments LP - Fund II", None, "Derek Vasquez", None),
             ("sample_email_006", "Cedar Lane Survey Results",
              "Karen Whitfield", "karen.whitfield@example.com", -20, 1,
-             None, None, "Cedar Lane Boundary Dispute", "Karen Whitfield"),
+             None, None, "Cedar Lane Boundary Dispute", "Karen Whitfield", None),
             ("sample_email_007", "RE: Bridge Loan Refinance Options",
              "Janet Cobb", "janet.cobb@bank.example.com", -2, 5,
-             None, None, None, "Janet Cobb"),
+             None, None, None, "Janet Cobb", None),
             ("sample_email_008", "Estate Plan - Updated Draft Documents",
              "Dr. Helen Park", "helen.park@law.example.com", -18, 2,
-             None, None, "Estate Plan Update", "Dr. Helen Park"),
+             None, None, "Estate Plan Update", "Dr. Helen Park",
+             "Update estate plan documents"),
             ("sample_email_009", "Property Tax Assessment Notice - Oak Ave",
              "County Assessor", "assessor@county.example.gov", -25, 1,
-             "1200 Oak Avenue", None, None, None),
+             "1200 Oak Avenue", None, None, None, None),
             ("sample_email_010", "RE: Elm St Business License Renewal",
              "City Clerk", "clerk@city.example.gov", -30, 1,
-             "450 Elm Street", None, None, None),
+             "450 Elm Street", None, None, None, None),
         ]
 
         for (msg_id, subject, from_name, from_email, day_offset,
-             msg_count, prop_name, inv_name, legal_name, sh_name) in email_data:
+             msg_count, prop_name, inv_name, legal_name, sh_name,
+             task_name) in email_data:
             el = EmailLink.objects.create(
                 message_id=msg_id,
                 subject=subject,
@@ -2181,6 +2189,7 @@ class Command(BaseCommand):
                 related_investment=investments.get(inv_name),
                 related_legal_matter=legal_matters.get(legal_name),
                 related_stakeholder=stakeholders.get(sh_name),
+                related_task=tasks.get(task_name),
             )
             el_pks.append(el.pk)
 

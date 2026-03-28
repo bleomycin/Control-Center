@@ -27,4 +27,6 @@ urlpatterns = [
     path("unlink/stakeholder/<int:pk>/<int:email_pk>/", views.stakeholder_email_unlink, name="stakeholder_email_unlink"),
     path("link/legal-matter/<int:pk>/", views.legal_matter_email_link, name="legal_matter_email_link"),
     path("unlink/legal-matter/<int:pk>/<int:email_pk>/", views.legal_matter_email_unlink, name="legal_matter_email_unlink"),
+    path("link/task/<int:pk>/", views.task_email_link, name="task_email_link"),
+    path("unlink/task/<int:pk>/<int:email_pk>/", views.task_email_unlink, name="task_email_unlink"),
 ]
