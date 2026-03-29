@@ -223,7 +223,15 @@
                     var durationWrapper = document.getElementById('duration-wrapper');
                     var meetingLinkWrapper = document.getElementById('meeting-link-wrapper');
                     var dateLabel = document.getElementById('due-date-label');
-                    if (taskTypeSelect.value === 'meeting') {
+                    var isMeeting = taskTypeSelect.value === 'meeting';
+                    // Show meeting fields if type is meeting OR any meeting field already has a value
+                    var hasMeetingData = meetingLinkWrapper && (
+                        document.getElementById('{{ form.meeting_url.id_for_label }}').value ||
+                        document.getElementById('{{ form.meeting_id.id_for_label }}').value ||
+                        document.getElementById('{{ form.meeting_passcode.id_for_label }}').value ||
+                        document.getElementById('{{ form.location.id_for_label }}').value
+                    );
+                    if (isMeeting) {
                         wrapper.classList.remove('hidden');
                         durationWrapper.classList.remove('hidden');
                         if (meetingLinkWrapper) meetingLinkWrapper.classList.remove('hidden');
@@ -231,7 +239,10 @@
                     } else {
                         wrapper.classList.add('hidden');
                         durationWrapper.classList.add('hidden');
-                        if (meetingLinkWrapper) meetingLinkWrapper.classList.add('hidden');
+                        if (meetingLinkWrapper) {
+                            if (hasMeetingData) meetingLinkWrapper.classList.remove('hidden');
+                            else meetingLinkWrapper.classList.add('hidden');
+                        }
                         document.getElementById('{{ form.due_time.id_for_label }}').value = '';
                         document.getElementById('{{ form.duration_minutes.id_for_label }}').value = '';
                         if (dateLabel) dateLabel.textContent = 'Due date';
