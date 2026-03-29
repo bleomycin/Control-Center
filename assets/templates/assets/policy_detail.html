@@ -150,7 +150,7 @@
                     hx-target="#note-form-container"
                     hx-swap="innerHTML"
                     class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
-            <a href="{% url 'notes:create' %}?policy={{ policy.pk }}"
+            <a href="{% url 'notes:create' %}?policy={{ policy.pk }}&next={{ request.path|urlencode }}"
                class="text-xs text-blue-400 hover:text-blue-300">+ New Note</a>
         </div>
     </div>

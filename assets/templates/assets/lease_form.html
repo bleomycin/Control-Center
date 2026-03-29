@@ -30,7 +30,7 @@
         {% endfor %}
         <div class="flex gap-3 pt-4">
             <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-md transition-colors">{% if object %}Update{% else %}Create{% endif %} Lease</button>
-            <a href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'assets:lease_list' %}{% endif %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
+            <a href="{% if object %}{{ object.get_absolute_url }}{% elif request.GET.next %}{{ request.GET.next }}{% else %}{% url 'assets:lease_list' %}{% endif %}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-md transition-colors">Cancel</a>
         </div>
     </form>
 </div>

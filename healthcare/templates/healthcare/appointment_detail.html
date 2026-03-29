@@ -94,7 +94,7 @@
                         hx-swap="innerHTML"
                         class="text-xs text-blue-400 hover:text-blue-300">+ Link Existing</button>
                 <a href="{% url 'notes:create' %}?appointment={{ appointment.pk }}&title=Re: {{ appointment.title|urlencode }}"
-                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+                   class="text-xs text-blue-400 hover:text-blue-300&next={{ request.path|urlencode }}">+ New</a>
             </div>
         </div>
         <div id="note-form-container"></div>

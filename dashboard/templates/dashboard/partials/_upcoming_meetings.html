@@ -31,7 +31,7 @@
                     {% endwith %}
                 </div>
             </a>
-            <a href="{% url 'notes:create' %}?task={{ meeting.pk }}&title=Meeting%20Notes%3A%20{{ meeting.title|urlencode }}&note_type=meeting{% with s=meeting.related_stakeholders.first %}{% if s %}&stakeholder={{ s.pk }}{% endif %}{% endwith %}{% if meeting.due_date %}&date={{ meeting.due_date|date:'Y-m-d' }}T{% if meeting.due_time %}{{ meeting.due_time|time:'H:i' }}{% else %}09:00{% endif %}{% endif %}"
+            <a href="{% url 'notes:create' %}?task={{ meeting.pk }}&title=Meeting%20Notes%3A%20{{ meeting.title|urlencode }}&note_type=meeting{% with s=meeting.related_stakeholders.first %}{% if s %}&stakeholder={{ s.pk }}{% endif %}{% endwith %}{% if meeting.due_date %}&date={{ meeting.due_date|date:'Y-m-d' }}T{% if meeting.due_time %}{{ meeting.due_time|time:'H:i' }}{% else %}09:00{% endif %}{% endif %}&next={{ request.path|urlencode }}"
                class="flex-shrink-0 ml-3 px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-900/30 rounded transition-colors">+ Notes</a>
         </div>
         {% endfor %}
