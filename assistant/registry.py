@@ -140,14 +140,15 @@ def serialize_instance(instance, expand_relations=True):
         name = field.name
 
         if isinstance(field, (models.ManyToManyField, models.ManyToManyRel, models.ManyToOneRel)):
-            if expand_relations and isinstance(field, models.ManyToManyField):
+            if expand_relations:
+                accessor = field.get_accessor_name() if hasattr(field, "get_accessor_name") else name
                 try:
-                    manager = getattr(instance, name)
-                    result[name] = [
-                        {"id": obj.pk, "str": str(obj)} for obj in manager.all()[:20]
+                    manager = getattr(instance, accessor)
+                    result[accessor] = [
+                        {"id": obj.pk, "str": str(obj)} for obj in manager.all()[:10]
                     ]
                 except Exception:
-                    result[name] = []
+                    pass
             continue
 
         if isinstance(field, models.ForeignKey):

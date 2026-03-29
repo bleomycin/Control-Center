@@ -184,6 +184,12 @@
                 initDrawer();
             }
 
+            // Pre-warm Anthropic prompt cache in background
+            fetch('/assistant/warm/', {
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            }).catch(function() {});
+
             setTimeout(function() {
                 document.getElementById('drawer-chat-input').focus();
             }, 200);

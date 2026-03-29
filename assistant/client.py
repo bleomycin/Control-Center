@@ -156,10 +156,8 @@ When the user's message includes a section starting with "Attached Google Drive 
 
 ## Linked email content
 Entities (tasks, stakeholders, properties, legal matters, etc.) may have linked Gmail threads via EmailLink records. EmailLink stores subject, sender, and date — but NOT the email body.
-When answering a query and the record data alone doesn't have the answer:
-1. Check for linked emails: `query(model="EmailLink", filters={"related_task__id__exact": ID})` (replace `related_task` with `related_stakeholder`, `related_property`, `related_legal_matter`, etc. as appropriate)
-2. If any email subject looks relevant to the query, fetch its content: `read_email(id=EMAILLINK_ID)`
-3. Only fetch emails whose subjects suggest relevance — don't read every linked email.
+When you call get_record on an entity, the response includes an `email_links` field with linked email summaries (id, subject, sender). You can also discover linked emails via: `query(model="EmailLink", filters={"related_task__id__exact": ID})` (replace `related_task` with `related_stakeholder`, `related_property`, `related_legal_matter`, etc. as appropriate).
+When answering a query and the record data alone doesn't have the answer, fetch email content: `read_email(id=EMAILLINK_ID)`. When in doubt about whether an email is relevant, read it — missing buried information is worse than reading an extra email.
 This is especially important when the user asks general questions — the answer may be buried in a linked email even if the user doesn't mention emails.
 
 ## Page context hints

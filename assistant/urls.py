@@ -24,5 +24,6 @@ urlpatterns = [
     path("gmail-thread/", views.gmail_thread_fetch, name="gmail_thread_fetch"),
     path("drawer-session/", views.drawer_session, name="drawer_session"),
     path("<int:session_id>/messages/", views.drawer_messages, name="drawer_messages"),
+    path("warm/", views.warm_cache, name="warm_cache"),
     path("settings/", views.assistant_settings, name="settings"),
 ]
