@@ -20,6 +20,7 @@
                 hx-post="{{ link_url }}"
                 hx-target="#email-list"
                 hx-swap="innerHTML"
+                hx-on::after-request="document.getElementById('email-form-container').innerHTML=''"
                 class="w-full text-left px-3 py-2">
             <div class="flex items-center justify-between">
                 <div class="min-w-0 flex-1">
