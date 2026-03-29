@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /* PWA standalone mode */
-html, body { overscroll-behavior: none; }
+html, body { overscroll-behavior: none; background-color: #111827; }
 
 /* Prevent iOS Safari auto-zoom on input focus (triggers below 16px) */
 @media screen and (max-width: 640px) {
