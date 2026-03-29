@@ -13,10 +13,7 @@ This file provides guidance to Claude Code when working with code in this reposi
      - **Desktop** (MacBook Pro): `{ width: 1512, height: 982 }`, `deviceScaleFactor: 2`
      - **Desktop Split** (4K half-screen): `{ width: 960, height: 1080 }`, `deviceScaleFactor: 2`
    - (d) **Desktop headed pass**: Playwright with `headless=False` — verify hover states, keyboard shortcuts (Cmd+K), hover-revealed buttons, clipboard, animations.
-   - (e) **Mobile: iOS Simulator (real Safari)** via safaridriver on BOTH devices:
-     - **iPhone 16e** (user's iPhone Air)
-     - **iPhone 16 Pro Max** (user's iPhone 17 Pro Max)
-     Navigate to every changed page. Scroll through changed sections. Screenshot. Verify layout, no overflow, touch behavior.
+   - (e) **Mobile: iOS Simulator (real Safari)** via safaridriver on **iPhone 16e** (user's iPhone Air, 375pt — the narrowest constraint). Navigate to every changed page. Scroll through changed sections. Screenshot. Verify layout, no overflow, touch behavior.
    - (f) `make tailwind-build` if any CSS classes changed.
    - **NO EXCEPTIONS. Every step a–f must be completed. Do NOT report done with any step skipped.**
 4. **Timezone**: ALWAYS use `timezone.localdate()`, NEVER `date.today()`. ALWAYS use `timezone.localdate(dt)`, NEVER `dt.date()`.
