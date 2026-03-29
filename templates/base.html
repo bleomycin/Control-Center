@@ -184,11 +184,15 @@
                 initDrawer();
             }
 
-            // Pre-warm Anthropic prompt cache in background
-            fetch('/assistant/warm/', {
-                method: 'POST',
-                headers: {'X-CSRFToken': '{{ csrf_token }}'},
-            }).catch(function() {});
+            // Pre-warm Anthropic prompt cache in background (debounced to 60s)
+            var now = Date.now();
+            if (!window._lastWarm || now - window._lastWarm > 60000) {
+                window._lastWarm = now;
+                fetch('/assistant/warm/', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                }).catch(function() {});
+            }
 
             setTimeout(function() {
                 document.getElementById('drawer-chat-input').focus();
