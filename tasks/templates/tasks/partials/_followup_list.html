@@ -40,8 +40,8 @@
                 <div class="flex items-center gap-2 ml-2 flex-shrink-0">
                     {% if fu.response_received %}
                     {% if fu.response_notes %}
-                    <a href="{% url 'notes:create' %}?title=Response from {{ fu.stakeholder.name|default:'Unknown'|urlencode }}&content={{ fu.response_notes|urlencode }}&task={{ task.pk }}{% if fu.stakeholder %}&stakeholder={{ fu.stakeholder.pk }}{% endif %}&date={{ fu.response_date|date:'Y-m-d\TH:i' }}"
-                       class="text-xs px-2 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 rounded-md transition-colors opacity-0 group-hover:opacity-100&next={{ request.path|urlencode }}">Create Note</a>
+                    <a href="{% url 'notes:create' %}?title=Response from {{ fu.stakeholder.name|default:'Unknown'|urlencode }}&content={{ fu.response_notes|urlencode }}&task={{ task.pk }}{% if fu.stakeholder %}&stakeholder={{ fu.stakeholder.pk }}{% endif %}&date={{ fu.response_date|date:'Y-m-d\TH:i' }}&next={{ request.path|urlencode }}"
+                       class="text-xs px-2 py-1 bg-blue-900/50 hover:bg-blue-900 text-blue-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Create Note</a>
                     {% endif %}
                     <button hx-post="{% url 'tasks:followup_respond' fu.pk %}" hx-target="#followup-list" hx-swap="innerHTML"
                             class="text-xs px-2 py-1 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors opacity-0 group-hover:opacity-100">Undo</button>
