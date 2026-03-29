@@ -219,7 +219,7 @@ def _build_system_prompt():
         {
             "type": "text",
             "text": SYSTEM_PREAMBLE + schema,
-            "cache_control": {"type": "ephemeral"},
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
         },
         {
             "type": "text",
