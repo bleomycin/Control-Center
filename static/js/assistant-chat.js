@@ -124,6 +124,8 @@ function createChatEngine(config) {
             autoScroll();
         } else if (event === 'title') {
             if (config.onTitle) config.onTitle(data.title);
+        } else if (event === 'confirm_required') {
+            pendingQuickReply = true;
         } else if (event === 'error') {
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">' + escapeHtml(data.message) + '</span>';
@@ -164,14 +166,8 @@ function createChatEngine(config) {
         config.sendBtnEl.disabled = false;
         config.sendBtnEl.textContent = 'Send';
 
-        // Check if the response looks like a confirmation prompt
-        pendingQuickReply = false;
-        if (collectedText) {
-            var lastChunk = collectedText.toLowerCase().slice(-200);
-            if (lastChunk.match(/\bconfirm|\bapprove|\bproceed|\blook right|\blook good|\bshall i|\bshould i|\bgo ahead|\bwant me to|\bwould you like|\bgood to (create|update|delete|go|proceed)|\bready to (execute|create|update|delete)|\b(create|update|delete) (it|this)\?/)) {
-                pendingQuickReply = true;
-            }
-        }
+        // pendingQuickReply is set by the confirm_required SSE event
+        // (emitted by the backend after dry_run tool calls)
 
         currentStreamContent = null;
         currentStreamTools = null;

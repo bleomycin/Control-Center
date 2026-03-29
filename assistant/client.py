@@ -634,6 +634,7 @@ def stream_message(session, user_text):
     # Streaming tool loop: every API call is streamed.
     # Text tokens are yielded live during the final (non-tool) response.
     # During tool iterations, any brief text is cleared before tools execute.
+    has_dry_run = False  # Track if any dry_run preview happened (for confirm UI)
     for iteration in range(MAX_TOOL_ITERATIONS):
         # Retry loop for transient API errors (overloaded, rate limit)
         response = None
@@ -721,6 +722,8 @@ def stream_message(session, user_text):
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    if block.input.get("dry_run"):
+                        has_dry_run = True
                     summary = _tool_summary(block.name, block.input)
                     yield sse("tool_start", {"name": block.name, "summary": summary})
                     result_str = _execute_tool(block.name, block.input)
@@ -786,6 +789,8 @@ def stream_message(session, user_text):
                 logger.exception("Failed to generate/save session title")
 
         yield sse("done", {"message_id": assistant_msg.pk})
+        if has_dry_run:
+            yield sse("confirm_required", {})
         return
 
     # Max iterations reached (for-else)
