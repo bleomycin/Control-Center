@@ -1,0 +1,11 @@
+<form hx-post="{% url 'tasks:link_edit' link.pk %}" hx-target="#task-links-list" hx-swap="innerHTML"
+      class="flex gap-2 px-4 py-2 bg-gray-700/30">
+    {% csrf_token %}
+    <input type="url" name="url" value="{{ link.url }}" required autofocus
+           class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 min-w-0">
+    <input type="text" name="label" value="{{ link.label }}" placeholder="Label (optional)"
+           class="w-32 sm:w-40 bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+    <button type="submit" class="px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-md transition-colors shrink-0">Save</button>
+    <button type="button" hx-get="{% url 'tasks:link_edit' link.pk %}?cancel=1" hx-target="#task-links-list" hx-swap="innerHTML"
+            class="px-2 py-1.5 bg-gray-600 hover:bg-gray-500 text-gray-300 text-xs font-medium rounded-md transition-colors shrink-0">Cancel</button>
+</form>

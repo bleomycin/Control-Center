@@ -31,5 +31,6 @@ urlpatterns = [
     path("bulk/export/", views.bulk_export_csv, name="bulk_export_csv"),
     path("bulk/complete/", views.bulk_complete, name="bulk_complete"),
     path("<int:pk>/link/add/", views.link_add, name="link_add"),
+    path("link/<int:pk>/edit/", views.link_edit, name="link_edit"),
     path("link/<int:pk>/delete/", views.link_delete, name="link_delete"),
 ]

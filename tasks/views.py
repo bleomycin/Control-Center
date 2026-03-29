@@ -760,6 +760,22 @@ def link_add(request, pk):
     return render(request, "tasks/partials/_link_list.html", {"task": task})
 
 
+def link_edit(request, pk):
+    """Edit a task link inline (HTMX)."""
+    link = get_object_or_404(TaskLink, pk=pk)
+    if request.method == "POST":
+        url = request.POST.get("url", "").strip()
+        label = request.POST.get("label", "").strip()
+        if url:
+            link.url = url
+            link.label = label
+            link.save()
+        return render(request, "tasks/partials/_link_list.html", {"task": link.task})
+    if request.GET.get("cancel"):
+        return render(request, "tasks/partials/_link_list.html", {"task": link.task})
+    return render(request, "tasks/partials/_link_edit.html", {"link": link})
+
+
 @require_POST
 def link_delete(request, pk):
     """Delete a task link (HTMX)."""
