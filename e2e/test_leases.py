@@ -451,7 +451,7 @@ class LeaseCalendarTests(PlaywrightTestCase):
             related_property=self.prop,
             status="active",
             monthly_rent=Decimal("2000.00"),
-            end_date=timezone.localdate() + timedelta(days=15),
+            end_date=timezone.localdate() + timedelta(days=5),
         )
 
     def test_calendar_has_lease_filter_toggle(self):

@@ -386,11 +386,12 @@ class QuickCaptureMobileExpandTests(PlaywrightTestCase):
     def _open_quick_capture_mobile(self):
         self.page.set_viewport_size({"width": 420, "height": 912})
         self.page.goto(self.url("/notes/"))
-        # On mobile, sidebar is off-screen. Use JS to trigger the HTMX request directly.
+        # On mobile, sidebar is off-screen. Reveal it, then click the mobile
+        # Quick Note button (labelled "Note", not "Quick Note", at this width).
         self.page.evaluate("""
             document.getElementById('sidebar').classList.remove('-translate-x-full');
         """)
-        self.page.click("button:has-text('Quick Note')")
+        self.page.click("button[title='Quick Note']")
         self.page.wait_for_selector("#qc-root", state="visible")
 
     def test_mobile_expand_and_collapse(self):
