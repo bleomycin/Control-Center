@@ -398,6 +398,41 @@ def summarize():
     return stats
 
 
+def read_email(id):
+    """Fetch full email thread content for a linked EmailLink record."""
+    from email_links.models import EmailLink
+    from email_links import gmail
+    from .views import _strip_quoted_reply, _strip_boilerplate
+
+    try:
+        el = EmailLink.objects.get(pk=id)
+    except EmailLink.DoesNotExist:
+        return {"error": f"EmailLink with id={id} not found"}
+
+    if not gmail.is_available():
+        return {"error": "Gmail is not connected"}
+
+    messages = gmail.get_thread_messages(el.message_id)
+    if messages is None:
+        return {"error": "Failed to fetch thread from Gmail"}
+
+    parts = [f"Subject: {el.subject}", f"Thread: {len(messages)} message(s)"]
+    entities = el.linked_entities
+    if entities:
+        parts.append("Linked to: " + ", ".join(f"{label}: {obj}" for label, obj in entities))
+    parts.append("")
+
+    for i, msg in enumerate(messages, 1):
+        parts.append(f"--- Message {i} ---")
+        parts.append(f"From: {msg.get('from_name', '')} <{msg.get('from_email', '')}>")
+        parts.append(f"Date: {msg.get('date', '')}")
+        body = _strip_boilerplate(_strip_quoted_reply(msg.get("body", "").strip()))
+        parts.append(body)
+        parts.append("")
+
+    return {"content": "\n".join(parts)}
+
+
 # Anthropic tool definitions
 TOOL_DEFINITIONS = [
     {
@@ -528,6 +563,22 @@ TOOL_DEFINITIONS = [
             "properties": {},
         },
     },
+    {
+        "name": "read_email",
+        "strict": True,
+        "description": "Fetch the full content of a linked Gmail thread. Use when you find an EmailLink record whose subject suggests it may contain information relevant to the user's query. Returns all messages in the thread with sender, date, and body text.",
+        "input_schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "description": "The EmailLink record ID (from search or query results)",
+                },
+            },
+            "required": ["id"],
+        },
+    },
 ]
 
 # Map tool names to functions
@@ -540,4 +591,5 @@ TOOL_HANDLERS = {
     "delete_record": delete_record,
     "list_models": list_models,
     "summarize": summarize,
+    "read_email": read_email,
 }

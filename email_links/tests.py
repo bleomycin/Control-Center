@@ -189,6 +189,53 @@ class TaskEmailLinkUnlinkTest(TestCase):
         self.assertEqual(el.linked_entities, [("Task", self.task)])
 
 
+class ReadEmailToolTest(TestCase):
+    def setUp(self):
+        from tasks.models import Task
+        self.task = Task.objects.create(title="Read Email Test", direction="personal")
+        self.email = EmailLink.objects.create(
+            message_id="read_test_123",
+            subject="Important Discussion",
+            from_email="sender@example.com",
+            from_name="Test Sender",
+            date=timezone.now(),
+            related_task=self.task,
+        )
+
+    @patch("email_links.gmail.is_available", return_value=True)
+    @patch("email_links.gmail.get_thread_messages")
+    def test_read_email_returns_content(self, mock_get, mock_avail):
+        mock_get.return_value = [
+            {"from_name": "Alice", "from_email": "alice@test.com",
+             "date": "Thu, 27 Mar 2026 10:00:00 +0000",
+             "body": "Here are the details you asked about."},
+            {"from_name": "Bob", "from_email": "bob@test.com",
+             "date": "Thu, 27 Mar 2026 11:00:00 +0000",
+             "body": "Thanks, got it."},
+        ]
+        from assistant.tools import read_email
+        result = read_email(id=self.email.pk)
+        self.assertIn("content", result)
+        self.assertIn("Important Discussion", result["content"])
+        self.assertIn("Here are the details", result["content"])
+        self.assertIn("Thanks, got it", result["content"])
+        self.assertIn("Message 1", result["content"])
+        self.assertIn("Message 2", result["content"])
+        self.assertIn("Task: Read Email Test", result["content"])
+
+    def test_read_email_not_found(self):
+        from assistant.tools import read_email
+        result = read_email(id=99999)
+        self.assertIn("error", result)
+
+    @patch("email_links.gmail.is_available", return_value=False)
+    def test_read_email_gmail_unavailable(self, mock_avail):
+        from assistant.tools import read_email
+        result = read_email(id=self.email.pk)
+        self.assertIn("error", result)
+        self.assertIn("not connected", result["error"])
+
+
 class GmailSearchViewIntegrationTest(TestCase):
     """Hit the actual view with mocked gmail, inspect rendered HTML."""
 
