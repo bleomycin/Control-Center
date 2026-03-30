@@ -15,9 +15,9 @@ def _normalize_choice_fields(model_cls, data):
     """Normalize DB-backed choice field values (label→value mapping).
 
     If the LLM sends a label like "Advisor" instead of the value "advisor",
-    map it to the correct value by checking ChoiceOption entries.
+    map it to the correct value by checking cached ChoiceOption entries.
     """
-    from dashboard.models import ChoiceOption
+    from dashboard.choices import get_choices
 
     CHOICE_CATEGORIES = {
         "entity_type": "entity_type",
@@ -35,21 +35,21 @@ def _normalize_choice_fields(model_cls, data):
         val = data[field_name]
         if not isinstance(val, str):
             continue
-        # Check if the value already matches a valid choice value
-        choices = ChoiceOption.objects.filter(category=category)
-        valid_values = {c.value for c in choices}
+        # get_choices returns cached [(value, label), ...] tuples
+        choices = get_choices(category)
+        valid_values = {v for v, _l in choices}
         if val in valid_values:
             continue
         # Try case-insensitive value match
-        for c in choices:
-            if c.value.lower() == val.lower():
-                data[field_name] = c.value
+        for v, _l in choices:
+            if v.lower() == val.lower():
+                data[field_name] = v
                 break
         else:
             # Try label→value mapping (case-insensitive)
-            for c in choices:
-                if c.label.lower() == val.lower():
-                    data[field_name] = c.value
+            for v, label in choices:
+                if label.lower() == val.lower():
+                    data[field_name] = v
                     break
 
 # Allowlisted Django ORM lookup suffixes
@@ -88,16 +88,24 @@ def _validate_filters(model, filters):
 
 
 def search(query, models=None):
-    """Search across all models for matching records."""
+    """Search across all models for matching records.
+
+    Stops early once MAX_SEARCH_RESULTS total results are found to avoid
+    unnecessary queries against all 34 models.
+    """
     registry.build_registry()
     results = []
-    limit = 10
+    per_model_limit = 10
+    max_total = 50
 
     search_targets = registry.SEARCH_FIELDS
     if models:
         search_targets = {k: v for k, v in search_targets.items() if k in models or k.lower() in [m.lower() for m in models]}
 
     for model_name, fields in search_targets.items():
+        if len(results) >= max_total:
+            break
+
         try:
             model = registry.get_model(model_name)
         except ValueError:
@@ -107,7 +115,8 @@ def search(query, models=None):
         for field in fields:
             q_filter |= Q(**{f"{field}__icontains": query})
 
-        qs = model.objects.filter(q_filter)[:limit]
+        remaining = min(per_model_limit, max_total - len(results))
+        qs = model.objects.filter(q_filter)[:remaining]
         for obj in qs:
             entry = {
                 "model": model_name,
@@ -162,8 +171,24 @@ def query(model, filters=None, fields=None, order_by=None, limit=DEFAULT_LIMIT):
 def get_record(model, id):
     """Get a single record with full related data."""
     model_cls = registry.get_model(model)
+    qs = model_cls.objects.all()
+
+    # Auto-discover FK and M2M fields to eliminate N+1 queries
+    fk_fields = [
+        f.name for f in model_cls._meta.get_fields()
+        if isinstance(f, registry.models.ForeignKey)
+    ]
+    m2m_fields = [
+        f.name for f in model_cls._meta.get_fields()
+        if isinstance(f, registry.models.ManyToManyField)
+    ]
+    if fk_fields:
+        qs = qs.select_related(*fk_fields)
+    if m2m_fields:
+        qs = qs.prefetch_related(*m2m_fields)
+
     try:
-        obj = model_cls.objects.get(pk=id)
+        obj = qs.get(pk=id)
     except model_cls.DoesNotExist:
         return {"error": f"{model} with id={id} not found"}
     return registry.serialize_instance(obj, expand_relations=True)
@@ -336,26 +361,51 @@ def list_models():
 
 
 def summarize():
-    """Return an overview of the system state."""
+    """Return an overview of the system state.
+
+    Uses batched raw SQL for model counts (1 query instead of 16)
+    and individual filtered queries only where needed.
+    """
     registry.build_registry()
     today = timezone.localdate()
 
     stats = {}
 
-    # Counts for major models
+    # Batch all simple model counts into a single raw SQL query
     count_models = [
         "Stakeholder", "LegalMatter", "RealEstate", "Investment", "Loan",
         "Vehicle", "Aircraft", "InsurancePolicy", "Lease", "Task", "Note",
         "CashFlowEntry", "Document", "Provider", "Prescription", "Appointment",
     ]
+    table_map = {}  # table_name -> display_name
     for name in count_models:
         try:
             model = registry.get_model(name)
-            stats[f"{name}_count"] = model.objects.count()
+            table_map[model._meta.db_table] = name
         except (ValueError, Exception):
             pass
 
-    # Task stats
+    if table_map:
+        from django.db import connection
+        # Build a UNION ALL query for all model counts in one round-trip
+        parts = [f"SELECT '{name}' AS name, COUNT(*) AS cnt FROM \"{table}\""
+                 for table, name in table_map.items()]
+        sql = " UNION ALL ".join(parts)
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(sql)
+                for row in cursor.fetchall():
+                    stats[f"{row[0]}_count"] = row[1]
+        except Exception:
+            # Fallback to individual counts if raw SQL fails
+            for name in count_models:
+                try:
+                    model = registry.get_model(name)
+                    stats[f"{name}_count"] = model.objects.count()
+                except (ValueError, Exception):
+                    pass
+
+    # Task stats (2 filtered queries — hard to batch further)
     try:
         Task = registry.get_model("Task")
         stats["overdue_tasks"] = Task.objects.filter(
@@ -578,6 +628,7 @@ TOOL_DEFINITIONS = [
             },
             "required": ["id"],
         },
+        "cache_control": {"type": "ephemeral", "ttl": "1h"},
     },
 ]
 

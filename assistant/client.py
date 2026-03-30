@@ -307,12 +307,12 @@ def _build_api_messages(chat_messages):
     if len(truncated) > CACHE_BREAKPOINT_INTERVAL:
         breakpoints_added = 0
         for i in range(CACHE_BREAKPOINT_INTERVAL - 1, len(truncated) - 1, CACHE_BREAKPOINT_INTERVAL):
-            if breakpoints_added >= 3:  # Max 4 total: 1 system + 3 messages
+            if breakpoints_added >= 2:  # Max 4 total: 1 tool + 1 system + 2 messages
                 break
             msg = truncated[i]
             content = msg.get("content")
-            # Only add breakpoints to plain text messages (not tool_data blocks)
             if isinstance(content, str):
+                # Plain text message — wrap in content block with cache control
                 truncated[i] = {
                     "role": msg["role"],
                     "content": [
@@ -320,6 +320,12 @@ def _build_api_messages(chat_messages):
                     ],
                 }
                 breakpoints_added += 1
+            elif isinstance(content, list) and content:
+                # Tool_use/tool_result blocks — add cache control to last block
+                last_block = content[-1]
+                if isinstance(last_block, dict):
+                    content[-1] = {**last_block, "cache_control": CACHE_CONTROL}
+                    breakpoints_added += 1
 
     return truncated
 
@@ -433,6 +439,19 @@ def _generate_title(client, user_text, assistant_text):
     return title
 
 
+def _get_client_and_model():
+    """Return (Anthropic client, model_name) from saved settings."""
+    from .models import AssistantSettings
+
+    settings = AssistantSettings.load()
+    api_key = settings.get_effective_api_key()
+    if not api_key:
+        raise ValueError("No API key configured")
+    client = anthropic.Anthropic(api_key=api_key, max_retries=5)
+    model_name = settings.model or DEFAULT_MODEL
+    return client, model_name
+
+
 def send_message(session, user_text):
     """
     Process a user message through the Anthropic API tool-use loop.
@@ -479,6 +498,7 @@ def send_message(session, user_text):
             response = client.messages.create(
                 model=model_name,
                 max_tokens=max_tokens,
+                temperature=float(assistant_settings.temperature),
                 system=system_prompt,
                 tools=TOOL_DEFINITIONS,
                 messages=api_messages,
@@ -643,6 +663,7 @@ def stream_message(session, user_text):
                 with client.messages.stream(
                     model=model_name,
                     max_tokens=max_tokens,
+                    temperature=float(assistant_settings.temperature),
                     system=system_prompt,
                     tools=TOOL_DEFINITIONS,
                     messages=api_messages,

@@ -142,11 +142,17 @@ def serialize_instance(instance, expand_relations=True):
         if isinstance(field, (models.ManyToManyField, models.ManyToManyRel, models.ManyToOneRel)):
             if expand_relations:
                 accessor = field.get_accessor_name() if hasattr(field, "get_accessor_name") else name
+                m2m_limit = 10
                 try:
                     manager = getattr(instance, accessor)
+                    # Fetch limit+1 to detect truncation without an extra count query
+                    items = list(manager.all()[:m2m_limit + 1])
+                    truncated = len(items) > m2m_limit
                     result[accessor] = [
-                        {"id": obj.pk, "str": str(obj)} for obj in manager.all()[:10]
+                        {"id": obj.pk, "str": str(obj)} for obj in items[:m2m_limit]
                     ]
+                    if truncated:
+                        result[f"{accessor}_truncated"] = True
                 except Exception:
                     pass
             continue

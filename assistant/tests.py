@@ -708,3 +708,546 @@ class DisplayContentTests(TestCase):
     def test_context_only_message(self):
         msg = ChatMessage(role="user", content='[Context: viewing Stakeholder #5 "Bob"]')
         self.assertEqual(msg.display_content, "")
+
+
+# ============================================================
+# Tests for optimization changes (A1-A4, B1-B4, C2)
+# ============================================================
+
+
+class TemperaturePassthroughTests(TestCase):
+    """A1: Verify temperature from settings is passed to API calls."""
+
+    def test_send_message_passes_temperature(self):
+        """Non-streaming path passes temperature to messages.create()."""
+        from .client import send_message
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.temperature = 0.3
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            # Simulate a text-only response (no tool use)
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hello!"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(session, "Hi")
+
+            # First call is the main message; second is title generation
+            first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertEqual(first_call_kwargs["temperature"], 0.3)
+
+    def test_send_message_temperature_zero(self):
+        """Default temperature of 0.0 is passed correctly (not omitted)."""
+        from .client import send_message
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.temperature = 0.0
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hi"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(session, "Hi")
+
+            first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertEqual(first_call_kwargs["temperature"], 0.0)
+
+
+class ToolDefinitionCacheTests(TestCase):
+    """A2: Verify cache_control is on the last tool definition."""
+
+    def test_last_tool_has_cache_control(self):
+        from .tools import TOOL_DEFINITIONS
+        last_tool = TOOL_DEFINITIONS[-1]
+        self.assertIn("cache_control", last_tool)
+        self.assertEqual(last_tool["cache_control"]["type"], "ephemeral")
+        # TTL must match system prompt (1h) — tools are processed first in hierarchy
+        self.assertEqual(last_tool["cache_control"]["ttl"], "1h")
+
+    def test_last_tool_is_read_email(self):
+        from .tools import TOOL_DEFINITIONS
+        last_tool = TOOL_DEFINITIONS[-1]
+        self.assertEqual(last_tool["name"], "read_email")
+
+    def test_other_tools_no_cache_control(self):
+        """Only the last tool should have cache_control."""
+        from .tools import TOOL_DEFINITIONS
+        for tool in TOOL_DEFINITIONS[:-1]:
+            self.assertNotIn(
+                "cache_control", tool,
+                f"Tool '{tool['name']}' should not have cache_control"
+            )
+
+
+class GetClientAndModelTests(TestCase):
+    """A3: Verify _get_client_and_model helper works correctly."""
+
+    def test_returns_client_and_model(self):
+        from .client import _get_client_and_model
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key-12345"
+        settings.model = "claude-opus-4-6"
+        settings.save()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value = MagicMock()
+            client, model_name = _get_client_and_model()
+            self.assertEqual(model_name, "claude-opus-4-6")
+            MockClient.assert_called_once_with(api_key="sk-test-key-12345", max_retries=5)
+
+    def test_raises_without_api_key(self):
+        from .client import _get_client_and_model
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = ""
+        settings.save()
+
+        # Also clear env var
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaises(ValueError):
+                _get_client_and_model()
+
+    def test_uses_default_model_when_blank(self):
+        from .client import DEFAULT_MODEL, _get_client_and_model
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.model = ""
+        settings.save()
+
+        with patch("assistant.client.anthropic.Anthropic"):
+            _, model_name = _get_client_and_model()
+            self.assertEqual(model_name, DEFAULT_MODEL)
+
+
+class WarmCacheEndpointTests(TestCase):
+    """A3: Verify warm_cache view works (previously crashed with ImportError)."""
+
+    def test_warm_cache_import_succeeds(self):
+        """The import in warm_cache should not crash."""
+        from .client import _get_client_and_model  # noqa: F401
+        # If we get here, the import works
+
+    def test_warm_cache_endpoint_returns_ok(self):
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = ""
+            mock_resp = MagicMock()
+            mock_resp.content = [mock_block]
+            mock_client.messages.create.return_value = mock_resp
+
+            response = self.client.post(reverse("assistant:warm_cache"))
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertTrue(data["ok"])
+
+    def test_warm_cache_swallows_errors(self):
+        """Even if API call fails, endpoint returns ok."""
+        from .models import AssistantSettings
+        settings = AssistantSettings.load()
+        settings.api_key = ""
+        settings.save()
+
+        response = self.client.post(reverse("assistant:warm_cache"))
+        self.assertEqual(response.status_code, 200)
+
+
+class CacheBreakpointTests(TestCase):
+    """A4: Verify cache breakpoints work on both text and tool_data messages."""
+
+    def _make_messages(self, count, tool_data=False):
+        """Create a list of alternating user/assistant API messages."""
+        msgs = []
+        for i in range(count):
+            role = "user" if i % 2 == 0 else "assistant"
+            if tool_data:
+                msgs.append({
+                    "role": role,
+                    "content": [{"type": "tool_result" if role == "user" else "tool_use",
+                                 "id": f"tool_{i}"}],
+                })
+            else:
+                msgs.append({"role": role, "content": f"Message {i}"})
+        return msgs
+
+    def test_text_messages_get_breakpoints(self):
+        """Original behavior: plain text messages get cache breakpoints."""
+        from .client import CACHE_BREAKPOINT_INTERVAL, _build_api_messages
+        from .models import ChatMessage
+
+        session = ChatSession.objects.create()
+        # Create enough messages to trigger breakpoints
+        for i in range(20):
+            role = "user" if i % 2 == 0 else "assistant"
+            ChatMessage.objects.create(session=session, role=role, content=f"Msg {i}")
+
+        result = _build_api_messages(session.messages.all())
+
+        # Check that at least one breakpoint was added
+        has_breakpoint = False
+        for msg in result:
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and "cache_control" in block:
+                        has_breakpoint = True
+                        break
+        self.assertTrue(has_breakpoint)
+
+    def test_tool_data_messages_get_breakpoints(self):
+        """New behavior: tool_data (list) messages also get cache breakpoints."""
+        from .client import CACHE_BREAKPOINT_INTERVAL, _build_api_messages
+        from .models import ChatMessage
+
+        session = ChatSession.objects.create()
+        # Create a mix: first a text msg, then lots of tool messages
+        ChatMessage.objects.create(session=session, role="user", content="Start")
+        for i in range(19):
+            role = "assistant" if i % 2 == 0 else "user"
+            if role == "assistant":
+                tool_data = [{"type": "tool_use", "id": f"tu_{i}", "name": "search", "input": {}}]
+            else:
+                tool_data = [{"type": "tool_result", "tool_use_id": f"tu_{i-1}", "content": "ok"}]
+            ChatMessage.objects.create(session=session, role=role, content="", tool_data=tool_data)
+
+        result = _build_api_messages(session.messages.all())
+
+        # Find breakpoints on tool_data messages
+        tool_breakpoints = 0
+        for msg in result:
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and "cache_control" in block:
+                        # It's a breakpoint on a list-type message
+                        if block.get("type") in ("tool_use", "tool_result"):
+                            tool_breakpoints += 1
+        self.assertGreater(tool_breakpoints, 0, "No breakpoints found on tool_data messages")
+
+    def test_max_two_breakpoints_in_messages(self):
+        """Cache breakpoints are capped at 2 (+ 1 tool + 1 system = 4 total)."""
+        from .client import _build_api_messages
+        from .models import ChatMessage
+
+        session = ChatSession.objects.create()
+        for i in range(50):
+            role = "user" if i % 2 == 0 else "assistant"
+            ChatMessage.objects.create(session=session, role=role, content=f"Msg {i}")
+
+        result = _build_api_messages(session.messages.all())
+
+        breakpoint_count = 0
+        for msg in result:
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and "cache_control" in block:
+                        breakpoint_count += 1
+        self.assertLessEqual(breakpoint_count, 2)
+
+
+class SummarizeBatchTests(TestCase):
+    """B1: Verify summarize() returns correct results with batched SQL."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from stakeholders.models import Stakeholder
+        from tasks.models import Task
+        from django.utils import timezone
+
+        Stakeholder.objects.create(name="Alice", entity_type="contact")
+        Stakeholder.objects.create(name="Bob", entity_type="attorney")
+        Task.objects.create(
+            title="Overdue task", status="not_started", priority="high",
+            direction="personal", due_date=timezone.localdate() - timezone.timedelta(days=5),
+        )
+        Task.objects.create(
+            title="Current task", status="not_started", priority="medium",
+            direction="personal", due_date=timezone.localdate() + timezone.timedelta(days=2),
+        )
+        Task.objects.create(
+            title="Done task", status="complete", priority="low",
+            direction="personal", due_date=timezone.localdate() - timezone.timedelta(days=1),
+        )
+
+    def test_model_counts_correct(self):
+        result = summarize()
+        self.assertEqual(result["Stakeholder_count"], 2)
+        self.assertEqual(result["Task_count"], 3)
+
+    def test_overdue_tasks_excludes_complete(self):
+        result = summarize()
+        self.assertEqual(result["overdue_tasks"], 1)
+
+    def test_tasks_due_this_week(self):
+        result = summarize()
+        self.assertEqual(result["tasks_due_this_week"], 1)
+
+    def test_returns_all_expected_keys(self):
+        """Summarize should return counts for all major models."""
+        result = summarize()
+        expected_models = [
+            "Stakeholder", "LegalMatter", "RealEstate", "Investment", "Loan",
+            "Task", "Note",
+        ]
+        for model in expected_models:
+            self.assertIn(f"{model}_count", result, f"Missing {model}_count")
+
+    def test_zero_counts_included(self):
+        """Models with zero records should still appear with count 0."""
+        result = summarize()
+        self.assertEqual(result.get("LegalMatter_count", -1), 0)
+
+
+class GetRecordSelectRelatedTests(TestCase):
+    """B2: Verify get_record uses select_related/prefetch_related."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from stakeholders.models import Stakeholder
+        from tasks.models import Task
+
+        cls.stakeholder = Stakeholder.objects.create(name="Test Person", entity_type="contact")
+        cls.task = Task.objects.create(
+            title="Linked task", status="not_started", priority="high",
+            direction="personal",
+        )
+        cls.task.related_stakeholders.add(cls.stakeholder)
+
+    def test_get_record_returns_correct_data(self):
+        """Functional correctness: get_record still returns full data."""
+        result = get_record("Task", self.task.pk)
+        self.assertEqual(result["title"], "Linked task")
+        self.assertEqual(result["__model__"], "Task")
+        self.assertIn("__url__", result)
+
+    def test_get_record_expands_m2m(self):
+        """M2M fields are still expanded."""
+        result = get_record("Task", self.task.pk)
+        self.assertIn("related_stakeholders", result)
+        stakeholders = result["related_stakeholders"]
+        self.assertEqual(len(stakeholders), 1)
+        self.assertEqual(stakeholders[0]["str"], "Test Person")
+
+    def test_get_record_not_found_still_works(self):
+        result = get_record("Task", 99999)
+        self.assertIn("error", result)
+
+    def test_get_record_with_fk(self):
+        """FK fields are still expanded correctly."""
+        from tasks.models import Task
+
+        task = Task.objects.create(
+            title="Assigned task", status="not_started", priority="high",
+            direction="outbound", assigned_to=self.stakeholder,
+        )
+        result = get_record("Task", task.pk)
+        self.assertIn("assigned_to", result)
+        self.assertEqual(result["assigned_to"]["id"], self.stakeholder.pk)
+        self.assertEqual(result["assigned_to"]["str"], "Test Person")
+
+    def test_get_record_reduces_queries(self):
+        """Verify select_related actually reduces query count."""
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+
+        with CaptureQueriesContext(connection) as ctx:
+            get_record("Task", self.task.pk)
+
+        # With select_related, all FK data comes in 1-2 queries + 1 prefetch per M2M
+        # Without it, each FK would be a separate query. Should be well under 10.
+        self.assertLess(
+            len(ctx), 10,
+            f"get_record made {len(ctx)} queries — N+1 may not be fixed"
+        )
+
+
+class ChoiceCacheTests(TestCase):
+    """B3: Verify _normalize_choice_fields uses cached choices."""
+
+    def test_normalize_exact_value(self):
+        """Exact value match should pass through unchanged."""
+        from .tools import _normalize_choice_fields
+        from stakeholders.models import Stakeholder
+
+        data = {"entity_type": "contact"}
+        _normalize_choice_fields(Stakeholder, data)
+        self.assertEqual(data["entity_type"], "contact")
+
+    def test_normalize_case_insensitive_value(self):
+        """Case-insensitive value match should normalize."""
+        from .tools import _normalize_choice_fields
+        from stakeholders.models import Stakeholder
+
+        data = {"entity_type": "Contact"}
+        _normalize_choice_fields(Stakeholder, data)
+        self.assertEqual(data["entity_type"], "contact")
+
+    def test_normalize_label_to_value(self):
+        """Label like 'Attorney' should map to value 'attorney'."""
+        from .tools import _normalize_choice_fields
+        from dashboard.models import ChoiceOption
+        from stakeholders.models import Stakeholder
+
+        # Ensure the choice exists (seeded by migration)
+        if not ChoiceOption.objects.filter(category="entity_type", value="attorney").exists():
+            ChoiceOption.objects.create(
+                category="entity_type", value="attorney", label="Attorney"
+            )
+
+        data = {"entity_type": "Attorney"}
+        _normalize_choice_fields(Stakeholder, data)
+        self.assertEqual(data["entity_type"], "attorney")
+
+    def test_normalize_ignores_non_choice_fields(self):
+        """Fields not in CHOICE_CATEGORIES should be untouched."""
+        from .tools import _normalize_choice_fields
+        from stakeholders.models import Stakeholder
+
+        data = {"name": "Test", "entity_type": "contact"}
+        _normalize_choice_fields(Stakeholder, data)
+        self.assertEqual(data["name"], "Test")
+
+    def test_normalize_ignores_non_string_values(self):
+        """Non-string values (e.g., integers) should be skipped."""
+        from .tools import _normalize_choice_fields
+        from stakeholders.models import Stakeholder
+
+        data = {"entity_type": 123}
+        _normalize_choice_fields(Stakeholder, data)
+        self.assertEqual(data["entity_type"], 123)
+
+
+class SearchEarlyTerminationTests(TestCase):
+    """B4: Verify search() stops early at max_total results."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from stakeholders.models import Stakeholder
+        # Create enough records to potentially hit the cap
+        for i in range(15):
+            Stakeholder.objects.create(name=f"TestMatch {i}", entity_type="contact")
+
+    def test_search_returns_results(self):
+        result = search("TestMatch")
+        self.assertGreater(result["count"], 0)
+
+    def test_search_respects_per_model_limit(self):
+        """Per-model limit of 10 should cap results from one model."""
+        result = search("TestMatch", models=["Stakeholder"])
+        self.assertLessEqual(result["count"], 10)
+
+    def test_search_with_model_filter_still_works(self):
+        result = search("TestMatch", models=["Stakeholder"])
+        for r in result["results"]:
+            self.assertEqual(r["model"], "Stakeholder")
+
+    def test_search_result_structure(self):
+        """Each result should have model, id, str, url."""
+        result = search("TestMatch", models=["Stakeholder"])
+        self.assertGreater(result["count"], 0)
+        first = result["results"][0]
+        self.assertIn("model", first)
+        self.assertIn("id", first)
+        self.assertIn("str", first)
+        self.assertIn("url", first)
+
+
+class M2MTruncationIndicatorTests(TestCase):
+    """C2: Verify M2M truncation flag appears when >10 items."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from stakeholders.models import Stakeholder
+        from tasks.models import Task
+
+        cls.stakeholder = Stakeholder.objects.create(name="Busy Person", entity_type="contact")
+        # Create 12 tasks linked to the stakeholder
+        for i in range(12):
+            task = Task.objects.create(
+                title=f"Task {i}", status="not_started",
+                priority="medium", direction="personal",
+            )
+            task.related_stakeholders.add(cls.stakeholder)
+
+    def test_truncated_flag_set_when_over_10(self):
+        """When >10 related items, _truncated flag should appear."""
+        result = serialize_instance(self.stakeholder, expand_relations=True)
+        # Tasks are accessed via reverse relation 'tasks'
+        self.assertIn("tasks", result)
+        self.assertEqual(len(result["tasks"]), 10)
+        self.assertTrue(result.get("tasks_truncated", False))
+
+    def test_no_truncated_flag_when_under_limit(self):
+        """When <=10 related items, no _truncated flag."""
+        from stakeholders.models import Stakeholder
+        from tasks.models import Task
+
+        s = Stakeholder.objects.create(name="Light Person", entity_type="contact")
+        for i in range(3):
+            task = Task.objects.create(
+                title=f"Small task {i}", status="not_started",
+                priority="low", direction="personal",
+            )
+            task.related_stakeholders.add(s)
+
+        result = serialize_instance(s, expand_relations=True)
+        self.assertIn("tasks", result)
+        self.assertEqual(len(result["tasks"]), 3)
+        self.assertNotIn("tasks_truncated", result)
+
+    def test_exactly_10_items_no_truncation(self):
+        """Exactly 10 items should NOT trigger truncation."""
+        from stakeholders.models import Stakeholder
+        from tasks.models import Task
+
+        s = Stakeholder.objects.create(name="Exact Person", entity_type="contact")
+        for i in range(10):
+            task = Task.objects.create(
+                title=f"Exact task {i}", status="not_started",
+                priority="low", direction="personal",
+            )
+            task.related_stakeholders.add(s)
+
+        result = serialize_instance(s, expand_relations=True)
+        self.assertIn("tasks", result)
+        self.assertEqual(len(result["tasks"]), 10)
+        self.assertNotIn("tasks_truncated", result)
+
+    def test_expand_relations_false_skips_m2m(self):
+        """With expand_relations=False, M2M fields are not included."""
+        result = serialize_instance(self.stakeholder, expand_relations=False)
+        self.assertNotIn("tasks", result)
+        self.assertNotIn("tasks_truncated", result)
