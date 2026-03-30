@@ -38,7 +38,11 @@ class DocumentListView(ListView):
     paginate_by = 50
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related(
+            "related_property", "related_investment", "related_loan",
+            "related_lease", "related_policy", "related_vehicle",
+            "related_aircraft", "related_stakeholder", "related_legal_matter",
+        )
 
         q = self.request.GET.get("q", "").strip()
         if q:
@@ -135,6 +139,17 @@ class DocumentListView(ListView):
             expiration_date__isnull=False,
             expiration_date__lte=today + datetime.timedelta(days=90),
             expiration_date__gte=today,
+        ).count()
+        ctx["unlinked_count"] = Document.objects.filter(
+            related_property__isnull=True,
+            related_investment__isnull=True,
+            related_loan__isnull=True,
+            related_lease__isnull=True,
+            related_policy__isnull=True,
+            related_vehicle__isnull=True,
+            related_aircraft__isnull=True,
+            related_stakeholder__isnull=True,
+            related_legal_matter__isnull=True,
         ).count()
         return ctx
 

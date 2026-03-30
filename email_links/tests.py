@@ -68,7 +68,22 @@ class EmailLinkUnlinkTest(TestCase):
             related_legal_matter=self.matter,
         )
 
-    def test_unlink_removes_fk(self):
+    def test_unlink_last_fk_deletes_record(self):
+        """Unlinking the only FK should delete the EmailLink entirely."""
+        resp = self.client.post(
+            reverse("email_links:legal_matter_email_unlink",
+                    args=[self.matter.pk, self.email.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(EmailLink.objects.filter(pk=self.email.pk).exists())
+
+    def test_unlink_preserves_record_when_other_fk_remains(self):
+        """Unlinking one FK should keep the record if another FK is still set."""
+        from tasks.models import Task
+        task = Task.objects.create(title="Keep Alive", direction="personal")
+        self.email.related_task = task
+        self.email.save()
+
         resp = self.client.post(
             reverse("email_links:legal_matter_email_unlink",
                     args=[self.matter.pk, self.email.pk])
@@ -76,6 +91,7 @@ class EmailLinkUnlinkTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.email.refresh_from_db()
         self.assertIsNone(self.email.related_legal_matter)
+        self.assertEqual(self.email.related_task, task)
 
     def test_link_form_get(self):
         resp = self.client.get(
@@ -134,14 +150,14 @@ class TaskEmailLinkUnlinkTest(TestCase):
             related_task=self.task,
         )
 
-    def test_unlink_removes_fk(self):
+    def test_unlink_last_fk_deletes_record(self):
+        """Unlinking the only FK on a task email should delete the record."""
         resp = self.client.post(
             reverse("email_links:task_email_unlink",
                     args=[self.task.pk, self.email.pk])
         )
         self.assertEqual(resp.status_code, 200)
-        self.email.refresh_from_db()
-        self.assertIsNone(self.email.related_task)
+        self.assertFalse(EmailLink.objects.filter(pk=self.email.pk).exists())
 
     def test_link_form_get(self):
         resp = self.client.get(
@@ -187,6 +203,57 @@ class TaskEmailLinkUnlinkTest(TestCase):
             message_id="task_le_test", related_task=self.task,
         )
         self.assertEqual(el.linked_entities, [("Task", self.task)])
+
+
+class EntityDeleteOrphanCleanupTest(TestCase):
+    """Deleting an entity should auto-delete EmailLinks that become orphaned."""
+
+    def test_delete_sole_linked_entity_deletes_email(self):
+        from legal.models import LegalMatter
+        matter = LegalMatter.objects.create(title="Doomed", status="active")
+        email = EmailLink.objects.create(
+            message_id="orphan_signal_1",
+            subject="Will be orphaned",
+            related_legal_matter=matter,
+        )
+        matter.delete()
+        self.assertFalse(EmailLink.objects.filter(pk=email.pk).exists())
+
+    def test_delete_entity_preserves_multi_linked_email(self):
+        from legal.models import LegalMatter
+        from tasks.models import Task
+        matter = LegalMatter.objects.create(title="Goes Away", status="active")
+        task = Task.objects.create(title="Stays", direction="personal")
+        email = EmailLink.objects.create(
+            message_id="orphan_signal_2",
+            subject="Has two links",
+            related_legal_matter=matter,
+            related_task=task,
+        )
+        matter.delete()
+        email.refresh_from_db()
+        self.assertIsNone(email.related_legal_matter)
+        self.assertEqual(email.related_task, task)
+
+    def test_delete_task_deletes_orphaned_email(self):
+        from tasks.models import Task
+        task = Task.objects.create(title="Task to delete", direction="personal")
+        email = EmailLink.objects.create(
+            message_id="orphan_signal_3",
+            related_task=task,
+        )
+        task.delete()
+        self.assertFalse(EmailLink.objects.filter(pk=email.pk).exists())
+
+    def test_delete_stakeholder_deletes_orphaned_email(self):
+        from stakeholders.models import Stakeholder
+        sh = Stakeholder.objects.create(name="Gone", entity_type="individual")
+        email = EmailLink.objects.create(
+            message_id="orphan_signal_4",
+            related_stakeholder=sh,
+        )
+        sh.delete()
+        self.assertFalse(EmailLink.objects.filter(pk=email.pk).exists())
 
 
 class ReadEmailToolTest(TestCase):

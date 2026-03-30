@@ -18,6 +18,13 @@ ENTITY_CONFIG = {
     "task": ("tasks.Task", "related_task"),
 }
 
+FK_ID_FIELDS = [f"{fk_field}_id" for _, fk_field in ENTITY_CONFIG.values()]
+
+
+def _has_any_link(email_link):
+    """Check if an EmailLink has any remaining entity FK set (no DB queries)."""
+    return any(getattr(email_link, fk_id) for fk_id in FK_ID_FIELDS)
+
 
 def _parse_email_date(date_str):
     """Parse an RFC 2822 date (from Gmail) into a datetime, or None."""
@@ -89,7 +96,10 @@ def _email_unlink(request, entity_type, pk, email_pk):
 
     if request.method == "POST":
         setattr(email_link, fk_field, None)
-        email_link.save()
+        if _has_any_link(email_link):
+            email_link.save()
+        else:
+            email_link.delete()
     return render(request, "email_links/partials/_email_list_section.html",
                   _email_list_ctx(entity, fk_field, unlink_url_name, pk))
 

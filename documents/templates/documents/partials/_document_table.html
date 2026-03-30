@@ -6,14 +6,30 @@
     </td>
     <td class="px-4 py-3">
         <a href="{% url 'documents:detail' doc.pk %}" class="text-sm text-gray-200 hover:text-white">{{ doc.title }}</a>
+        {% if doc.gdrive_file_name and doc.gdrive_file_name != doc.title %}
+        <div class="text-xs text-gray-500 mt-0.5 line-clamp-1">{{ doc.gdrive_file_name }}</div>
+        {% endif %}
+        {% if doc.description %}
+        <div class="text-xs text-gray-500 line-clamp-1">{{ doc.description }}</div>
+        {% endif %}
+        {# Mobile-only: linked entities + category #}
         {% if doc.linked_entities %}
         <div class="sm:hidden text-xs text-gray-500 mt-0.5">
-            {% for label, obj in doc.linked_entities %}{{ label }}{% if not forloop.last %}, {% endif %}{% endfor %}
+            {% for label, obj in doc.linked_entities %}{{ label }}: {{ obj|truncatechars:20 }}{% if not forloop.last %}, {% endif %}{% endfor %}
         </div>
+        {% else %}
+        <div class="sm:hidden text-xs text-gray-600 mt-0.5">Unlinked</div>
         {% endif %}
         {% if doc.category %}
         <span class="sm:hidden text-xs text-gray-500 ml-1">&middot; {{ doc.category|choice_label:"document_category" }}</span>
         {% endif %}
+    </td>
+    <td class="px-4 py-3 text-sm hidden sm:table-cell">
+        {% for label, obj in doc.linked_entities %}
+        <a href="{{ obj.get_absolute_url }}" class="text-blue-400 hover:text-blue-300 text-xs block leading-relaxed">{{ label }}: {{ obj|truncatechars:25 }}</a>
+        {% empty %}
+        <span class="text-gray-600 text-xs">Unlinked</span>
+        {% endfor %}
     </td>
     <td class="px-4 py-3 text-sm text-gray-300 hidden sm:table-cell">
         {% if doc.category %}{{ doc.category|choice_label:"document_category" }}{% else %}<span class="text-gray-600">-</span>{% endif %}
@@ -32,8 +48,20 @@
     </td>
     <td class="px-4 py-3 text-center hidden md:table-cell">
         {% if doc.has_drive_link %}
-            <a href="{{ doc.gdrive_url }}" target="_blank" rel="noopener" title="Open in Google Drive" class="text-blue-400 hover:text-blue-300">
-                <svg class="w-4 h-4 inline" fill="currentColor" viewBox="0 0 24 24"><path d="M7.71 3.5L1.15 15l4.58 7.5h13.54l4.58-7.5L17.29 3.5H7.71zm.58 1h8.42l5.83 10.5h-5.83l-4.21-7.3-4.21 7.3H2.46L8.29 4.5z"/></svg>
+            <a href="{{ doc.gdrive_url }}" target="_blank" rel="noopener" title="{{ doc.gdrive_file_name|default:'Open in Google Drive' }}" class="{% if 'pdf' in doc.gdrive_mime_type %}text-red-400 hover:text-red-300{% elif 'document' in doc.gdrive_mime_type or 'word' in doc.gdrive_mime_type %}text-blue-400 hover:text-blue-300{% elif 'spreadsheet' in doc.gdrive_mime_type or 'excel' in doc.gdrive_mime_type or 'sheet' in doc.gdrive_mime_type %}text-green-400 hover:text-green-300{% elif 'presentation' in doc.gdrive_mime_type or 'powerpoint' in doc.gdrive_mime_type %}text-amber-400 hover:text-amber-300{% elif 'image' in doc.gdrive_mime_type %}text-purple-400 hover:text-purple-300{% else %}text-gray-400 hover:text-gray-300{% endif %}">
+                {% if 'pdf' in doc.gdrive_mime_type %}
+                <svg class="w-4 h-4 inline" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 2l5 5h-5V4zM6 20V4h6v6h6v10H6zm2-8h2v1H8v2h1v-1h1v2H8v1h3v-5H8v0zm5 0h2c.55 0 1 .45 1 1v3c0 .55-.45 1-1 1h-2v-5zm1 4h1v-3h-1v3z"/></svg>
+                {% elif 'document' in doc.gdrive_mime_type or 'word' in doc.gdrive_mime_type %}
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                {% elif 'spreadsheet' in doc.gdrive_mime_type or 'excel' in doc.gdrive_mime_type or 'sheet' in doc.gdrive_mime_type %}
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M3 6h18M3 18h18M9 6v12M15 6v12"/></svg>
+                {% elif 'presentation' in doc.gdrive_mime_type or 'powerpoint' in doc.gdrive_mime_type %}
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
+                {% elif 'image' in doc.gdrive_mime_type %}
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                {% else %}
+                <svg class="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                {% endif %}
             </a>
         {% elif doc.has_file %}
             <a href="{{ doc.file.url }}" target="_blank" title="Download file" class="text-gray-400 hover:text-gray-300">
@@ -45,7 +73,7 @@
     </td>
 </tr>
 {% empty %}
-<tr><td colspan="6" class="px-4 py-12 text-center">
+<tr><td colspan="7" class="px-4 py-12 text-center">
     <svg class="w-10 h-10 mx-auto text-gray-600 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
     </svg>
