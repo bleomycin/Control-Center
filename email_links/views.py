@@ -15,6 +15,7 @@ ENTITY_CONFIG = {
     "aircraft": ("assets.Aircraft", "related_aircraft"),
     "stakeholder": ("stakeholders.Stakeholder", "related_stakeholder"),
     "legal_matter": ("legal.LegalMatter", "related_legal_matter"),
+    "note": ("notes.Note", "related_note"),
     "task": ("tasks.Task", "related_task"),
 }
 
@@ -176,6 +177,14 @@ def legal_matter_email_link(request, pk):
 
 def legal_matter_email_unlink(request, pk, email_pk):
     return _email_unlink(request, "legal_matter", pk, email_pk)
+
+
+def note_email_link(request, pk):
+    return _email_link(request, "note", pk)
+
+
+def note_email_unlink(request, pk, email_pk):
+    return _email_unlink(request, "note", pk, email_pk)
 
 
 def task_email_link(request, pk):

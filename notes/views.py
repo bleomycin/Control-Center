@@ -243,6 +243,7 @@ class NoteDetailView(DetailView):
         ctx["attachment_form"] = AttachmentForm()
         ctx["link_list"] = self.object.links.all()
         ctx["link_form"] = LinkForm()
+        ctx["entity_email_links"] = self.object.email_links.all()
         from checklists.views import get_checklists_context
         ctx.update(get_checklists_context(self.object, "note"))
         return ctx

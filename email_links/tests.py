@@ -255,6 +255,58 @@ class EntityDeleteOrphanCleanupTest(TestCase):
         sh.delete()
         self.assertFalse(EmailLink.objects.filter(pk=email.pk).exists())
 
+    def test_delete_note_deletes_orphaned_email(self):
+        from notes.models import Note
+        note = Note.objects.create(title="Gone Note", note_type="meeting", date=timezone.localdate())
+        email = EmailLink.objects.create(
+            message_id="orphan_signal_5",
+            related_note=note,
+        )
+        note.delete()
+        self.assertFalse(EmailLink.objects.filter(pk=email.pk).exists())
+
+
+class NoteEmailLinkUnlinkTest(TestCase):
+    def setUp(self):
+        from notes.models import Note
+        self.note = Note.objects.create(title="Test Note", note_type="meeting", date=timezone.localdate())
+        self.email = EmailLink.objects.create(
+            message_id="note_test_123",
+            subject="Test Note Email",
+            from_email="test@example.com",
+            date=timezone.now(),
+            related_note=self.note,
+        )
+
+    def test_unlink_last_fk_deletes_record(self):
+        resp = self.client.post(
+            reverse("email_links:note_email_unlink",
+                    args=[self.note.pk, self.email.pk])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(EmailLink.objects.filter(pk=self.email.pk).exists())
+
+    def test_link_post_creates_and_links(self):
+        resp = self.client.post(
+            reverse("email_links:note_email_link", args=[self.note.pk]),
+            {
+                "message_id": "note_new_msg_123",
+                "subject": "New Note Email",
+                "from_name": "Sender",
+                "from_email": "sender@example.com",
+                "date": "",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        el = EmailLink.objects.get(message_id="note_new_msg_123")
+        self.assertEqual(el.related_note, self.note)
+
+    def test_linked_entities_includes_note(self):
+        el = EmailLink.objects.create(
+            message_id="note_le_test", related_note=self.note,
+        )
+        self.assertEqual(el.linked_entities, [("Note", self.note)])
+
 
 class ReadEmailToolTest(TestCase):
     def setUp(self):
