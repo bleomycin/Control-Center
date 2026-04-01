@@ -87,11 +87,111 @@ def _validate_filters(model, filters):
     return validated
 
 
+ENRICH_THRESHOLD = 10  # Auto-enrich search results when total count is ≤ this
+
+# Key fields to include per model when enriching search results.
+# These give the model enough context to make connections without get_record.
+ENRICH_FIELDS = {
+    "Stakeholder": {
+        "scalars": ["entity_type", "organization", "phone", "email",
+                     "address", "city", "state"],
+    },
+    "RealEstate": {
+        "scalars": ["address", "city", "state", "property_type",
+                     "estimated_value", "status"],
+    },
+    "Aircraft": {
+        "scalars": ["registration_number", "make", "model_name", "year"],
+        "reverse": ["owners"],
+    },
+    "Vehicle": {
+        "scalars": ["year", "make", "model_name", "vin"],
+        "reverse": ["owners"],
+    },
+    "Investment": {
+        "scalars": ["investment_type", "total_committed"],
+    },
+    "Loan": {
+        "scalars": ["loan_type", "original_amount", "lender"],
+        "reverse": ["parties"],
+    },
+    "LegalMatter": {
+        "scalars": ["matter_type", "status"],
+        "m2m": ["attorneys"],
+    },
+    "Task": {
+        "scalars": ["status", "priority", "due_date", "due_time",
+                     "task_type", "direction", "location"],
+        "fk": ["assigned_to"],
+    },
+    "InsurancePolicy": {
+        "scalars": ["policy_type", "policy_number", "premium", "status"],
+    },
+    "Note": {
+        "scalars": ["note_type", "date"],
+    },
+    "Lease": {
+        "scalars": ["lease_type", "status", "start_date", "end_date"],
+    },
+}
+
+
+def _enrich_result(obj, model_name):
+    """Add key fields to a search result for richer context."""
+    spec = ENRICH_FIELDS.get(model_name)
+    if not spec:
+        return None
+
+    details = {}
+
+    # Scalar fields (direct attributes)
+    for field_name in spec.get("scalars", []):
+        val = getattr(obj, field_name, None)
+        if val is not None and val != "":
+            details[field_name] = registry._json_safe(val)
+
+    # FK fields (show id + str)
+    for field_name in spec.get("fk", []):
+        related = getattr(obj, field_name, None)
+        if related:
+            details[field_name] = {"id": related.pk, "str": str(related)}
+
+    # M2M fields (show list of id + str, limit 5)
+    for field_name in spec.get("m2m", []):
+        try:
+            manager = getattr(obj, field_name)
+            items = list(manager.all()[:5])
+            if items:
+                details[field_name] = [
+                    {"id": o.pk, "str": str(o)} for o in items
+                ]
+        except Exception:
+            pass
+
+    # Reverse relations (e.g., aircraft_owners → through model)
+    for accessor in spec.get("reverse", []):
+        try:
+            manager = getattr(obj, accessor)
+            items = list(manager.select_related("stakeholder").all()[:5])
+            if items:
+                details[accessor] = [
+                    {"id": o.stakeholder_id, "str": str(o.stakeholder),
+                     "role": getattr(o, "role", "")}
+                    for o in items if hasattr(o, "stakeholder")
+                ]
+        except Exception:
+            pass
+
+    return details if details else None
+
+
 def search(query, models=None):
     """Search across all models for matching records.
 
     Stops early once MAX_SEARCH_RESULTS total results are found to avoid
-    unnecessary queries against all 34 models.
+    unnecessary queries against all 34 models. When the total result count
+    is small (≤ ENRICH_THRESHOLD), each result includes key fields so the
+    model has enough context without needing get_record.
     """
     registry.build_registry()
     results = []
@@ -128,7 +228,21 @@ def search(query, models=None):
                     entry["url"] = obj.get_absolute_url()
                 except Exception:
                     pass
+            # Stash object reference for potential enrichment
+            entry["_obj"] = obj
+            entry["_model_name"] = model_name
             results.append(entry)
+
+    # Enrich with key fields when result set is small
+    if len(results) <= ENRICH_THRESHOLD:
+        for entry in results:
+            details = _enrich_result(entry.pop("_obj"), entry.pop("_model_name"))
+            if details:
+                entry["details"] = details
+    else:
+        for entry in results:
+            entry.pop("_obj", None)
+            entry.pop("_model_name", None)
 
     return {"results": results, "count": len(results)}
 

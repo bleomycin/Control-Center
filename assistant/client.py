@@ -25,6 +25,10 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8192
 TITLE_MODEL = "claude-haiku-4-5-20251001"
 
+# Injection point for benchmark-injected system prompt rules.
+# Set by benchmark_intelligence to test prompt variations.
+_EXTRA_RULES = ""
+
 SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a personal management system. You help the user manage their stakeholders, legal matters, assets, tasks, notes, cash flow, healthcare records, documents, and checklists.
 
 ## Your capabilities
@@ -44,6 +48,9 @@ SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a
 7. **Batch tool calls aggressively**: Every API round-trip adds latency. Always call as many tools as possible in a single response. If you need to search for 15 entities, call search() 15 times in one response — do NOT split them across multiple iterations. Fewer iterations = faster results for the user.
 8. **Meetings vs Appointments**: For scheduling meetings (business, legal, personal), create a `Task` with `task_type="meeting"` and set `due_date` + `due_time`. The `Appointment` model is ONLY for medical/healthcare appointments (doctor visits, lab work, etc.) — never use it for general meetings.
 9. **Task links**: To attach reference links to a task, create `TaskLink` records (model: TaskLink, fields: task, url, label). Each TaskLink has a `task` FK (the task ID), a `url` (required), and an optional `label`. A task can have multiple links. Use this for articles, documents, external resources, websites — anything that isn't a video call join link. The `meeting_url` field on Task is exclusively for Zoom/Teams/Meet join URLs.
+10. **Get full records before acting**: When you find an entity via search, ALWAYS call `get_record()` on it before using it in a plan. The search result is a preview — the full record has addresses, linked assets, relationships, and details you need. If the user says "at Jim's office" and you found Jim via search, get_record on Jim to find his actual address. Never use a search snippet when the full record is available.
+11. **Search for every entity reference**: When the user mentions ANY noun that could be a record — a person, property, vehicle, aircraft, company, LLC, legal matter, loan — search for it, even if mentioned in passing or parenthetically. "Matt Jones (G600 Pilot)" means search for BOTH "Matt Jones" AND "G600". "Oak Ave contractor" means search for "Oak Ave". Batch all searches into one call. Missing a connection is always worse than an extra search.
+12. **Link relationships on creation**: When creating a new stakeholder who has a described relationship to an existing entity (pilot of an aircraft, attorney for a legal matter, manager of a property, partner on an LLC), include that relationship in the creation plan. Search for the related entity first, then propose linking via the appropriate through model or M2M field.
 
 ## Email & meeting notes processing
 
@@ -218,7 +225,7 @@ def _build_system_prompt():
     return [
         {
             "type": "text",
-            "text": SYSTEM_PREAMBLE + schema,
+            "text": SYSTEM_PREAMBLE + _EXTRA_RULES + schema,
             "cache_control": {"type": "ephemeral", "ttl": "1h"},
         },
         {
@@ -452,12 +459,17 @@ def _get_client_and_model():
     return client, model_name
 
 
-def send_message(session, user_text):
+def send_message(session, user_text, thinking=None):
     """
     Process a user message through the Anthropic API tool-use loop.
 
     Saves all messages to the database and returns the list of
     new ChatMessage objects created during this exchange.
+
+    Args:
+        thinking: Optional dict for extended thinking, e.g.
+                  {"type": "enabled", "budget_tokens": 4096}.
+                  When set, temperature is forced to 1.0.
     """
     from .models import ChatMessage
 
@@ -495,7 +507,7 @@ def send_message(session, user_text):
 
     for iteration in range(MAX_TOOL_ITERATIONS):
         try:
-            response = client.messages.create(
+            create_kwargs = dict(
                 model=model_name,
                 max_tokens=max_tokens,
                 temperature=float(assistant_settings.temperature),
@@ -503,6 +515,10 @@ def send_message(session, user_text):
                 tools=TOOL_DEFINITIONS,
                 messages=api_messages,
             )
+            if thinking:
+                create_kwargs["thinking"] = thinking
+                create_kwargs["temperature"] = 1.0
+            response = client.messages.create(**create_kwargs)
         except anthropic.APIError as e:
             logger.error(f"Anthropic API error: {e}")
             error_msg = ChatMessage.objects.create(
@@ -520,9 +536,16 @@ def send_message(session, user_text):
 
         if has_tool_use:
             # Save the assistant's tool_use response
+            # Include thinking blocks (must be round-tripped for extended thinking)
             assistant_content = []
             for block in response.content:
-                if block.type == "text":
+                if block.type == "thinking":
+                    assistant_content.append({
+                        "type": "thinking",
+                        "thinking": block.thinking,
+                        "signature": block.signature,
+                    })
+                elif block.type == "text":
                     assistant_content.append({
                         "type": "text",
                         "text": block.text,
