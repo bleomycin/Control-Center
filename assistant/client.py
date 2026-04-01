@@ -716,6 +716,7 @@ def stream_message(session, user_text, mode="fast"):
     # Text tokens are yielded live during the final (non-tool) response.
     # During tool iterations, any brief text is cleared before tools execute.
     has_dry_run = False  # Track if any dry_run preview happened (for confirm UI)
+    has_write_executed = False  # Track if any write actually executed (suppress stale buttons)
     for iteration in range(MAX_TOOL_ITERATIONS):
         # Retry loop for transient API errors (overloaded, rate limit)
         response = None
@@ -842,8 +843,6 @@ def stream_message(session, user_text, mode="fast"):
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
-                    if block.input.get("dry_run"):
-                        has_dry_run = True
                     summary = _tool_summary(block.name, block.input)
                     yield sse("tool_start", {"name": block.name, "summary": summary})
                     result_str = _execute_tool(block.name, block.input)
@@ -857,6 +856,12 @@ def stream_message(session, user_text, mode="fast"):
                         result_obj = json.loads(result_str)
                     except (json.JSONDecodeError, TypeError):
                         result_obj = {}
+                    # Detect dry_run from tool RESULT (not input) so implicit
+                    # dry_runs (LLM omits param, Python default applies) are caught.
+                    if result_obj.get("dry_run") is True:
+                        has_dry_run = True
+                    if result_obj.get("action") in ("created", "updated", "deleted"):
+                        has_write_executed = True
                     r_summary = _result_summary(block.name, block.input, result_obj)
                     if len(result_str) > 2000:
                         output = {"_truncated": True, "preview": result_str[:2000]}
@@ -908,9 +913,9 @@ def stream_message(session, user_text, mode="fast"):
             except Exception:
                 logger.exception("Failed to generate/save session title")
 
-        yield sse("done", {"message_id": assistant_msg.pk})
-        if has_dry_run:
+        if has_dry_run and not has_write_executed:
             yield sse("confirm_required", {})
+        yield sse("done", {"message_id": assistant_msg.pk})
         return
 
     # Max iterations reached (for-else)
