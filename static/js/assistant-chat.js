@@ -51,6 +51,7 @@ function createChatEngine(config) {
     var currentStreamContent = null;
     var currentStreamTools = null;
     var inactivityTimer = null;
+    var endedWithError = false;
 
     function autoScroll() {
         config.scrollEl.scrollTop = config.scrollEl.scrollHeight;
@@ -60,6 +61,7 @@ function createChatEngine(config) {
         if (inactivityTimer) clearTimeout(inactivityTimer);
         inactivityTimer = setTimeout(function() {
             console.error('Stream inactivity timeout (90s)');
+            endedWithError = true;
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">Connection lost — no response for 90 seconds. <a href="" class="underline text-blue-400">Reload to see results</a> (your data was saved).</span>';
             }
@@ -127,7 +129,18 @@ function createChatEngine(config) {
             if (config.onTitle) config.onTitle(data.title);
         } else if (event === 'confirm_required') {
             pendingQuickReply = true;
+        } else if (event === 'thinking') {
+            // Extended thinking keepalive — reset watchdog and show deep-thinking indicator
+            resetWatchdog();
+            if (currentStreamContent && firstToken) {
+                currentStreamContent.innerHTML = '<span class="text-gray-500 flex items-center gap-2">'
+                    + '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">'
+                    + '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>'
+                    + '<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>'
+                    + '</svg>Thinking deeply\u2026</span>';
+            }
         } else if (event === 'error') {
+            endedWithError = true;
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">' + escapeHtml(data.message) + '</span>';
             }
@@ -172,13 +185,15 @@ function createChatEngine(config) {
 
         currentStreamContent = null;
         currentStreamTools = null;
-        // Delay onFinish slightly so the server saves the message before we refresh
-        if (config.onFinish) {
+        // Delay onFinish slightly so the server saves the message before we refresh.
+        // Skip reload on error/timeout — preserve the error message in the bubble.
+        if (config.onFinish && !endedWithError) {
             setTimeout(function() { config.onFinish(); }, 300);
         }
     }
 
     function doSend(text) {
+        endedWithError = false;
         // Prepend page context if available
         var context = config.getPageContext ? config.getPageContext() : null;
         var fullText = text;

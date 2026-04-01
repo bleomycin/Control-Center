@@ -737,11 +737,19 @@ def stream_message(session, user_text, mode="fast"):
                     stream_kwargs["output_config"] = mode_config["output_config"]
 
                 with client.messages.stream(**stream_kwargs) as stream:
-                    # Stream text tokens to client as they arrive
+                    # Stream text tokens to client as they arrive.
+                    # During extended thinking, yield periodic keepalives
+                    # so the client watchdog doesn't fire (90s timeout).
+                    last_thinking_keepalive = 0
                     for event in stream:
                         if event.type == "content_block_delta":
                             if event.delta.type == "text_delta":
                                 yield sse("token", {"text": event.delta.text})
+                            elif event.delta.type == "thinking_delta":
+                                now = time.monotonic()
+                                if now - last_thinking_keepalive >= 10:
+                                    yield sse("thinking", {})
+                                    last_thinking_keepalive = now
 
                     response = stream.get_final_message()
 
