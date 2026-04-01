@@ -225,6 +225,25 @@ def dashboard(request):
     return render(request, "dashboard/index.html", context)
 
 
+def _word_q(fields, query):
+    """Build Q filter: AND words within each field, OR across fields.
+
+    "Stan Gribble" on ["name"] becomes:
+        (name__icontains="Stan" AND name__icontains="Gribble")
+    matching "Stanley W. Gribble".
+    """
+    words = query.split()
+    if not words:
+        return Q()
+    q = Q()
+    for field in fields:
+        field_q = Q()
+        for word in words:
+            field_q &= Q(**{f"{field}__icontains": word})
+        q |= field_q
+    return q
+
+
 def global_search(request):
     q = request.GET.get("q", "").strip()
     context = {"query": q}
@@ -232,42 +251,50 @@ def global_search(request):
     if q:
         limit = 10
         context["stakeholders"] = Stakeholder.objects.filter(
-            Q(name__icontains=q) | Q(organization__icontains=q) | Q(parent_organization__name__icontains=q)
+            _word_q(["name", "organization", "parent_organization__name"], q)
         )[:limit]
-        context["tasks_results"] = Task.objects.filter(title__icontains=q)[:limit]
+        context["tasks_results"] = Task.objects.filter(
+            _word_q(["title"], q)
+        )[:limit]
         context["notes"] = Note.objects.filter(
-            Q(title__icontains=q) | Q(content__icontains=q)
+            _word_q(["title", "content"], q)
         )[:limit]
         context["legal_matters"] = LegalMatter.objects.filter(
-            Q(title__icontains=q) | Q(case_number__icontains=q)
+            _word_q(["title", "case_number"], q)
         )[:limit]
         context["properties"] = RealEstate.objects.filter(
-            Q(name__icontains=q) | Q(address__icontains=q)
+            _word_q(["name", "address"], q)
         )[:limit]
-        context["investments"] = Investment.objects.filter(name__icontains=q)[:limit]
-        context["loans"] = Loan.objects.filter(name__icontains=q)[:limit]
+        context["investments"] = Investment.objects.filter(
+            _word_q(["name"], q)
+        )[:limit]
+        context["loans"] = Loan.objects.filter(
+            _word_q(["name"], q)
+        )[:limit]
         context["cashflow_entries"] = CashFlowEntry.objects.filter(
-            description__icontains=q
+            _word_q(["description"], q)
         )[:limit]
         from assets.models import Lease
-        context["leases"] = Lease.objects.filter(name__icontains=q).select_related("related_property")[:limit]
+        context["leases"] = Lease.objects.filter(
+            _word_q(["name"], q)
+        ).select_related("related_property")[:limit]
         from documents.models import Document as DocumentModel
         context["documents"] = DocumentModel.objects.filter(
-            Q(title__icontains=q) | Q(description__icontains=q) | Q(category__icontains=q)
+            _word_q(["title", "description", "category"], q)
         )[:limit]
         from email_links.models import EmailLink
         context["email_links"] = EmailLink.objects.filter(
-            Q(subject__icontains=q) | Q(from_name__icontains=q) | Q(from_email__icontains=q)
+            _word_q(["subject", "from_name", "from_email"], q)
         )[:limit]
         from healthcare.models import Provider, Prescription, Appointment
         context["hc_providers"] = Provider.objects.filter(
-            Q(name__icontains=q) | Q(specialty__icontains=q) | Q(practice_name__icontains=q)
+            _word_q(["name", "specialty", "practice_name"], q)
         )[:limit]
         context["hc_prescriptions"] = Prescription.objects.filter(
-            Q(medication_name__icontains=q) | Q(generic_name__icontains=q)
+            _word_q(["medication_name", "generic_name"], q)
         )[:limit]
         context["hc_appointments"] = Appointment.objects.filter(
-            Q(title__icontains=q) | Q(purpose__icontains=q)
+            _word_q(["title", "purpose"], q)
         )[:limit]
         context["has_results"] = any([
             context["stakeholders"],

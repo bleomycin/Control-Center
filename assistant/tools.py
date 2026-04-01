@@ -185,16 +185,62 @@ def _enrich_result(obj, model_name):
     return details if details else None
 
 
+def _build_word_filter(fields, query):
+    """Build a Q filter: AND all query words within each field, OR across fields.
+
+    "Stan Gribble" on field "name" becomes:
+        (name__icontains="Stan" AND name__icontains="Gribble")
+
+    This matches "Stanley W. Gribble" — the old single-substring approach did not.
+    """
+    words = query.split()
+    if not words:
+        return Q()
+    q_filter = Q()
+    for field in fields:
+        field_q = Q()
+        for word in words:
+            field_q &= Q(**{f"{field}__icontains": word})
+        q_filter |= field_q
+    return q_filter
+
+
+# Fields that represent body/notes content rather than entity identity.
+# Name matches on these are deprioritized (searched in pass 2) so that
+# a record mentioning "Stan Gribble" in notes doesn't crowd out
+# the actual "Stanley W. Gribble" record matched by name.
+_SECONDARY_FIELDS = frozenset({
+    "notes_text",
+    "description",
+    "content",
+    "notes",
+    "summary",
+    "advice_text",
+    "response_notes",
+    "text",
+    "scope",
+    "participants_text",
+    "purpose",
+})
+
+
 def search(query, models=None):
     """Search across all models for matching records.
 
-    Stops early once MAX_SEARCH_RESULTS total results are found to avoid
-    unnecessary queries against all 34 models. When the total result count
-    is small (≤ ENRICH_THRESHOLD), each result includes key fields so the
-    model has enough context without needing get_record.
+    Uses word-splitting (AND within field, OR across fields) so that
+    "Stan Gribble" matches "Stanley W. Gribble".
+
+    Primary fields (name, title) are searched first; secondary fields
+    (notes_text, description) fill remaining slots. This prevents
+    notes-text mentions from burying direct name matches.
     """
     registry.build_registry()
+    if not query or not query.strip():
+        return {"results": [], "count": 0}
+
     results = []
+    seen_keys = set()
+    model_counts = {}
     per_model_limit = 10
     max_total = 50
 
@@ -202,22 +248,29 @@ def search(query, models=None):
     if models:
         search_targets = {k: v for k, v in search_targets.items() if k in models or k.lower() in [m.lower() for m in models]}
 
-    for model_name, fields in search_targets.items():
-        if len(results) >= max_total:
-            break
+    def _collect(model_name, model, fields):
+        """Query one model on the given fields and append unique results."""
+        if not fields:
+            return
+        current = model_counts.get(model_name, 0)
+        model_remaining = per_model_limit - current
+        global_remaining = max_total - len(results)
+        limit = min(model_remaining, global_remaining)
+        if limit <= 0:
+            return
 
-        try:
-            model = registry.get_model(model_name)
-        except ValueError:
-            continue
-
-        q_filter = Q()
-        for field in fields:
-            q_filter |= Q(**{f"{field}__icontains": query})
-
-        remaining = min(per_model_limit, max_total - len(results))
-        qs = model.objects.filter(q_filter)[:remaining]
-        for obj in qs:
+        q_filter = _build_word_filter(fields, query)
+        qs = model.objects.filter(q_filter)
+        # Exclude PKs already found for this model to avoid fetching dupes
+        found_pks = [pk for (mn, pk) in seen_keys if mn == model_name]
+        if found_pks:
+            qs = qs.exclude(pk__in=found_pks)
+        for obj in qs[:limit]:
+            key = (model_name, obj.pk)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            model_counts[model_name] = model_counts.get(model_name, 0) + 1
             entry = {
                 "model": model_name,
                 "id": obj.pk,
@@ -228,10 +281,31 @@ def search(query, models=None):
                     entry["url"] = obj.get_absolute_url()
                 except Exception:
                     pass
-            # Stash object reference for potential enrichment
             entry["_obj"] = obj
             entry["_model_name"] = model_name
             results.append(entry)
+
+    # Pass 1: primary fields (name, title, etc.) — identity matches first
+    for model_name, fields in search_targets.items():
+        if len(results) >= max_total:
+            break
+        try:
+            model = registry.get_model(model_name)
+        except ValueError:
+            continue
+        primary = [f for f in fields if f not in _SECONDARY_FIELDS]
+        _collect(model_name, model, primary)
+
+    # Pass 2: secondary fields (notes_text, description) — fill remaining slots
+    for model_name, fields in search_targets.items():
+        if len(results) >= max_total:
+            break
+        try:
+            model = registry.get_model(model_name)
+        except ValueError:
+            continue
+        secondary = [f for f in fields if f in _SECONDARY_FIELDS]
+        _collect(model_name, model, secondary)
 
     # Enrich with key fields when result set is small
     if len(results) <= ENRICH_THRESHOLD:

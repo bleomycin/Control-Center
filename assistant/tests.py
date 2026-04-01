@@ -184,6 +184,63 @@ class ToolTests(TestCase):
         self.assertIn("Task_count", result)
 
 
+class SearchWordSplitTests(TestCase):
+    """Tests for word-splitting and primary/secondary field prioritization."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from stakeholders.models import Stakeholder
+
+        # The actual person — "Stan Gribble" is NOT a contiguous substring
+        cls.stanley = Stakeholder.objects.create(
+            name="Stanley W. Gribble", entity_type="contact",
+        )
+        # Entities that merely reference Stan in their notes
+        cls.attorney = Stakeholder.objects.create(
+            name="Ed Hanley", entity_type="attorney",
+            notes_text="Long-term real estate attorney for Stan Gribble",
+        )
+        cls.accountant = Stakeholder.objects.create(
+            name="Bill Buckner", entity_type="advisor",
+            notes_text="CPA for Stan Gribble trust accounting",
+        )
+
+    def test_multiword_search_matches_noncontiguous(self):
+        """'Stan Gribble' must match 'Stanley W. Gribble'."""
+        result = search("Stan Gribble", models=["Stakeholder"])
+        names = [r["str"] for r in result["results"]]
+        self.assertIn("Stanley W. Gribble", names)
+
+    def test_name_match_before_notes_match(self):
+        """Name matches must appear before notes_text matches."""
+        result = search("Stan Gribble", models=["Stakeholder"])
+        self.assertGreaterEqual(result["count"], 1)
+        # Stanley (name match) must be first
+        self.assertEqual(result["results"][0]["str"], "Stanley W. Gribble")
+
+    def test_single_word_still_works(self):
+        """Single-word search should still work as before."""
+        result = search("Hanley", models=["Stakeholder"])
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["results"][0]["str"], "Ed Hanley")
+
+    def test_notes_matches_still_returned(self):
+        """Notes-text matches should still appear, just after name matches."""
+        result = search("Stan Gribble", models=["Stakeholder"])
+        names = [r["str"] for r in result["results"]]
+        self.assertIn("Ed Hanley", names)
+        self.assertIn("Bill Buckner", names)
+        # But they come after the name match
+        stanley_idx = names.index("Stanley W. Gribble")
+        for other in ["Ed Hanley", "Bill Buckner"]:
+            self.assertGreater(names.index(other), stanley_idx)
+
+    def test_empty_query(self):
+        """Empty query should return no results."""
+        result = search("", models=["Stakeholder"])
+        self.assertEqual(result["count"], 0)
+
+
 def create_record_helper(model, data, dry_run=True):
     """Helper to avoid name collision with tools.create_record import."""
     from .tools import create_record
