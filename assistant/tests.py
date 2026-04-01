@@ -541,11 +541,11 @@ class ToolSummaryTests(TestCase):
         self.assertIn("A" * 40, result)
 
     def test_query_summary(self):
-        self.assertEqual(_tool_summary("query", {"model_name": "Task"}), "Task")
+        self.assertEqual(_tool_summary("query", {"model": "Task"}), "Task")
 
     def test_query_summary_with_filters(self):
         result = _tool_summary("query", {
-            "model_name": "Task",
+            "model": "Task",
             "filters": {"status": "active", "priority": "high", "extra": "ignored"},
         })
         self.assertIn("Task", result)
@@ -555,12 +555,12 @@ class ToolSummaryTests(TestCase):
 
     def test_get_record_summary(self):
         self.assertEqual(
-            _tool_summary("get_record", {"model_name": "Stakeholder", "record_id": 42}),
+            _tool_summary("get_record", {"model": "Stakeholder", "id": 42}),
             "Stakeholder #42",
         )
 
     def test_create_record_summary_dry_run(self):
-        result = _tool_summary("create_record", {"model_name": "Task", "dry_run": True})
+        result = _tool_summary("create_record", {"model": "Task", "dry_run": True})
         self.assertIn("Task", result)
         self.assertIn("dry_run", result)
 
@@ -571,12 +571,16 @@ class ToolSummaryTests(TestCase):
         self.assertEqual(_tool_summary("summarize", {}), "")
 
     def test_update_record_summary(self):
-        result = _tool_summary("update_record", {"model_name": "Task", "record_id": 5})
+        result = _tool_summary("update_record", {"model": "Task", "id": 5})
         self.assertEqual(result, "Task #5")
 
     def test_delete_record_summary(self):
-        result = _tool_summary("delete_record", {"model_name": "Note", "record_id": 10})
+        result = _tool_summary("delete_record", {"model": "Note", "id": 10})
         self.assertEqual(result, "Note #10")
+
+    def test_read_email_summary(self):
+        result = _tool_summary("read_email", {"id": 7})
+        self.assertEqual(result, "EmailLink #7")
 
 
 class ResultSummaryTests(TestCase):

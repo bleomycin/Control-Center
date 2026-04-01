@@ -29,6 +29,24 @@ TITLE_MODEL = "claude-haiku-4-5-20251001"
 # Set by benchmark_intelligence to test prompt variations.
 _EXTRA_RULES = ""
 
+# Per-message mode configurations.
+# Think/Max force specific models to guarantee adaptive thinking support.
+MODE_CONFIGS = {
+    "fast": {},  # Uses settings as-is
+    "think": {
+        "model": "claude-sonnet-4-6",
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": "high"},
+        "max_tokens": 16384,
+    },
+    "max": {
+        "model": "claude-opus-4-6",
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": "max"},
+        "max_tokens": 16384,
+    },
+}
+
 SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a personal management system. You help the user manage their stakeholders, legal matters, assets, tasks, notes, cash flow, healthcare records, documents, and checklists.
 
 ## Your capabilities
@@ -357,23 +375,25 @@ def _tool_summary(name, tool_input):
             s += f", models={models}"
         return s
     elif name == "query":
-        s = tool_input.get("model_name", "")
+        s = tool_input.get("model", "")
         filters = tool_input.get("filters") or {}
         if filters:
             items = list(filters.items())[:2]
             s += ", " + ", ".join(f"{k}={v}" for k, v in items)
         return s
     elif name == "get_record":
-        return f'{tool_input.get("model_name", "")} #{tool_input.get("record_id", "")}'
+        return f'{tool_input.get("model", "")} #{tool_input.get("id", "")}'
     elif name in ("create_record", "update_record"):
-        s = tool_input.get("model_name", "")
+        s = tool_input.get("model", "")
         if tool_input.get("dry_run"):
             s += ", dry_run"
         if name == "update_record":
-            s = f'{s} #{tool_input.get("record_id", "")}'
+            s = f'{s} #{tool_input.get("id", "")}'
         return s
     elif name == "delete_record":
-        return f'{tool_input.get("model_name", "")} #{tool_input.get("record_id", "")}'
+        return f'{tool_input.get("model", "")} #{tool_input.get("id", "")}'
+    elif name == "read_email":
+        return f'EmailLink #{tool_input.get("id", "")}'
     return ""
 
 
@@ -459,7 +479,7 @@ def _get_client_and_model():
     return client, model_name
 
 
-def send_message(session, user_text, thinking=None):
+def send_message(session, user_text, mode="fast"):
     """
     Process a user message through the Anthropic API tool-use loop.
 
@@ -467,9 +487,7 @@ def send_message(session, user_text, thinking=None):
     new ChatMessage objects created during this exchange.
 
     Args:
-        thinking: Optional dict for extended thinking, e.g.
-                  {"type": "enabled", "budget_tokens": 4096}.
-                  When set, temperature is forced to 1.0.
+        mode: "fast" (default), "think" (adaptive thinking), or "max" (Opus + thinking).
     """
     from .models import ChatMessage
 
@@ -502,22 +520,33 @@ def send_message(session, user_text, thinking=None):
     model_name = assistant_settings.model or DEFAULT_MODEL
     max_tokens = assistant_settings.max_tokens or DEFAULT_MAX_TOKENS
 
+    # Apply mode overrides (think/max change model, enable thinking, etc.)
+    mode_config = MODE_CONFIGS.get(mode, {})
+    if "model" in mode_config:
+        model_name = mode_config["model"]
+    if "max_tokens" in mode_config:
+        max_tokens = mode_config["max_tokens"]
+
     client = anthropic.Anthropic(api_key=api_key, max_retries=5)
     system_prompt = _build_system_prompt()
+    logger.info(f"send mode={mode} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
 
     for iteration in range(MAX_TOOL_ITERATIONS):
         try:
             create_kwargs = dict(
                 model=model_name,
                 max_tokens=max_tokens,
-                temperature=float(assistant_settings.temperature),
                 system=system_prompt,
                 tools=TOOL_DEFINITIONS,
                 messages=api_messages,
             )
-            if thinking:
-                create_kwargs["thinking"] = thinking
-                create_kwargs["temperature"] = 1.0
+            if "thinking" in mode_config:
+                create_kwargs["thinking"] = mode_config["thinking"]
+                # temperature is incompatible with thinking — omit it
+            else:
+                create_kwargs["temperature"] = float(assistant_settings.temperature)
+            if "output_config" in mode_config:
+                create_kwargs["output_config"] = mode_config["output_config"]
             response = client.messages.create(**create_kwargs)
         except anthropic.APIError as e:
             logger.error(f"Anthropic API error: {e}")
@@ -622,7 +651,7 @@ def send_message(session, user_text, thinking=None):
     return new_messages
 
 
-def stream_message(session, user_text):
+def stream_message(session, user_text, mode="fast"):
     """
     Generator that yields SSE events as the assistant processes a message.
 
@@ -668,11 +697,20 @@ def stream_message(session, user_text):
     model_name = assistant_settings.model or DEFAULT_MODEL
     max_tokens = assistant_settings.max_tokens or DEFAULT_MAX_TOKENS
 
+    # Apply mode overrides (think/max change model, enable thinking, etc.)
+    mode_config = MODE_CONFIGS.get(mode, {})
+    if "model" in mode_config:
+        model_name = mode_config["model"]
+    if "max_tokens" in mode_config:
+        max_tokens = mode_config["max_tokens"]
+
     client = anthropic.Anthropic(api_key=api_key, max_retries=5)
     system_prompt = _build_system_prompt()
 
     all_messages = session.messages.all()
     api_messages = _build_api_messages(all_messages)
+
+    logger.info(f"stream mode={mode} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
 
     # Streaming tool loop: every API call is streamed.
     # Text tokens are yielded live during the final (non-tool) response.
@@ -683,14 +721,22 @@ def stream_message(session, user_text):
         response = None
         for attempt in range(5):
             try:
-                with client.messages.stream(
+                stream_kwargs = dict(
                     model=model_name,
                     max_tokens=max_tokens,
-                    temperature=float(assistant_settings.temperature),
                     system=system_prompt,
                     tools=TOOL_DEFINITIONS,
                     messages=api_messages,
-                ) as stream:
+                )
+                if "thinking" in mode_config:
+                    stream_kwargs["thinking"] = mode_config["thinking"]
+                    # temperature is incompatible with thinking — omit it
+                else:
+                    stream_kwargs["temperature"] = float(assistant_settings.temperature)
+                if "output_config" in mode_config:
+                    stream_kwargs["output_config"] = mode_config["output_config"]
+
+                with client.messages.stream(**stream_kwargs) as stream:
                     # Stream text tokens to client as they arrive
                     for event in stream:
                         if event.type == "content_block_delta":
@@ -699,9 +745,9 @@ def stream_message(session, user_text):
 
                     response = stream.get_final_message()
 
-                # Log request_id for debugging API issues
-                if hasattr(response, '_request_id'):
-                    logger.info(f"Anthropic request_id: {response._request_id}")
+                # Log request_id and actual model used
+                req_id = getattr(response, '_request_id', None)
+                logger.info(f"OK model={response.model} request_id={req_id}")
 
                 break  # Success — exit retry loop
             except anthropic.APIStatusError as e:
@@ -710,8 +756,14 @@ def stream_message(session, user_text):
                 if req_id:
                     logger.warning(f"Anthropic request_id: {req_id}")
 
-                # Retryable: 429 rate limit, 5xx server errors
-                if (e.status_code >= 500 or e.status_code == 429) and attempt < 4:
+                # Retryable: 429 rate limit, 529 overloaded, 5xx server errors
+                is_overloaded = (
+                    e.status_code == 529
+                    or e.status_code >= 500
+                    or e.status_code == 429
+                    or "overloaded" in str(e).lower()
+                )
+                if is_overloaded and attempt < 4:
                     # Respect retry-after header if present, otherwise exponential backoff
                     retry_after = None
                     if hasattr(e, 'response') and e.response:
@@ -732,7 +784,7 @@ def stream_message(session, user_text):
                     continue
                 # Non-retryable (400, 401, 403, etc.) or final retry exhausted
                 logger.error(f"Anthropic API error {e.status_code}: {e}")
-                if e.status_code >= 500 or e.status_code == 429:
+                if is_overloaded:
                     error_msg = "The AI service is temporarily unavailable. Please try again in a minute."
                 else:
                     error_msg = f"Request error ({e.status_code}). Try sending your message again."
@@ -740,6 +792,15 @@ def stream_message(session, user_text):
                 yield sse("error", {"message": error_msg})
                 return
             except anthropic.APIError as e:
+                # Catch-all: also retry overloaded errors that arrive as generic APIError
+                if "overloaded" in str(e).lower() and attempt < 4:
+                    wait = 2 ** attempt
+                    logger.warning(f"Anthropic overloaded (attempt {attempt + 1}/5), retrying in {wait}s")
+                    deadline = time.monotonic() + wait
+                    while time.monotonic() < deadline:
+                        yield ": keepalive\n\n"
+                        time.sleep(min(5, deadline - time.monotonic()))
+                    continue
                 logger.error(f"Anthropic API error: {e}")
                 _safe_create_message(session, f"API error: {e}")
                 yield sse("error", {"message": str(e)})
@@ -752,9 +813,16 @@ def stream_message(session, user_text):
             yield sse("clear", {})
 
             # Build assistant content blocks (saved to DB after tools complete)
+            # Include thinking blocks for round-tripping (required for tool loops with adaptive thinking)
             assistant_content = []
             for block in response.content:
-                if block.type == "text":
+                if block.type == "thinking":
+                    assistant_content.append({
+                        "type": "thinking",
+                        "thinking": block.thinking,
+                        "signature": block.signature,
+                    })
+                elif block.type == "text":
                     assistant_content.append({"type": "text", "text": block.text})
                 elif block.type == "tool_use":
                     assistant_content.append({

@@ -287,7 +287,32 @@
             var titleEl = document.getElementById('drawer-session-title');
             if (titleEl) titleEl.classList.add('hidden');
             initDrawer('?new=1');
+            // Reset mode to Fast on new session
+            setDrawerSmartMode('fast');
             document.getElementById('drawer-chat-input').focus();
+        }
+
+        // Drawer mode toggle
+        var DRAWER_MODE_STYLES = {
+            fast:  {bg: 'bg-blue-600/20',   text: 'text-blue-300'},
+            think: {bg: 'bg-amber-600/20',  text: 'text-amber-300'},
+            max:   {bg: 'bg-purple-600/20', text: 'text-purple-300'},
+        };
+        function setDrawerSmartMode(mode) {
+            if (drawerEngine) drawerEngine.setMode(mode);
+            document.querySelectorAll('#drawer-mode-toggle .drawer-mode-btn').forEach(function(btn) {
+                var m = btn.getAttribute('data-mode');
+                var isActive = m === mode;
+                btn.classList.remove('bg-blue-600/20', 'text-blue-300',
+                                     'bg-amber-600/20', 'text-amber-300',
+                                     'bg-purple-600/20', 'text-purple-300');
+                btn.classList.remove('bg-gray-700/50', 'text-gray-400', 'hover:text-gray-200');
+                if (isActive) {
+                    btn.classList.add(DRAWER_MODE_STYLES[m].bg, DRAWER_MODE_STYLES[m].text);
+                } else {
+                    btn.classList.add('bg-gray-700/50', 'text-gray-400', 'hover:text-gray-200');
+                }
+            });
         }
 
         // Keyboard shortcut: Cmd+K / Ctrl+K to toggle drawer

@@ -17,7 +17,6 @@ Usage:
 
 import time
 from dataclasses import dataclass, field
-from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 
@@ -33,21 +32,18 @@ EXTRA_RULES = """
 CONFIGS = {
     "baseline": {
         "extra_rules": "",
-        "thinking": None,
-        "temperature": None,  # Use DB setting
+        "mode": "fast",
         "description": "Current production behavior",
     },
     "rules": {
         "extra_rules": EXTRA_RULES,
-        "thinking": None,
-        "temperature": None,
+        "mode": "fast",
         "description": "Prompt + cross-referencing rules",
     },
     "rules_thinking": {
         "extra_rules": EXTRA_RULES,
-        "thinking": {"type": "enabled", "budget_tokens": 4096},
-        "temperature": Decimal("1.0"),  # Required for thinking
-        "description": "Prompt + rules + extended thinking",
+        "mode": "think",
+        "description": "Prompt + rules + adaptive thinking",
     },
 }
 
@@ -183,7 +179,6 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR("No API key configured."))
             return
 
-        original_temp = settings.temperature
         self._cleanup()
 
         total_calls = len(config_names) * len(scenario_names)
@@ -228,9 +223,6 @@ class Command(BaseCommand):
             # Restore original settings
             import assistant.client as client_mod
             client_mod._EXTRA_RULES = ""
-            settings = AssistantSettings.load()
-            settings.temperature = original_temp
-            settings.save()
             self._cleanup()
 
         self._print_report(results, config_names, scenario_names)
@@ -247,10 +239,6 @@ class Command(BaseCommand):
 
         # Apply config
         client_mod._EXTRA_RULES = config["extra_rules"]
-        if config["temperature"] is not None:
-            settings = AssistantSettings.load()
-            settings.temperature = config["temperature"]
-            settings.save()
 
         session = ChatSession.objects.create(
             title=f"{SESSION_PREFIX} {config_name}/{scenario_name}"
@@ -259,7 +247,7 @@ class Command(BaseCommand):
         try:
             start = time.time()
             messages = send_message(
-                session, scenario["prompt"], thinking=config["thinking"],
+                session, scenario["prompt"], mode=config["mode"],
             )
             latency = time.time() - start
 

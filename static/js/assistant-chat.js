@@ -46,6 +46,7 @@ function createChatEngine(config) {
     var streaming = false;
     var collectedText = '';
     var firstToken = true;
+    var currentMode = 'fast';  // Sticky per-session: "fast", "think", "max"
     // Direct DOM refs to current stream elements (no IDs needed)
     var currentStreamContent = null;
     var currentStreamTools = null;
@@ -233,6 +234,7 @@ function createChatEngine(config) {
         // Start SSE stream
         var body = new FormData();
         body.append('message', fullText);
+        body.append('mode', currentMode);
         resetWatchdog();
 
         fetch(config.streamUrl, {
@@ -312,5 +314,7 @@ function createChatEngine(config) {
         refreshMessages: refreshMessages,
         autoScroll: autoScroll,
         isStreaming: function() { return streaming; },
+        setMode: function(m) { currentMode = m; },
+        getMode: function() { return currentMode; },
     };
 }

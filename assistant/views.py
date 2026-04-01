@@ -79,8 +79,12 @@ def stream_message_view(request, session_id):
     if not user_text:
         return HttpResponse(status=400)
 
+    mode = request.POST.get("mode", "fast")
+    if mode not in ("fast", "think", "max"):
+        mode = "fast"
+
     response = StreamingHttpResponse(
-        assistant_client.stream_message(session, user_text),
+        assistant_client.stream_message(session, user_text, mode=mode),
         content_type="text/event-stream",
     )
     response["Cache-Control"] = "no-cache"

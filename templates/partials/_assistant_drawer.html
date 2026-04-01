@@ -59,6 +59,27 @@
                 <span id="drawer-context-label" class="truncate"></span>
             </span>
         </div>
+        <!-- Drawer Mode Toggle -->
+        <div class="flex items-center gap-1 mb-2" id="drawer-mode-toggle">
+            <button type="button" data-mode="fast"
+                    class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-blue-600/20 text-blue-300"
+                    onclick="setDrawerSmartMode('fast')"
+                    title="Default speed and accuracy">
+                &#9889; Fast
+            </button>
+            <button type="button" data-mode="think"
+                    class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                    onclick="setDrawerSmartMode('think')"
+                    title="Sonnet + adaptive thinking for complex tasks">
+                &#129504; Think
+            </button>
+            <button type="button" data-mode="max"
+                    class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                    onclick="setDrawerSmartMode('max')"
+                    title="Opus + max effort — most capable, slowest">
+                &#128302; Max
+            </button>
+        </div>
         <form id="drawer-chat-form" class="flex gap-2">
             <textarea id="drawer-chat-input" rows="1" placeholder="Ask about your data..."
                       class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-base text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"

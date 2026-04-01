@@ -30,4 +30,4 @@ python manage.py qcluster &
 mkdir -p /app/backups
 
 echo "Starting Gunicorn..."
-exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --worker-class gthread --timeout 300
+exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --worker-class gthread --timeout 300 --error-logfile - --capture-output

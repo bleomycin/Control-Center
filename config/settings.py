@@ -192,3 +192,15 @@ EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.conso
 
 ADMIN_EMAIL = 'admin@controlcenter.local'
 DEFAULT_FROM_EMAIL = 'noreply@controlcenter.local'
+
+# Logging — route app-level loggers to Docker stdout.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler'},
+    },
+    'loggers': {
+        'assistant': {'handlers': ['console'], 'level': 'INFO'},
+    },
+}

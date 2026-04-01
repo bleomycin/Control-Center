@@ -120,6 +120,27 @@
 
         <!-- Input Bar -->
         <div class="border-t border-gray-700 p-3 bg-gray-800/50 shrink-0">
+            <!-- Mode Toggle -->
+            <div class="flex items-center gap-1 mb-2" id="mode-toggle">
+                <button type="button" data-mode="fast"
+                        class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-blue-600/20 text-blue-300"
+                        onclick="setSmartMode('fast')"
+                        title="Default speed and accuracy">
+                    &#9889; Fast
+                </button>
+                <button type="button" data-mode="think"
+                        class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                        onclick="setSmartMode('think')"
+                        title="Sonnet + adaptive thinking for complex tasks">
+                    &#129504; Think
+                </button>
+                <button type="button" data-mode="max"
+                        class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                        onclick="setSmartMode('max')"
+                        title="Opus + max effort — most capable, slowest">
+                    &#128302; Max
+                </button>
+            </div>
             <form id="chat-form" class="flex gap-2">
                 <textarea id="chat-input" name="message"
                           rows="1"
@@ -144,6 +165,30 @@
 var SESSION_PK = {{ session.pk }};
 var CSRF_TOKEN = CSRF_TOKEN_GLOBAL;
 var messageList = document.getElementById('message-list');
+
+// Mode toggle for smart modes
+var MODE_STYLES = {
+    fast:  {bg: 'bg-blue-600/20',   text: 'text-blue-300'},
+    think: {bg: 'bg-amber-600/20',  text: 'text-amber-300'},
+    max:   {bg: 'bg-purple-600/20', text: 'text-purple-300'},
+};
+function setSmartMode(mode) {
+    chatEngine.setMode(mode);
+    document.querySelectorAll('#mode-toggle .mode-btn').forEach(function(btn) {
+        var m = btn.getAttribute('data-mode');
+        var isActive = m === mode;
+        // Clear all active styles
+        btn.classList.remove('bg-blue-600/20', 'text-blue-300',
+                             'bg-amber-600/20', 'text-amber-300',
+                             'bg-purple-600/20', 'text-purple-300');
+        btn.classList.remove('bg-gray-700/50', 'text-gray-400', 'hover:text-gray-200');
+        if (isActive) {
+            btn.classList.add(MODE_STYLES[m].bg, MODE_STYLES[m].text);
+        } else {
+            btn.classList.add('bg-gray-700/50', 'text-gray-400', 'hover:text-gray-200');
+        }
+    });
+}
 
 // Create chat engine for the full page
 var chatEngine = createChatEngine({
