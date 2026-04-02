@@ -247,6 +247,7 @@
                     emptyStateEl: document.getElementById('drawer-empty-state'),
                     sessionPk: drawerSessionPk,
                     messagesUrl: '/assistant/' + drawerSessionPk + '/messages/',
+                    getEffort: function(mode) { return getDrawerEffort(mode); },
                     getPageContext: function() {
                         return document.querySelector('main').getAttribute('data-page-context') || null;
                     },
@@ -298,7 +299,62 @@
             think: {bg: 'bg-amber-600/20',  text: 'text-amber-300'},
             max:   {bg: 'bg-purple-600/20', text: 'text-purple-300'},
         };
+        var DRAWER_MODE_ICONS = {fast: '&#9889; ', think: '&#129504; ', max: '&#128302; '};
+        var DRAWER_MODE_NAMES = {fast: 'Fast', think: 'Think', max: 'Max'};
+        var DRAWER_EFFORT_LABELS = {low: 'Low', medium: 'Med', high: 'High', max: 'Max'};
+        var DRAWER_EFFORT_DEFAULTS = {think: 'high', max: 'max'};
+        var drawerActiveMode = 'fast';
+
+        function getDrawerEffort(mode) {
+            return localStorage.getItem('ccEffort_' + mode) || DRAWER_EFFORT_DEFAULTS[mode] || '';
+        }
+
+        function getDrawerModeLabel(mode, isActive) {
+            var label = DRAWER_MODE_ICONS[mode] + DRAWER_MODE_NAMES[mode];
+            if (isActive && mode !== 'fast') {
+                label += ' &middot; ' + DRAWER_EFFORT_LABELS[getDrawerEffort(mode)] + ' &#9662;';
+            }
+            return label;
+        }
+
+        function closeDrawerPopovers() {
+            document.querySelectorAll('#drawer-mode-toggle [id$="-effort-popover"]').forEach(function(p) {
+                p.classList.add('hidden');
+            });
+        }
+
+        function highlightDrawerPopoverOptions(mode) {
+            var popover = document.getElementById('drawer-' + mode + '-effort-popover');
+            if (!popover) return;
+            var current = getDrawerEffort(mode);
+            var color = DRAWER_MODE_STYLES[mode];
+            popover.querySelectorAll('.drawer-effort-opt').forEach(function(btn) {
+                var isActive = btn.getAttribute('data-effort') === current;
+                btn.classList.remove('bg-amber-600/20', 'text-amber-300', 'bg-purple-600/20', 'text-purple-300', 'text-gray-300');
+                if (isActive) {
+                    btn.classList.add(color.bg, color.text);
+                } else {
+                    btn.classList.add('text-gray-300');
+                }
+            });
+        }
+
         function setDrawerSmartMode(mode) {
+            // If clicking the already-active think/max button, toggle popover
+            if (mode === drawerActiveMode && mode !== 'fast') {
+                var popover = document.getElementById('drawer-' + mode + '-effort-popover');
+                if (popover) {
+                    var isHidden = popover.classList.contains('hidden');
+                    closeDrawerPopovers();
+                    if (isHidden) {
+                        highlightDrawerPopoverOptions(mode);
+                        popover.classList.remove('hidden');
+                    }
+                }
+                return;
+            }
+            closeDrawerPopovers();
+            drawerActiveMode = mode;
             if (drawerEngine) drawerEngine.setMode(mode);
             document.querySelectorAll('#drawer-mode-toggle .drawer-mode-btn').forEach(function(btn) {
                 var m = btn.getAttribute('data-mode');
@@ -312,8 +368,23 @@
                 } else {
                     btn.classList.add('bg-gray-700/50', 'text-gray-400', 'hover:text-gray-200');
                 }
+                btn.innerHTML = getDrawerModeLabel(m, isActive);
             });
         }
+
+        function setDrawerEffort(mode, level) {
+            localStorage.setItem('ccEffort_' + mode, level);
+            closeDrawerPopovers();
+            var btn = document.querySelector('#drawer-mode-toggle .drawer-mode-btn[data-mode="' + mode + '"]');
+            if (btn && mode === drawerActiveMode) {
+                btn.innerHTML = getDrawerModeLabel(mode, true);
+            }
+        }
+
+        // Close drawer popovers on outside click
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#drawer-mode-toggle')) closeDrawerPopovers();
+        });
 
         // Keyboard shortcut: Cmd+K / Ctrl+K to toggle drawer
         document.addEventListener('keydown', function(e) {

@@ -128,18 +128,34 @@
                         title="Default speed and accuracy">
                     &#9889; Fast
                 </button>
-                <button type="button" data-mode="think"
-                        class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
-                        onclick="setSmartMode('think')"
-                        title="Sonnet + adaptive thinking for complex tasks">
-                    &#129504; Think
-                </button>
-                <button type="button" data-mode="max"
-                        class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
-                        onclick="setSmartMode('max')"
-                        title="Opus + max effort — most capable, slowest">
-                    &#128302; Max
-                </button>
+                <div class="relative">
+                    <button type="button" data-mode="think"
+                            class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                            onclick="setSmartMode('think')"
+                            title="Sonnet + adaptive thinking for complex tasks">
+                        &#129504; Think
+                    </button>
+                    <div id="think-effort-popover" class="hidden absolute left-0 bottom-full mb-1 z-50 bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 min-w-[7rem]">
+                        <button type="button" onclick="setEffort('think','low')" data-effort="low" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Low</button>
+                        <button type="button" onclick="setEffort('think','medium')" data-effort="medium" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Medium</button>
+                        <button type="button" onclick="setEffort('think','high')" data-effort="high" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">High</button>
+                        <button type="button" onclick="setEffort('think','max')" data-effort="max" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Max</button>
+                    </div>
+                </div>
+                <div class="relative">
+                    <button type="button" data-mode="max"
+                            class="mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                            onclick="setSmartMode('max')"
+                            title="Opus + max effort — most capable, slowest">
+                        &#128302; Max
+                    </button>
+                    <div id="max-effort-popover" class="hidden absolute left-0 bottom-full mb-1 z-50 bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 min-w-[7rem]">
+                        <button type="button" onclick="setEffort('max','low')" data-effort="low" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Low</button>
+                        <button type="button" onclick="setEffort('max','medium')" data-effort="medium" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Medium</button>
+                        <button type="button" onclick="setEffort('max','high')" data-effort="high" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">High</button>
+                        <button type="button" onclick="setEffort('max','max')" data-effort="max" class="effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Max</button>
+                    </div>
+                </div>
             </div>
             <form id="chat-form" class="flex gap-2">
                 <textarea id="chat-input" name="message"
@@ -172,12 +188,66 @@ var MODE_STYLES = {
     think: {bg: 'bg-amber-600/20',  text: 'text-amber-300'},
     max:   {bg: 'bg-purple-600/20', text: 'text-purple-300'},
 };
+var MODE_ICONS = {fast: '&#9889; ', think: '&#129504; ', max: '&#128302; '};
+var MODE_NAMES = {fast: 'Fast', think: 'Think', max: 'Max'};
+var EFFORT_LABELS = {low: 'Low', medium: 'Med', high: 'High', max: 'Max'};
+var EFFORT_DEFAULTS = {think: 'high', max: 'max'};
+var currentActiveMode = 'fast';
+
+function getEffort(mode) {
+    return localStorage.getItem('ccEffort_' + mode) || EFFORT_DEFAULTS[mode] || '';
+}
+
+function getModeButtonLabel(mode, isActive) {
+    var label = MODE_ICONS[mode] + MODE_NAMES[mode];
+    if (isActive && mode !== 'fast') {
+        label += ' &middot; ' + EFFORT_LABELS[getEffort(mode)] + ' &#9662;';
+    }
+    return label;
+}
+
+function closeAllPopovers() {
+    document.querySelectorAll('#mode-toggle [id$="-effort-popover"]').forEach(function(p) {
+        p.classList.add('hidden');
+    });
+}
+
+function highlightPopoverOptions(mode) {
+    var popover = document.getElementById(mode + '-effort-popover');
+    if (!popover) return;
+    var current = getEffort(mode);
+    var color = MODE_STYLES[mode];
+    popover.querySelectorAll('.effort-opt').forEach(function(btn) {
+        var isActive = btn.getAttribute('data-effort') === current;
+        btn.classList.remove('bg-amber-600/20', 'text-amber-300', 'bg-purple-600/20', 'text-purple-300', 'text-gray-300');
+        if (isActive) {
+            btn.classList.add(color.bg, color.text);
+        } else {
+            btn.classList.add('text-gray-300');
+        }
+    });
+}
+
 function setSmartMode(mode) {
+    // If clicking the already-active think/max button, toggle popover
+    if (mode === currentActiveMode && mode !== 'fast') {
+        var popover = document.getElementById(mode + '-effort-popover');
+        if (popover) {
+            var isHidden = popover.classList.contains('hidden');
+            closeAllPopovers();
+            if (isHidden) {
+                highlightPopoverOptions(mode);
+                popover.classList.remove('hidden');
+            }
+        }
+        return;
+    }
+    closeAllPopovers();
+    currentActiveMode = mode;
     chatEngine.setMode(mode);
     document.querySelectorAll('#mode-toggle .mode-btn').forEach(function(btn) {
         var m = btn.getAttribute('data-mode');
         var isActive = m === mode;
-        // Clear all active styles
         btn.classList.remove('bg-blue-600/20', 'text-blue-300',
                              'bg-amber-600/20', 'text-amber-300',
                              'bg-purple-600/20', 'text-purple-300');
@@ -187,8 +257,24 @@ function setSmartMode(mode) {
         } else {
             btn.classList.add('bg-gray-700/50', 'text-gray-400', 'hover:text-gray-200');
         }
+        btn.innerHTML = getModeButtonLabel(m, isActive);
     });
 }
+
+function setEffort(mode, level) {
+    localStorage.setItem('ccEffort_' + mode, level);
+    closeAllPopovers();
+    // Update button label for the active mode
+    var btn = document.querySelector('#mode-toggle .mode-btn[data-mode="' + mode + '"]');
+    if (btn && mode === currentActiveMode) {
+        btn.innerHTML = getModeButtonLabel(mode, true);
+    }
+}
+
+// Close popovers on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#mode-toggle')) closeAllPopovers();
+});
 
 // Create chat engine for the full page
 var chatEngine = createChatEngine({
@@ -201,6 +287,7 @@ var chatEngine = createChatEngine({
     emptyStateEl: document.getElementById('empty-state'),
     sessionPk: SESSION_PK,
     messagesUrl: "{% url 'assistant:drawer_messages' session.pk %}",
+    getEffort: function(mode) { return getEffort(mode); },
     getPageContext: function() { return null; },
     onFinish: function() {
         htmx.trigger(document.body, 'refreshSessions');

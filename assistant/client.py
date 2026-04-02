@@ -479,7 +479,7 @@ def _get_client_and_model():
     return client, model_name
 
 
-def send_message(session, user_text, mode="fast"):
+def send_message(session, user_text, mode="fast", effort=""):
     """
     Process a user message through the Anthropic API tool-use loop.
 
@@ -521,7 +521,9 @@ def send_message(session, user_text, mode="fast"):
     max_tokens = assistant_settings.max_tokens or DEFAULT_MAX_TOKENS
 
     # Apply mode overrides (think/max change model, enable thinking, etc.)
-    mode_config = MODE_CONFIGS.get(mode, {})
+    mode_config = dict(MODE_CONFIGS.get(mode, {}))
+    if effort and "output_config" in mode_config:
+        mode_config["output_config"] = {"effort": effort}
     if "model" in mode_config:
         model_name = mode_config["model"]
     if "max_tokens" in mode_config:
@@ -529,7 +531,8 @@ def send_message(session, user_text, mode="fast"):
 
     client = anthropic.Anthropic(api_key=api_key, max_retries=5)
     system_prompt = _build_system_prompt()
-    logger.info(f"send mode={mode} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
+    effective_effort = mode_config.get("output_config", {}).get("effort", "")
+    logger.info(f"send mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
 
     for iteration in range(MAX_TOOL_ITERATIONS):
         try:
@@ -651,7 +654,7 @@ def send_message(session, user_text, mode="fast"):
     return new_messages
 
 
-def stream_message(session, user_text, mode="fast"):
+def stream_message(session, user_text, mode="fast", effort=""):
     """
     Generator that yields SSE events as the assistant processes a message.
 
@@ -698,7 +701,9 @@ def stream_message(session, user_text, mode="fast"):
     max_tokens = assistant_settings.max_tokens or DEFAULT_MAX_TOKENS
 
     # Apply mode overrides (think/max change model, enable thinking, etc.)
-    mode_config = MODE_CONFIGS.get(mode, {})
+    mode_config = dict(MODE_CONFIGS.get(mode, {}))
+    if effort and "output_config" in mode_config:
+        mode_config["output_config"] = {"effort": effort}
     if "model" in mode_config:
         model_name = mode_config["model"]
     if "max_tokens" in mode_config:
@@ -710,7 +715,8 @@ def stream_message(session, user_text, mode="fast"):
     all_messages = session.messages.all()
     api_messages = _build_api_messages(all_messages)
 
-    logger.info(f"stream mode={mode} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
+    effective_effort = mode_config.get("output_config", {}).get("effort", "")
+    logger.info(f"stream mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
 
     # Streaming tool loop: every API call is streamed.
     # Text tokens are yielded live during the final (non-tool) response.

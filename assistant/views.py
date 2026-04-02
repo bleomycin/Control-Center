@@ -83,8 +83,12 @@ def stream_message_view(request, session_id):
     if mode not in ("fast", "think", "max"):
         mode = "fast"
 
+    effort = request.POST.get("effort", "")
+    if effort not in ("low", "medium", "high", "max"):
+        effort = ""
+
     response = StreamingHttpResponse(
-        assistant_client.stream_message(session, user_text, mode=mode),
+        assistant_client.stream_message(session, user_text, mode=mode, effort=effort),
         content_type="text/event-stream",
     )
     response["Cache-Control"] = "no-cache"

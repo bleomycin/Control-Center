@@ -250,6 +250,8 @@ function createChatEngine(config) {
         var body = new FormData();
         body.append('message', fullText);
         body.append('mode', currentMode);
+        var eff = config.getEffort ? config.getEffort(currentMode) : '';
+        if (eff) body.append('effort', eff);
         resetWatchdog();
 
         fetch(config.streamUrl, {

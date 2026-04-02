@@ -67,18 +67,34 @@
                     title="Default speed and accuracy">
                 &#9889; Fast
             </button>
-            <button type="button" data-mode="think"
-                    class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
-                    onclick="setDrawerSmartMode('think')"
-                    title="Sonnet + adaptive thinking for complex tasks">
-                &#129504; Think
-            </button>
-            <button type="button" data-mode="max"
-                    class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
-                    onclick="setDrawerSmartMode('max')"
-                    title="Opus + max effort — most capable, slowest">
-                &#128302; Max
-            </button>
+            <div class="relative">
+                <button type="button" data-mode="think"
+                        class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                        onclick="setDrawerSmartMode('think')"
+                        title="Sonnet + adaptive thinking for complex tasks">
+                    &#129504; Think
+                </button>
+                <div id="drawer-think-effort-popover" class="hidden absolute left-0 bottom-full mb-1 z-50 bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 min-w-[7rem]">
+                    <button type="button" onclick="setDrawerEffort('think','low')" data-effort="low" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Low</button>
+                    <button type="button" onclick="setDrawerEffort('think','medium')" data-effort="medium" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Medium</button>
+                    <button type="button" onclick="setDrawerEffort('think','high')" data-effort="high" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">High</button>
+                    <button type="button" onclick="setDrawerEffort('think','max')" data-effort="max" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Max</button>
+                </div>
+            </div>
+            <div class="relative">
+                <button type="button" data-mode="max"
+                        class="drawer-mode-btn px-2.5 py-1 text-xs font-medium rounded-md transition-colors bg-gray-700/50 text-gray-400 hover:text-gray-200"
+                        onclick="setDrawerSmartMode('max')"
+                        title="Opus + max effort — most capable, slowest">
+                    &#128302; Max
+                </button>
+                <div id="drawer-max-effort-popover" class="hidden absolute left-0 bottom-full mb-1 z-50 bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 min-w-[7rem]">
+                    <button type="button" onclick="setDrawerEffort('max','low')" data-effort="low" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Low</button>
+                    <button type="button" onclick="setDrawerEffort('max','medium')" data-effort="medium" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Medium</button>
+                    <button type="button" onclick="setDrawerEffort('max','high')" data-effort="high" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">High</button>
+                    <button type="button" onclick="setDrawerEffort('max','max')" data-effort="max" class="drawer-effort-opt block w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700">Max</button>
+                </div>
+            </div>
         </div>
         <form id="drawer-chat-form" class="flex gap-2">
             <textarea id="drawer-chat-input" rows="1" placeholder="Ask about your data..."
