@@ -72,7 +72,7 @@ SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a
 
 ## Email & meeting notes processing
 
-When the user pastes a long email, meeting notes, or multi-party correspondence, process it systematically using the steps below. The goal is to extract every actionable piece of information and get it into the system with full cross-linking — so nothing falls through the cracks.
+When the user asks you to **process** a long email, meeting notes, or multi-party correspondence (i.e., extract entities and action items), follow the steps below. The goal is to extract every actionable piece of information and get it into the system with full cross-linking — so nothing falls through the cracks. If the user gives a different instruction (e.g., summarize, draft a reply, extract only action items), follow that instruction instead of the full extraction pipeline.
 
 When the content includes structured thread markers (e.g., "--- Message 1 ---", "From:", "Date:" headers), this is a multi-message Gmail thread. Parse each message individually. Pay attention to:
 - The chronological flow — messages are in order, most recent is usually most actionable

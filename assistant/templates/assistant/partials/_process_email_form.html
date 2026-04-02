@@ -68,9 +68,19 @@
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">Additional Context <span class="text-gray-500">(optional)</span></label>
-            <input type="text" id="gmail-context" placeholder='e.g. "focus on action items for Amanda"'
-                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <label class="block text-sm font-medium text-gray-300 mb-1">Instruction</label>
+            <select id="gmail-instruction-preset" onchange="onPresetChange('gmail')"
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <option value="full_extract" selected>Full extraction (stakeholders, assets, actions, notes)</option>
+                <option value="action_items">Action items only</option>
+                <option value="summarize">Summarize</option>
+                <option value="draft_reply">Draft a reply</option>
+                <option value="stakeholders">Identify stakeholders</option>
+                <option value="custom">Custom instruction...</option>
+                <option value="paste_only">Paste to chat (no instruction)</option>
+            </select>
+            <textarea id="gmail-custom-instruction" rows="2" placeholder="Type your instruction here..."
+                      class="hidden w-full mt-2 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"></textarea>
         </div>
 
         <button type="button" id="gmail-process-btn" onclick="submitGmailEmail()" disabled
@@ -82,18 +92,28 @@
 
     <!-- Paste Text Tab -->
     <div id="panel-paste" class="space-y-4 {% if gmail_available %}hidden{% endif %}">
-        <p class="text-sm text-gray-400">Paste an email or meeting notes below. The assistant will extract all stakeholders, assets, action items, and create linked records.</p>
+        <p class="text-sm text-gray-400">Paste an email or meeting notes below, then choose what to do with it.</p>
         <div>
             <label for="email-content" class="block text-sm font-medium text-gray-300 mb-1">Email / Notes Content</label>
             <textarea id="email-content" rows="12" placeholder="Paste the full email here..."
                       class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"></textarea>
         </div>
         <div>
-            <label for="email-context" class="block text-sm font-medium text-gray-300 mb-1">Additional Context <span class="text-gray-500">(optional)</span></label>
-            <input type="text" id="email-context" placeholder='e.g. "focus on action items for Amanda" or "this is about the Cedar Lane property"'
-                   class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <label class="block text-sm font-medium text-gray-300 mb-1">Instruction</label>
+            <select id="email-instruction-preset" onchange="onPresetChange('email')"
+                    class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <option value="full_extract" selected>Full extraction (stakeholders, assets, actions, notes)</option>
+                <option value="action_items">Action items only</option>
+                <option value="summarize">Summarize</option>
+                <option value="draft_reply">Draft a reply</option>
+                <option value="stakeholders">Identify stakeholders</option>
+                <option value="custom">Custom instruction...</option>
+                <option value="paste_only">Paste to chat (no instruction)</option>
+            </select>
+            <textarea id="email-custom-instruction" rows="2" placeholder="Type your instruction here..."
+                      class="hidden w-full mt-2 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-y"></textarea>
         </div>
-        <button type="button" onclick="submitProcessEmail()"
+        <button type="button" id="paste-process-btn" onclick="submitProcessEmail()"
                 class="w-full px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition-colors">
             Process
         </button>
@@ -178,16 +198,53 @@ function clearGmailSelection() {
     document.getElementById('gmail-process-btn').disabled = true;
 }
 
+// --- Instruction presets ---
+var INSTRUCTION_PRESETS = {
+    full_extract: 'Process this email and extract all stakeholders, assets, action items, and notes:',
+    action_items: 'Extract only the action items and deadlines from this email. For each, note who is responsible and any due dates:',
+    summarize: 'Summarize this email concisely. Include the key points, any decisions made, and what (if anything) requires follow-up:',
+    draft_reply: 'Read this email and draft a professional reply. Acknowledge key points and respond to any questions or requests:',
+    stakeholders: 'Identify all people and organizations mentioned in this email. For each, note their role and any contact information provided:'
+};
+
+function onPresetChange(prefix) {
+    var select = document.getElementById(prefix + '-instruction-preset');
+    var customArea = document.getElementById(prefix + '-custom-instruction');
+    var btn = document.getElementById(prefix === 'gmail' ? 'gmail-process-btn' : 'paste-process-btn');
+    var val = select.value;
+    if (val === 'custom') {
+        customArea.classList.remove('hidden');
+        customArea.focus();
+    } else {
+        customArea.classList.add('hidden');
+    }
+    if (btn) {
+        btn.textContent = (val === 'paste_only') ? 'Paste to Chat' : 'Process';
+    }
+}
+
+function _getInstruction(prefix) {
+    var select = document.getElementById(prefix + '-instruction-preset');
+    var val = select.value;
+    if (val === 'paste_only') return null;
+    if (val === 'custom') {
+        var customText = document.getElementById(prefix + '-custom-instruction').value.trim();
+        return customText || null;
+    }
+    return INSTRUCTION_PRESETS[val] || INSTRUCTION_PRESETS.full_extract;
+}
+
 function submitGmailEmail() {
     if (!_selectedThreadText) return;
-    var context = document.getElementById('gmail-context').value.trim();
-    var message = 'Process this email thread and extract all stakeholders, assets, action items, and notes:\n\n---\n\n' + _selectedThreadText + '\n\n---';
-    if (context) {
-        message += '\n\nAdditional context: ' + context;
-    }
-    message += _buildDriveFilesBlock();
+    var instruction = _getInstruction('gmail');
+    var emailBlock = '\n\n---\n\n' + _selectedThreadText + '\n\n---';
+    emailBlock += _buildDriveFilesBlock();
     closeModal();
-    _sendToActiveChat(message);
+    if (instruction === null) {
+        _pasteToChat(emailBlock);
+    } else {
+        _sendToActiveChat(instruction + emailBlock);
+    }
 }
 
 // --- Paste tab ---
@@ -197,14 +254,15 @@ function submitProcessEmail() {
         document.getElementById('email-content').focus();
         return;
     }
-    var context = document.getElementById('email-context').value.trim();
-    var message = 'Process this email and extract all stakeholders, assets, action items, and notes:\n\n---\n\n' + content + '\n\n---';
-    if (context) {
-        message += '\n\nAdditional context: ' + context;
-    }
-    message += _buildDriveFilesBlock();
+    var instruction = _getInstruction('email');
+    var emailBlock = '\n\n---\n\n' + content + '\n\n---';
+    emailBlock += _buildDriveFilesBlock();
     closeModal();
-    _sendToActiveChat(message);
+    if (instruction === null) {
+        _pasteToChat(emailBlock);
+    } else {
+        _sendToActiveChat(instruction + emailBlock);
+    }
 }
 
 function _sendToActiveChat(message) {
@@ -217,6 +275,18 @@ function _sendToActiveChat(message) {
         chatInput.value = message;
         chatInput.dispatchEvent(new Event('input', {bubbles: true}));
         chatForm.dispatchEvent(new Event('submit'));
+    }
+}
+
+function _pasteToChat(content) {
+    var useDrawer = typeof drawerOpen !== 'undefined' && drawerOpen && document.getElementById('drawer-chat-input');
+    var inputId = useDrawer ? 'drawer-chat-input' : 'chat-input';
+    var chatInput = document.getElementById(inputId);
+    if (chatInput) {
+        chatInput.value = content;
+        chatInput.dispatchEvent(new Event('input', {bubbles: true}));
+        chatInput.focus();
+        chatInput.setSelectionRange(0, 0);
     }
 }
 
