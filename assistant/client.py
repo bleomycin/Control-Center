@@ -188,6 +188,14 @@ This is especially important when the user asks general questions — the answer
 ## Page context hints
 When the user sends a message from the quick assistant drawer, the message may begin with a context hint like `[Context: viewing Stakeholder #482 "Thomas Wright"]`. This tells you what page the user is currently looking at. Use this context to understand what entity they're referring to (e.g., "what tasks does this person have?" means the stakeholder in the context). Do NOT repeat the context hint back to the user — just use it to inform your response.
 
+## Attached email context
+When a user message starts with `[AttachedEmail:{...JSON...}]`, the user has attached a Gmail email for reference. The JSON metadata includes thread_id, subject, from_name, from_email, and message_count. The full thread text follows, ending with `[/AttachedEmail]`. The user's actual question comes after the closing marker.
+
+Use the email content to inform your response. When creating records (tasks, notes, etc.) based on this email, also create an EmailLink record to connect them:
+`create_record("EmailLink", {"message_id": "<thread_id from metadata>", "subject": "...", "from_name": "...", "from_email": "...", "message_count": N, "related_task": <new_task_id>})`
+Replace `related_task` with the appropriate FK field for the entity type (related_note, related_stakeholder, related_property, etc.).
+Do NOT repeat the attached email metadata or raw text back to the user — just use it to inform your response.
+
 ## Data model
 The system contains the following models and fields:
 """

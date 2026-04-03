@@ -84,12 +84,18 @@ class ChatMessage(models.Model):
 
     @property
     def display_content(self):
-        """Strip the [Context: ...] prefix injected by the drawer for display."""
-        if self.content and self.content.startswith("[Context:"):
-            idx = self.content.find("]")
+        """Strip [AttachedEmail:...] and [Context: ...] prefixes for display."""
+        text = self.content or ""
+        if text.startswith("[AttachedEmail:"):
+            end_marker = "[/AttachedEmail]"
+            idx = text.find(end_marker)
             if idx > -1:
-                return self.content[idx + 1 :].strip()
-        return self.content
+                text = text[idx + len(end_marker) :].strip()
+        if text.startswith("[Context:"):
+            idx = text.find("]")
+            if idx > -1:
+                text = text[idx + 1 :].strip()
+        return text
 
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"

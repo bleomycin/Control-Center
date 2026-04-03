@@ -35,6 +35,10 @@ def chat_page(request, session_id=None):
     pinned = ChatSession.objects.filter(is_pinned=True).order_by("sort_order", "-updated_at")
     unpinned = ChatSession.objects.filter(is_pinned=False).order_by("sort_order", "-updated_at")
 
+    from email_links import gmail
+    gmail_available = gmail.is_available()
+    labels = gmail.get_labels() if gmail_available else []
+
     return render(request, "assistant/chat.html", {
         "session": session,
         "sessions": sessions,
@@ -42,6 +46,8 @@ def chat_page(request, session_id=None):
         "unpinned_sessions": unpinned,
         "chat_messages": display_messages,
         "form": form,
+        "gmail_available": gmail_available,
+        "labels": labels,
     })
 
 
@@ -337,12 +343,18 @@ def gmail_thread_search(request):
         return render(request, "assistant/partials/_gmail_thread_results.html", {
             "error": f"Gmail search error: {e}",
         })
+    mode = request.GET.get("mode", "")
+    callback = "attachGmailThread" if mode == "attach" else ""
+    callback_label = "Attach" if mode == "attach" else ""
     return render(request, "assistant/partials/_gmail_thread_results.html", {
         "results": data.get("threads"),
         "next_page_token": data.get("next_page_token"),
         "query": query,
         "label": label,
         "browsing": not query,
+        "mode": mode,
+        "callback": callback,
+        "callback_label": callback_label,
     })
 
 

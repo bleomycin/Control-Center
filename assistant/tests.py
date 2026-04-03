@@ -770,6 +770,41 @@ class DisplayContentTests(TestCase):
         msg = ChatMessage(role="user", content='[Context: viewing Stakeholder #5 "Bob"]')
         self.assertEqual(msg.display_content, "")
 
+    def test_strips_attached_email(self):
+        content = (
+            '[AttachedEmail:{"thread_id":"abc","subject":"Test"}]\n'
+            'Subject: Test\nThread: 1 message(s)\n'
+            '[/AttachedEmail]\n'
+            'Create a task from this email'
+        )
+        msg = ChatMessage(role="user", content=content)
+        self.assertEqual(msg.display_content, "Create a task from this email")
+
+    def test_attached_email_with_context(self):
+        content = (
+            '[AttachedEmail:{"thread_id":"abc","subject":"Test"}]\n'
+            'Email body here\n'
+            '[/AttachedEmail]\n'
+            '[Context: viewing Task #1 "Test"]\nWhat about this?'
+        )
+        msg = ChatMessage(role="user", content=content)
+        self.assertEqual(msg.display_content, "What about this?")
+
+    def test_attached_email_no_user_text(self):
+        content = (
+            '[AttachedEmail:{"thread_id":"abc","subject":"Test"}]\n'
+            'Email body\n'
+            '[/AttachedEmail]'
+        )
+        msg = ChatMessage(role="user", content=content)
+        self.assertEqual(msg.display_content, "")
+
+    def test_attached_email_missing_end_marker(self):
+        content = '[AttachedEmail:{"thread_id":"abc"}]\nSome text without closing marker'
+        msg = ChatMessage(role="user", content=content)
+        # No end marker found, returns content as-is
+        self.assertEqual(msg.display_content, content)
+
 
 # ============================================================
 # Tests for optimization changes (A1-A4, B1-B4, C2)
