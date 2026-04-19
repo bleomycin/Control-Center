@@ -708,6 +708,89 @@ class ResultSummaryTests(TestCase):
         )
 
 
+class ReminderPolicyTests(TestCase):
+    """Tests for the schema fix and server-side reminder policy."""
+
+    def test_schema_datetimefield_reported_as_datetime(self):
+        from assistant.registry import build_registry, get_field_info
+        from tasks.models import Task
+        build_registry()
+        info = {f["name"]: f for f in get_field_info(Task)}
+        self.assertEqual(info["reminder_date"]["type"], "datetime")
+        self.assertNotIn("created_at", info)  # auto_now_add, must be skipped
+        self.assertNotIn("updated_at", info)  # auto_now, must be skipped
+
+    def test_create_record_meeting_strips_reminder_date(self):
+        result = create_record_helper(
+            "Task",
+            {"title": "M", "task_type": "meeting", "direction": "personal",
+             "due_date": "2026-04-23", "due_time": "15:30",
+             "reminder_date": "2026-04-23T00:00:00"},
+            dry_run=True,
+        )
+        self.assertNotIn("reminder_date", result["data"])
+
+    def test_create_record_meeting_strips_reminder_date_execute(self):
+        from tasks.models import Task
+        result = create_record_helper(
+            "Task",
+            {"title": "M2", "task_type": "meeting", "direction": "personal",
+             "due_date": "2026-04-23", "due_time": "15:30",
+             "reminder_date": "2026-04-23T00:00:00"},
+            dry_run=False,
+        )
+        t = Task.objects.get(pk=result["record"]["__pk__"])
+        self.assertIsNone(t.reminder_date)
+
+    def test_create_record_non_meeting_autocomputes_reminder_date(self):
+        from assistant.models import AssistantSettings
+        from tasks.models import Task
+        from django.utils import timezone
+        from datetime import datetime, timedelta
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 1440
+        s.save()
+        result = create_record_helper(
+            "Task",
+            {"title": "T", "task_type": "one_time", "direction": "personal",
+             "due_date": "2026-04-23", "due_time": "15:30"},
+            dry_run=False,
+        )
+        t = Task.objects.get(pk=result["record"]["__pk__"])
+        expected = timezone.make_aware(
+            datetime(2026, 4, 23, 15, 30), timezone.get_current_timezone()
+        ) - timedelta(minutes=1440)
+        self.assertEqual(t.reminder_date, expected)
+
+    def test_create_record_non_meeting_respects_explicit_reminder(self):
+        from tasks.models import Task
+        result = create_record_helper(
+            "Task",
+            {"title": "T2", "task_type": "one_time", "direction": "personal",
+             "due_date": "2026-04-23", "due_time": "15:30",
+             "reminder_date": "2026-04-21T09:00:00"},
+            dry_run=False,
+        )
+        t = Task.objects.get(pk=result["record"]["__pk__"])
+        self.assertEqual(t.reminder_date.day, 21)
+        self.assertEqual(t.reminder_date.hour, 9)
+
+    def test_update_record_meeting_strips_reminder_date(self):
+        from tasks.models import Task
+        from assistant.tools import update_record
+        task = Task.objects.create(
+            title="Existing Meeting", task_type="meeting",
+            direction="personal", due_date="2026-04-23",
+        )
+        result = update_record(
+            "Task", task.pk,
+            {"due_time": "15:30", "reminder_date": "2026-04-23T14:30:00"},
+            dry_run=False,
+        )
+        task.refresh_from_db()
+        self.assertIsNone(task.reminder_date)
+
+
 class DrawerViewTests(TestCase):
     def test_drawer_session_returns_most_recent(self):
         s1 = ChatSession.objects.create(title="Old")

@@ -220,15 +220,17 @@ def _build_system_prompt():
     settings = AssistantSettings.load()
     owner_name = settings.owner_name
     reminder_mins = settings.default_reminder_minutes
-    if reminder_mins:
-        stats_lines.append(f"Default task reminder: {reminder_mins} minutes before due time")
-        stats_lines.append(
-            "When creating a task with a due_date and due_time, automatically set "
-            f"reminder_date to {reminder_mins} minutes before the due datetime. "
-            "For example, if due_date=2026-04-01 and due_time=14:00, set "
-            f"reminder_date to the datetime {reminder_mins} minutes earlier. "
-            "Skip this for tasks without a due_time."
-        )
+    stats_lines.append(
+        "Reminder policy:\n"
+        "- Do NOT set reminder_date yourself. The server computes it automatically:\n"
+        "  * For task_type='meeting': reminder_date is left blank. Meeting reminders\n"
+        "    come from Settings > Calendar Feed (user-configured per-category offsets).\n"
+        f"  * For other task types with a due_date and due_time: the server sets\n"
+        f"    reminder_date to {reminder_mins} minutes before the due datetime.\n"
+        "- Only include reminder_date in your payload if the user explicitly asks for\n"
+        "  a specific one-off reminder time. In that case pass a full ISO datetime\n"
+        "  like '2026-04-22T15:30:00'."
+    )
     if owner_name:
         stats_lines.append(f"System owner: {owner_name}")
         stats_lines.append(

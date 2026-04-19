@@ -232,7 +232,7 @@ class AssistantPageStructureTests(PlaywrightTestCase):
             session=self.session, role="user", content="Hello there"
         )
         self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
-        bubble = self.page.locator(".bg-blue-600\\/20")
+        bubble = self.page.locator("#message-list .bg-blue-600\\/20")
         bubble.wait_for(state="visible")
         self.assertIn("Hello there", bubble.text_content())
 
@@ -286,7 +286,7 @@ class AssistantMessageActionsTests(PlaywrightTestCase):
         self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
         self.page.wait_for_selector("#message-list")
         # Hover over user message bubble
-        bubble = self.page.locator(".bg-blue-600\\/20").first
+        bubble = self.page.locator("#message-list .bg-blue-600\\/20").first
         bubble.hover()
         copy_btn = bubble.locator("button[title='Copy']")
         copy_btn.wait_for(state="visible")
@@ -301,7 +301,7 @@ class AssistantMessageActionsTests(PlaywrightTestCase):
         retry_btn = asst_bubble.locator("button[title='Retry']")
         self.assertEqual(retry_btn.count(), 1)
         # User message should NOT have retry
-        user_bubble = self.page.locator(".bg-blue-600\\/20").first
+        user_bubble = self.page.locator("#message-list .bg-blue-600\\/20").first
         user_retry = user_bubble.locator("button[title='Retry']")
         self.assertEqual(user_retry.count(), 0)
 
@@ -310,7 +310,7 @@ class AssistantMessageActionsTests(PlaywrightTestCase):
         self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
         self.page.wait_for_selector("#message-list")
         # User message should have edit
-        user_bubble = self.page.locator(".bg-blue-600\\/20").first
+        user_bubble = self.page.locator("#message-list .bg-blue-600\\/20").first
         edit_btn = user_bubble.locator("button[title='Edit & resend']")
         self.assertEqual(edit_btn.count(), 1)
         # Assistant message should NOT have edit

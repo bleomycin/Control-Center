@@ -123,7 +123,7 @@
                         </label>
                         {{ form.default_reminder_minutes }}
                         {% if form.default_reminder_minutes.errors %}<p class="mt-1 text-sm text-red-400">{{ form.default_reminder_minutes.errors.0 }}</p>{% endif %}
-                        <p class="mt-1 text-xs text-gray-500">{{ form.default_reminder_minutes.help_text }}</p>
+                        <p class="mt-1 text-xs text-gray-500">{{ form.default_reminder_minutes.help_text }} Does not apply to meetings — meeting reminders come from Calendar Feed settings.</p>
                     </div>
                 </div>
             </div>

@@ -11,6 +11,40 @@ from django.utils import timezone
 from . import registry
 
 
+def _apply_reminder_policy(model_cls, data, existing_obj=None):
+    """Enforce server-side reminder policy for Task records.
+
+    - Meetings: strip reminder_date (calendar feed owns meeting reminders).
+    - Non-meetings with due_date + due_time and no explicit reminder_date:
+      auto-compute reminder_date from AssistantSettings.default_reminder_minutes.
+    """
+    if model_cls.__name__ != "Task":
+        return
+
+    task_type = data.get("task_type")
+    if task_type is None and existing_obj is not None:
+        task_type = existing_obj.task_type
+
+    if task_type == "meeting":
+        data.pop("reminder_date", None)
+    elif "reminder_date" not in data:
+        due_date = data.get("due_date")
+        due_time = data.get("due_time")
+        if due_date and due_time:
+            from assistant.models import AssistantSettings
+            from django.utils import timezone as _tz
+            from django.utils.dateparse import parse_date, parse_time
+            from datetime import datetime as _dt, timedelta as _td
+
+            mins = AssistantSettings.load().default_reminder_minutes
+            if mins:
+                d = due_date if hasattr(due_date, "year") else parse_date(str(due_date))
+                t = due_time if hasattr(due_time, "hour") else parse_time(str(due_time))
+                if d and t:
+                    aware = _tz.make_aware(_dt.combine(d, t), _tz.get_current_timezone())
+                    data["reminder_date"] = aware - _td(minutes=mins)
+
+
 def _normalize_choice_fields(model_cls, data):
     """Normalize DB-backed choice field values (label→value mapping).
 
@@ -388,6 +422,7 @@ def create_record(model, data, dry_run=True):
 
     # Normalize choice field values (label→value, case-insensitive)
     _normalize_choice_fields(model_cls, data)
+    _apply_reminder_policy(model_cls, data)
 
     # Separate M2M fields from regular fields
     m2m_data = {}
@@ -442,6 +477,7 @@ def update_record(model, id, data, dry_run=True):
 
     # Normalize choice field values (label→value, case-insensitive)
     _normalize_choice_fields(model_cls, data)
+    _apply_reminder_policy(model_cls, data, existing_obj=obj)
 
     m2m_data = {}
     regular_data = {}

@@ -215,13 +215,13 @@ def get_field_info(model):
         elif isinstance(field, models.BooleanField):
             info["type"] = "boolean"
             info["required"] = False
-        elif isinstance(field, models.DateField):
-            info["type"] = "date"
-            info["required"] = not field.null
         elif isinstance(field, models.DateTimeField):
             if field.auto_now or field.auto_now_add:
                 continue  # skip auto timestamps
             info["type"] = "datetime"
+            info["required"] = not field.null
+        elif isinstance(field, models.DateField):
+            info["type"] = "date"
             info["required"] = not field.null
         elif isinstance(field, models.TimeField):
             info["type"] = "time"
