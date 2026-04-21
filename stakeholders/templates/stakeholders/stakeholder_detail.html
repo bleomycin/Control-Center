@@ -190,46 +190,46 @@
     <!-- Tab Navigation: Desktop buttons -->
     <div class="hidden sm:flex flex-wrap border-b border-gray-700 px-4 gap-1">
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-blue-500 text-blue-400" data-tab="stakeholders">
-            Stakeholders <span class="text-xs opacity-70">({{ counts.stakeholders }})</span>
+            Stakeholders {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.stakeholders bg="rgba(99,102,241,0.2)" text="#a5b4fc" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="properties">
-            Properties <span class="text-xs opacity-70">({{ counts.properties }})</span>
+            Properties {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.properties bg="rgba(16,185,129,0.2)" text="#6ee7b7" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="investments">
-            Investments <span class="text-xs opacity-70">({{ counts.investments }})</span>
+            Investments {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.investments bg="rgba(168,85,247,0.2)" text="#c4b5fd" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="loans">
-            Loans <span class="text-xs opacity-70">({{ counts.loans }})</span>
+            Loans {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.loans bg="rgba(249,115,22,0.2)" text="#fdba74" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="vehicles">
-            Vehicles <span class="text-xs opacity-70">({{ counts.vehicles }})</span>
+            Vehicles {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.vehicles bg="rgba(20,184,166,0.2)" text="#5eead4" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="aircraft">
-            Aircraft <span class="text-xs opacity-70">({{ counts.aircraft }})</span>
+            Aircraft {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.aircraft bg="rgba(14,165,233,0.2)" text="#7dd3fc" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="leases">
-            Leases <span class="text-xs opacity-70">({{ counts.leases }})</span>
+            Leases {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.leases bg="rgba(132,204,22,0.2)" text="#bef264" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="policies">
-            Insurance <span class="text-xs opacity-70">({{ counts.policies }})</span>
+            Insurance {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.policies bg="rgba(236,72,153,0.2)" text="#f9a8d4" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="legal">
-            Legal <span class="text-xs opacity-70">({{ counts.legal_matters }})</span>
+            Legal {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.legal_matters bg="rgba(239,68,68,0.2)" text="#fca5a5" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="tasks">
-            Tasks <span class="text-xs opacity-70">({{ counts.tasks }})</span>
+            Tasks {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.tasks bg="rgba(234,179,8,0.2)" text="#fde047" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="notes">
-            Notes <span class="text-xs opacity-70">({{ counts.notes }})</span>
+            Notes {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.notes bg="rgba(245,158,11,0.2)" text="#fcd34d" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="cashflow">
-            Cash Flow <span class="text-xs opacity-70">({{ counts.cashflow }})</span>
+            Cash Flow {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.cashflow bg="rgba(34,197,94,0.2)" text="#86efac" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="healthcare">
-            Healthcare <span class="text-xs opacity-70">({{ counts.healthcare }})</span>
+            Healthcare {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.healthcare bg="rgba(6,182,212,0.2)" text="#67e8f9" %}
         </button>
         <button class="tab-btn px-3 py-2 text-sm border-b-2 border-transparent text-gray-400 hover:text-gray-300" data-tab="caselogs">
-            Case Logs <span class="text-xs opacity-70">({{ counts.case_logs }})</span>
+            Case Logs {% include "stakeholders/partials/_tab_count_badge.html" with count=counts.case_logs bg="rgba(100,116,139,0.2)" text="#cbd5e1" %}
         </button>
     </div>
 

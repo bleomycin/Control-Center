@@ -1,0 +1,6 @@
+{% comment %}
+Count indicator for All Connections tabs.
+- Non-zero: colored pill matching the Relationship Network palette above.
+- Zero: muted grey text so populated tabs stand out.
+Required args: count, bg (rgba string), text (hex color).
+{% endcomment %}{% if count %}<span class="ml-1 inline-flex items-center text-xs font-semibold px-1.5 py-0.5 rounded-full" style="background: {{ bg }}; color: {{ text }};">{{ count }}</span>{% else %}<span class="ml-1 text-xs text-gray-600">0</span>{% endif %}
