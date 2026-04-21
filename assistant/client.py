@@ -213,24 +213,48 @@ def _build_system_prompt():
 
     stats_lines = ["\n## Current system state"]
     from django.utils import timezone
+    from django.conf import settings as dj_settings
     stats_lines.append(f"Today: {timezone.localdate().isoformat()}")
+    stats_lines.append(
+        f"Timezone: {dj_settings.TIME_ZONE} "
+        f"(all dates you see and write are in this zone unless tagged otherwise)"
+    )
+    stats_lines.append(
+        "When writing datetime fields (e.g., Note.date, Task.due_date+due_time, "
+        "appointment times), emit the datetime in the user's local timezone. "
+        "Prefer full ISO format with explicit offset "
+        "(e.g., '2026-04-20T19:27:00-07:00'). If you only have a raw email header "
+        "in UTC, convert it to local time first."
+    )
 
     # Include assistant settings
     from .models import AssistantSettings
     settings = AssistantSettings.load()
     owner_name = settings.owner_name
     reminder_mins = settings.default_reminder_minutes
-    stats_lines.append(
-        "Reminder policy:\n"
-        "- Do NOT set reminder_date yourself. The server computes it automatically:\n"
-        "  * For task_type='meeting': reminder_date is left blank. Meeting reminders\n"
-        "    come from Settings > Calendar Feed (user-configured per-category offsets).\n"
-        f"  * For other task types with a due_date and due_time: the server sets\n"
-        f"    reminder_date to {reminder_mins} minutes before the due datetime.\n"
-        "- Only include reminder_date in your payload if the user explicitly asks for\n"
-        "  a specific one-off reminder time. In that case pass a full ISO datetime\n"
-        "  like '2026-04-22T15:30:00'."
+    reminder_lines = [
+        "Reminder policy:",
+        "- For task_type='meeting': leave reminder_date blank. Meeting reminders come"
+        " from Settings > Calendar Feed (user-configured per-category offsets).",
+    ]
+    if reminder_mins:
+        reminder_lines.append(
+            f"- For other task types with a due_date and due_time: do NOT set"
+            f" reminder_date yourself — the server auto-sets it to {reminder_mins}"
+            f" minutes before the due datetime."
+        )
+    else:
+        reminder_lines.append(
+            "- Auto-reminders are disabled in settings (default_reminder_minutes=0)."
+            " Do NOT set reminder_date unless the user explicitly asks for a"
+            " specific reminder time."
+        )
+    reminder_lines.append(
+        "- If the user explicitly asks for a specific one-off reminder time, include"
+        " reminder_date as a full ISO datetime with offset like"
+        " '2026-04-22T15:30:00-07:00'."
     )
+    stats_lines.append("\n".join(reminder_lines))
     if owner_name:
         stats_lines.append(f"System owner: {owner_name}")
         stats_lines.append(

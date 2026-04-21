@@ -42,7 +42,10 @@ def _apply_reminder_policy(model_cls, data, existing_obj=None):
                 t = due_time if hasattr(due_time, "hour") else parse_time(str(due_time))
                 if d and t:
                     aware = _tz.make_aware(_dt.combine(d, t), _tz.get_current_timezone())
-                    data["reminder_date"] = aware - _td(minutes=mins)
+                    # ISO string, not datetime: this dict is aliased into
+                    # block.input, which gets saved to ChatMessage.tool_data
+                    # (JSONField) and re-sent as Anthropic message history.
+                    data["reminder_date"] = (aware - _td(minutes=mins)).isoformat()
 
 
 def _normalize_choice_fields(model_cls, data):

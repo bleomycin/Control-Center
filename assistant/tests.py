@@ -764,6 +764,7 @@ class ReminderPolicyTests(TestCase):
 
     def test_create_record_non_meeting_respects_explicit_reminder(self):
         from tasks.models import Task
+        from django.utils import timezone
         result = create_record_helper(
             "Task",
             {"title": "T2", "task_type": "one_time", "direction": "personal",
@@ -772,8 +773,11 @@ class ReminderPolicyTests(TestCase):
             dry_run=False,
         )
         t = Task.objects.get(pk=result["record"]["__pk__"])
-        self.assertEqual(t.reminder_date.day, 21)
-        self.assertEqual(t.reminder_date.hour, 9)
+        # The LLM sends a naive ISO datetime; Django stores it as UTC.
+        # Assert on localtime to match user intent (9 AM local, not UTC).
+        local = timezone.localtime(t.reminder_date)
+        self.assertEqual(local.day, 21)
+        self.assertEqual(local.hour, 9)
 
     def test_update_record_meeting_strips_reminder_date(self):
         from tasks.models import Task
@@ -789,6 +793,76 @@ class ReminderPolicyTests(TestCase):
         )
         task.refresh_from_db()
         self.assertIsNone(task.reminder_date)
+
+    def test_apply_reminder_policy_leaves_data_json_safe(self):
+        # Regression for the ChatMessage.tool_data save crash: the mutated dict
+        # is aliased into block.input which is stored verbatim in tool_data
+        # (JSONField) and re-sent as Anthropic message history. A raw datetime
+        # breaks both paths. Input path mirrors create_record/update_record,
+        # which is how the streaming loop reaches this function.
+        import json
+        from assistant.models import AssistantSettings
+        from assistant.tools import _apply_reminder_policy
+        from tasks.models import Task
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 1440
+        s.save()
+        data = {
+            "title": "Import CVS documents",
+            "task_type": "one_time",
+            "direction": "personal",
+            "due_date": "2026-04-21",
+            "due_time": "20:00",
+        }
+        _apply_reminder_policy(Task, data)
+        self.assertIn("reminder_date", data)
+        json.dumps(data)
+
+    def test_create_record_dry_run_preview_is_json_safe(self):
+        # The live bug surface: the dry_run=True branch is what the streaming
+        # loop hits first, and assistant_content[N]["input"]["data"] is the
+        # very dict mutated by the policy. Exercise that exact flow.
+        import json
+        from assistant.models import AssistantSettings
+        from assistant.tools import create_record
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 1440
+        s.save()
+        tool_input = {
+            "model": "Task",
+            "data": {
+                "title": "Import CVS documents",
+                "task_type": "one_time",
+                "direction": "personal",
+                "due_date": "2026-04-21",
+                "due_time": "20:00",
+            },
+        }
+        create_record(**tool_input)  # dry_run defaults to True
+        json.dumps(tool_input)
+
+    def test_system_prompt_omits_auto_reminder_when_disabled(self):
+        # When default_reminder_minutes=0 the server writes no reminder, so
+        # the prompt must not claim "the server sets reminder_date to 0
+        # minutes before". The meeting bullet stays — that's unconditional.
+        from assistant.client import _build_system_prompt
+        from assistant.models import AssistantSettings
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 0
+        s.save()
+        stats_text = _build_system_prompt()[1]["text"]
+        self.assertNotIn("0 minutes before the due datetime", stats_text)
+        self.assertNotIn("server sets", stats_text)
+        self.assertIn("task_type='meeting'", stats_text)
+
+    def test_system_prompt_includes_auto_reminder_when_enabled(self):
+        from assistant.client import _build_system_prompt
+        from assistant.models import AssistantSettings
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 1440
+        s.save()
+        stats_text = _build_system_prompt()[1]["text"]
+        self.assertIn("1440 minutes before the due datetime", stats_text)
 
 
 class DrawerViewTests(TestCase):
@@ -1430,3 +1504,51 @@ class M2MTruncationIndicatorTests(TestCase):
         result = serialize_instance(self.stakeholder, expand_relations=False)
         self.assertNotIn("tasks", result)
         self.assertNotIn("tasks_truncated", result)
+
+
+class DateTimeHandlingTests(TestCase):
+    """Regression tests for assistant datetime handling.
+
+    Prevents future-dated records when the LLM emits datetimes parsed from
+    UTC-offset email headers.
+    """
+
+    def test_registry_schema_note_date_is_datetime(self):
+        from notes.models import Note
+        info = {f["name"]: f for f in get_field_info(Note)}
+        self.assertEqual(info["date"]["type"], "datetime")
+
+    def test_registry_schema_task_reminder_date_is_datetime(self):
+        from tasks.models import Task
+        info = {f["name"]: f for f in get_field_info(Task)}
+        self.assertEqual(info["reminder_date"]["type"], "datetime")
+
+    def test_note_stored_correctly_with_offset_tagged_iso_datetime(self):
+        from django.utils import timezone
+        from notes.models import Note
+        from .tools import create_record
+
+        with timezone.override("America/Los_Angeles"):
+            result = create_record("Note", {
+                "title": "Email note",
+                "content": "Body",
+                "date": "2026-04-20T19:27:00-07:00",
+                "note_type": "email",
+            }, dry_run=False)
+            note = Note.objects.get(pk=result["record"]["__pk__"])
+            local = timezone.localtime(note.date)
+
+        self.assertEqual(local.year, 2026)
+        self.assertEqual(local.month, 4)
+        self.assertEqual(local.day, 20)
+        self.assertEqual(local.hour, 19)
+        self.assertEqual(local.minute, 27)
+
+    def test_system_prompt_declares_timezone(self):
+        from .client import _build_system_prompt
+
+        blocks = _build_system_prompt()
+        stats_text = blocks[1]["text"]
+        self.assertIn("Timezone:", stats_text)
+        self.assertIn("America/Los_Angeles", stats_text)
+        self.assertIn("ISO format", stats_text)
