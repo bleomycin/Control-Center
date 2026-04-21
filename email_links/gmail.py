@@ -208,6 +208,8 @@ def get_thread_messages(gmail_id):
     Fetch all messages in a Gmail thread.
     Accepts either a thread ID (new records) or a message ID (legacy records).
     Returns list of dicts: [{from_name, from_email, date, body}], or None.
+    The `date` field is converted from the email's RFC 2822 UTC-offset header
+    to a local-timezone string like "2026-04-20 19:27 PDT".
     """
     service = _get_service()
     if not service:
@@ -229,15 +231,31 @@ def get_thread_messages(gmail_id):
         except Exception:
             logger.exception("Failed to fetch Gmail thread for %s", gmail_id)
             return None
+
+    from email.utils import parsedate_to_datetime
+    from datetime import timezone as _utc_tz
+    from django.utils import timezone as djtz
+
     result = []
     for msg in thread.get("messages", []):
         headers = _msg_headers(msg)
         from_name, from_email = _parse_from(headers.get("From", ""))
         body = _extract_plain_text(msg.get("payload", {}))
+
+        raw_date = headers.get("Date", "")
+        try:
+            dt = parsedate_to_datetime(raw_date)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_utc_tz.utc)
+            local_dt = dt.astimezone(djtz.get_current_timezone())
+            date_str = local_dt.strftime("%Y-%m-%d %H:%M %Z")
+        except (ValueError, TypeError):
+            date_str = raw_date
+
         result.append({
             "from_name": from_name,
             "from_email": from_email,
-            "date": headers.get("Date", ""),
+            "date": date_str,
             "body": body or "(no text content)",
         })
     return result

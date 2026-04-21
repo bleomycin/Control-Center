@@ -640,3 +640,77 @@ class GetLabelsTest(TestCase):
         names = [l["name"] for l in result]
         # System first in defined order, then user alphabetical
         self.assertEqual(names, ["Inbox", "Sent", "Alpha", "Zebra"])
+
+
+class GmailThreadMessagesDateTest(TestCase):
+    """Regression tests for RFC 2822 Date header → local timezone conversion.
+
+    Prevents future-dated notes when an email arrives late evening Pacific
+    (UTC header rolls forward a day).
+    """
+
+    @patch("email_links.gmail._get_service")
+    def test_returns_local_date_string(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().threads().get().execute.return_value = {
+            "messages": [{
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "Alice <alice@example.com>"},
+                        {"name": "Date", "value": "Tue, 21 Apr 2026 02:27:33 +0000"},
+                    ],
+                    "mimeType": "text/plain",
+                    "body": {"data": ""},
+                },
+            }],
+        }
+        with timezone.override("America/Los_Angeles"):
+            messages = gmail.get_thread_messages("thread123")
+        self.assertIsNotNone(messages)
+        self.assertEqual(len(messages), 1)
+        # UTC 2026-04-21 02:27 → Pacific 2026-04-20 19:27 PDT
+        self.assertTrue(
+            messages[0]["date"].startswith("2026-04-20 19:27"),
+            f"Expected Pacific local date, got: {messages[0]['date']}",
+        )
+
+    @patch("email_links.gmail._get_service")
+    def test_handles_unparseable_date_header(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().threads().get().execute.return_value = {
+            "messages": [{
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "Bob <bob@example.com>"},
+                        {"name": "Date", "value": "not a real date"},
+                    ],
+                    "mimeType": "text/plain",
+                    "body": {"data": ""},
+                },
+            }],
+        }
+        messages = gmail.get_thread_messages("thread456")
+        self.assertIsNotNone(messages)
+        # Fall back to the raw header rather than crashing
+        self.assertEqual(messages[0]["date"], "not a real date")
+
+    @patch("email_links.gmail._get_service")
+    def test_handles_missing_date_header(self, mock_get_service):
+        mock_service = MagicMock()
+        mock_get_service.return_value = mock_service
+        mock_service.users().threads().get().execute.return_value = {
+            "messages": [{
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "Carol <carol@example.com>"},
+                    ],
+                    "mimeType": "text/plain",
+                    "body": {"data": ""},
+                },
+            }],
+        }
+        messages = gmail.get_thread_messages("thread789")
+        self.assertIsNotNone(messages)
+        self.assertEqual(messages[0]["date"], "")
