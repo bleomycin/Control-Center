@@ -154,6 +154,9 @@ Eight Django apps + one e2e test package, all relationally linked:
 - **Always work in parallel**: Maximize parallel tool calls and background agents. Run independent operations concurrently (tests + Docker rebuild, multiple file reads, research agents). Ask: "How many workers can I usefully run right now?"
 - For detailed feature-specific patterns (Insurance, Loans, Calendar, Tasks, Notes, etc.), see `.claude/docs/ARCHITECTURE.md`.
 
+## Auto-Loaded Design Context
+- **Sketch findings for control-center** (validated design decisions, CSS patterns, visual direction for the dashboard redesign) → `Skill("sketch-findings-control-center")`. Load this skill before any UI work on `dashboard/templates/dashboard/` — the decisions locked in sketching rounds 1-4 shouldn't be re-litigated during implementation.
+
 ## cmux Browser (Quick Dev Checks)
 
 Use cmux for fast desktop-width visual checks during development. NOT for mobile testing (use iOS Simulator) or automated testing (use Playwright/e2e).

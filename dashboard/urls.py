@@ -5,6 +5,7 @@ app_name = "dashboard"
 
 urlpatterns = [
     path("", views.dashboard, name="index"),
+    path("version/<str:version>/", views.switch_dashboard_version, name="switch_version"),
     path("search/", views.global_search, name="search"),
     path("timeline/", views.activity_timeline, name="timeline"),
     path("calendar/", views.calendar_view, name="calendar"),

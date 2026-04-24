@@ -1,0 +1,12 @@
+{% comment %}Dense row: [stripe] [when] [title/meta] [chip] [action]
+Shared by pipeline, overdue, and monitoring sections.{% endcomment %}
+<a href="{{ row.url }}" class="v2-row no-underline">
+  <div class="v2-row-stripe {{ row.stripe|default:'low' }}"></div>
+  <div class="v2-row-when {% if row.days_late %}overdue{% elif row.time_label == 'Today' %}now{% elif row.date %}{% endif %}">{{ row.when_label|default:row.time_label }}</div>
+  <div class="min-w-0">
+    <div class="text-sm text-gray-100 truncate">{{ row.title }}</div>
+    {% if row.meta %}<div class="text-xs text-gray-500 truncate mt-0.5">{{ row.meta }}</div>{% endif %}
+  </div>
+  <span class="v2-chip v2-{{ row.chip_class }} v2-row-chip-hide-sm">{{ row.chip_label }}</span>
+  <span class="text-xs px-2.5 py-1 rounded-md border border-gray-600 text-gray-400 hover:border-blue-400 hover:text-blue-400 transition-colors">{{ row.action_label|default:"Open" }}</span>
+</a>

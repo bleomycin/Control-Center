@@ -47,7 +47,7 @@ class DashboardUpcomingRemindersTests(PlaywrightTestCase):
 
     def test_panel_shows_upcoming_reminder_task(self):
         """Dashboard Upcoming Reminders panel shows tasks with reminder_date within 7 days."""
-        self.page.goto(self.url("/"))
+        self.page.goto(self.url("/?v=legacy"))
         self.page.wait_for_load_state("networkidle")
 
         # Default viewport (1280x720) is >= lg, so desktop panel is visible
@@ -57,7 +57,7 @@ class DashboardUpcomingRemindersTests(PlaywrightTestCase):
 
     def test_panel_excludes_far_future_reminders(self):
         """Tasks with reminder_date beyond 7 days don't appear in the panel."""
-        self.page.goto(self.url("/"))
+        self.page.goto(self.url("/?v=legacy"))
         self.page.wait_for_load_state("networkidle")
 
         panel = self.page.locator("#reminders-desktop")
@@ -66,7 +66,7 @@ class DashboardUpcomingRemindersTests(PlaywrightTestCase):
 
     def test_panel_excludes_complete_tasks(self):
         """Completed tasks with reminders don't show in the panel."""
-        self.page.goto(self.url("/"))
+        self.page.goto(self.url("/?v=legacy"))
         self.page.wait_for_load_state("networkidle")
 
         panel = self.page.locator("#reminders-desktop")
@@ -75,7 +75,7 @@ class DashboardUpcomingRemindersTests(PlaywrightTestCase):
 
     def test_panel_shows_count_badge(self):
         """The panel header shows a count badge for the number of upcoming reminders."""
-        self.page.goto(self.url("/"))
+        self.page.goto(self.url("/?v=legacy"))
         self.page.wait_for_load_state("networkidle")
 
         badge = self.page.locator("#reminders-desktop .bg-purple-900\\/50.text-purple-300")
@@ -85,7 +85,7 @@ class DashboardUpcomingRemindersTests(PlaywrightTestCase):
     def test_panel_empty_state(self):
         """When no reminders, the panel shows an empty message."""
         Task.objects.all().delete()
-        self.page.goto(self.url("/"))
+        self.page.goto(self.url("/?v=legacy"))
         self.page.wait_for_load_state("networkidle")
 
         empty_msg = self.page.locator("#reminders-desktop >> text=No upcoming reminders")
@@ -348,7 +348,7 @@ class ReminderBadgeMobileTests(PlaywrightTestCase):
 
     def test_dashboard_reminders_panel_on_mobile(self):
         """Dashboard Upcoming Reminders panel renders on mobile near the top."""
-        self.page.goto(self.url("/"))
+        self.page.goto(self.url("/?v=legacy"))
         self.page.wait_for_load_state("networkidle")
 
         # Mobile panel should be visible, desktop panel hidden

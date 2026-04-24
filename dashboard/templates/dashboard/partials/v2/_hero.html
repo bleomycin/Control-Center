@@ -1,0 +1,221 @@
+{% load humanize %}
+{% comment %}Adaptive hero — same shell across 4 states (live / later / open / clear), body content morphs.
+Spec: .claude/skills/sketch-findings-control-center/references/adaptive-hero.md (H pattern + L enrichment).{% endcomment %}
+
+<div class="v2-hero bg-gray-800 border border-gray-700 rounded-xl mb-4 overflow-hidden">
+
+  {# Hero header — label on left, status on right — identical structure across states #}
+  <div class="flex items-center justify-between px-4 py-2.5 border-b border-gray-700 bg-black/20">
+    {% if v2_hero_state == "live" %}
+      <span class="text-xs font-bold uppercase tracking-wider text-gray-300">
+        <span class="text-green-500 mr-1.5">▶</span>Right Now
+      </span>
+      <span class="v2-live-dot text-xs font-semibold text-green-400">Live · {% now "g:i A" %}</span>
+    {% elif v2_hero_state == "later" %}
+      <span class="text-xs font-bold uppercase tracking-wider text-gray-300">
+        <span class="text-blue-400 mr-1.5">◐</span>Up Next Today
+      </span>
+      <span class="text-xs font-medium text-gray-400">{{ v2_next_in_label|default:"Later today" }}</span>
+    {% elif v2_hero_state == "clear" %}
+      <span class="text-xs font-bold uppercase tracking-wider text-gray-300">
+        <span class="text-green-500 mr-1.5">✓</span>All Clear
+      </span>
+      <span class="text-xs font-medium text-gray-400">Nothing pressing · open day</span>
+    {% else %}{# open #}
+      <span class="text-xs font-bold uppercase tracking-wider text-gray-300">
+        <span class="text-red-300 mr-1.5">▼</span>Focus On
+      </span>
+      <span class="text-xs font-medium text-gray-400">Today is open · 0 scheduled</span>
+    {% endif %}
+  </div>
+
+  {# Hero body — always 2-col on desktop; L enrichment packs more into primary on open days #}
+  <div class="v2-hero-body grid gap-0" style="grid-template-columns: 2fr 1fr;">
+
+    {# ─── PRIMARY PANEL ─────────────────────────────────────────────────── #}
+    <div class="v2-hero-primary p-4 sm:p-5 border-r border-gray-700">
+
+      {% if v2_hero_state == "live" and v2_live_item %}
+        {# Live: current meeting/task is happening now #}
+        <div class="text-xs font-bold uppercase tracking-wider text-red-300">
+          ● {{ v2_live_item.time_label }} · now
+        </div>
+        <h2 class="text-xl font-semibold text-white mt-1 mb-1.5 leading-tight">{{ v2_live_item.title }}</h2>
+        {% if v2_live_item.meta %}<div class="text-sm text-gray-400">{{ v2_live_item.meta }}</div>{% endif %}
+        <div class="flex gap-2 mt-3 flex-wrap">
+          {% if v2_live_item.type == "meeting" %}
+          <a href="{% url 'notes:create' %}?task={{ v2_live_item.task.pk }}&title=Meeting%20Notes%3A%20{{ v2_live_item.task.title|urlencode }}&note_type=meeting&next={{ request.path|urlencode }}"
+             class="text-xs px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-400 text-gray-900 font-semibold transition-colors">+ Meeting Notes</a>
+          {% endif %}
+          <a href="{{ v2_live_item.url }}"
+             class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Open →</a>
+        </div>
+
+      {% elif v2_hero_state == "later" and v2_later_items %}
+        {# Later: next scheduled item today #}
+        {% with next_item=v2_later_items.0 %}
+        <div class="text-xs font-bold uppercase tracking-wider text-orange-300">
+          ◐ {{ next_item.time_label }} · {{ v2_next_in_label|default:"later today" }}
+        </div>
+        <h2 class="text-xl font-semibold text-white mt-1 mb-1.5 leading-tight">{{ next_item.title }}</h2>
+        {% if next_item.meta %}<div class="text-sm text-gray-400">{{ next_item.meta }}</div>{% endif %}
+        <div class="flex gap-2 mt-3 flex-wrap">
+          {% if next_item.type == "meeting" %}
+          <a href="{% url 'notes:create' %}?task={{ next_item.task.pk }}&title=Meeting%20Notes%3A%20{{ next_item.task.title|urlencode }}&note_type=meeting&next={{ request.path|urlencode }}"
+             class="text-xs px-3 py-1.5 rounded-md bg-blue-500 hover:bg-blue-400 text-gray-900 font-semibold transition-colors">Prep notes</a>
+          {% endif %}
+          <a href="{{ next_item.url }}"
+             class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Open →</a>
+        </div>
+        {% endwith %}
+
+      {% elif v2_hero_state == "clear" %}
+        {# All clear: suggestions for productive use of open day #}
+        <div class="text-xs font-bold uppercase tracking-wider text-green-500">
+          Nothing overdue · nothing scheduled today
+        </div>
+        <h2 class="text-xl font-semibold text-white mt-1 mb-1.5 leading-tight">You're caught up.</h2>
+        <p class="text-sm text-gray-400">Good time to think ahead — review legal, plan next week, or capture a note.</p>
+        <div class="flex gap-2 mt-3 flex-wrap">
+          <a href="{% url 'legal:list' %}"
+             class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Review legal matters</a>
+          <a href="{% url 'tasks:list' %}"
+             class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Plan next week</a>
+          <a href="{% url 'notes:create' %}?next={{ request.path|urlencode }}"
+             class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Capture a note</a>
+        </div>
+
+      {% else %}
+        {# Open: L enrichment — detail + inline list + actions #}
+        <div class="text-xs font-bold uppercase tracking-wider text-gray-400">
+          Recommended · today is open
+        </div>
+        {% if v2_overdue_count %}
+          <h2 class="text-xl font-semibold text-white mt-1 mb-1.5 leading-tight">
+            Clear the {{ v2_overdue_count }} overdue {% if v2_overdue_count == 1 %}task{% else %}tasks{% endif %}
+          </h2>
+          <p class="text-sm text-gray-400 mb-3 leading-relaxed">
+            {% with first=v2_overdue_rows.0 %}
+              {% if first.task.priority == "critical" or first.task.priority == "high" %}
+              One is {{ first.task.get_priority_display }} priority — {{ first.title|truncatechars:60 }}, {{ first.days_late }} day{{ first.days_late|pluralize }} late.
+              {% endif %}
+            {% endwith %}
+            {% if v2_oldest_overdue_days >= 7 %}
+              Oldest item is {{ v2_oldest_overdue_days }} days stale.
+            {% endif %}
+            {% if v2_pipeline_total == 0 %}
+              No meetings today — this is the highest-leverage use of your time.
+            {% endif %}
+          </p>
+
+          <div class="v2-inline-list mt-3 mb-3">
+            {% for row in v2_overdue_rows|slice:":6" %}
+            <a href="{{ row.url }}" class="v2-ilist-item hover:opacity-80 transition-opacity">
+              <span class="v2-ilist-dot"></span>
+              <span class="text-gray-100 truncate flex-1">{{ row.title|truncatechars:50 }}</span>
+              {% if row.task.priority == "critical" or row.task.priority == "high" %}
+              <span class="v2-chip v2-chip-{{ row.task.priority }} ml-auto">{{ row.chip_label }}</span>
+              {% endif %}
+              <span class="text-xs text-gray-500">{{ row.days_late }}d</span>
+            </a>
+            {% endfor %}
+            {% if v2_overdue_count > 6 %}
+            <div class="text-xs text-gray-500 italic pl-3.5 pt-1">+{{ v2_overdue_count|add:"-6" }} more in Overdue below</div>
+            {% endif %}
+          </div>
+
+          <div class="flex gap-2 mt-3 flex-wrap">
+            <a href="{% url 'tasks:list' %}?status=overdue"
+               class="text-xs px-3 py-1.5 rounded-md bg-red-500 hover:bg-red-400 text-white font-semibold transition-colors">Start triage →</a>
+            <a href="{% url 'tasks:list' %}"
+               class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Open in Tasks →</a>
+          </div>
+        {% else %}
+          {# Open, no overdue — recommend planning #}
+          <h2 class="text-xl font-semibold text-white mt-1 mb-1.5 leading-tight">No meetings today — good deep-work window</h2>
+          <p class="text-sm text-gray-400">Plan next week or review monitoring items below.</p>
+          <div class="flex gap-2 mt-3 flex-wrap">
+            <a href="{% url 'tasks:list' %}"
+               class="text-xs px-3 py-1.5 rounded-md border border-gray-600 text-gray-300 hover:border-blue-400 hover:text-blue-400 transition-colors">Plan tasks →</a>
+          </div>
+        {% endif %}
+      {% endif %}
+
+    </div>{# /v2-hero-primary #}
+
+    {% comment %}Side panel — in live/later states: full today schedule (past items muted, live pulsing,
+    future items normal). In open/clear states: next-scheduled upcoming items.{% endcomment %}
+    <div class="p-4 sm:p-5">
+      {% if v2_today_total_count %}
+        <div class="text-[0.6875rem] font-semibold uppercase tracking-wider text-gray-500 mb-3 flex items-center justify-between">
+          <span>Today's schedule</span>
+          {% if v2_today_total_count %}<span class="text-gray-600 font-normal normal-case tracking-normal">{{ v2_today_future_count }} upcoming{% if v2_today_past_count %} · {{ v2_today_past_count }} past{% endif %}</span>{% endif %}
+        </div>
+        {% for item in v2_today_schedule|slice:":6" %}
+        <a href="{{ item.url }}" class="flex gap-2.5 py-1.5 text-sm border-b border-dashed border-gray-700 last:border-0 hover:opacity-80 {% if item.is_past %}opacity-50{% endif %}">
+          <div class="text-xs {% if item.is_past %}text-gray-500 line-through{% else %}text-gray-300{% endif %} min-w-[3.75rem] pt-0.5">{{ item.time_label }}</div>
+          <div class="min-w-0 flex-1">
+            <div class="{% if item.is_past %}text-gray-400{% else %}text-gray-100{% endif %} truncate">{{ item.title|truncatechars:36 }}</div>
+            {% if item.meta %}<div class="text-xs text-gray-500 truncate mt-0.5">{{ item.meta }}</div>{% endif %}
+          </div>
+          {% if item.type == "meeting" %}<span class="text-[0.6875rem] text-blue-400 uppercase tracking-wider pt-0.5">Mtg</span>{% endif %}
+        </a>
+        {% empty %}
+        <div class="text-xs text-gray-500 italic">Nothing scheduled today</div>
+        {% endfor %}
+        {% if v2_today_total_count > 6 %}
+        <div class="text-xs text-gray-500 italic pt-1.5">+{{ v2_today_total_count|add:"-6" }} more today</div>
+        {% endif %}
+      {% else %}
+        <div class="text-[0.6875rem] font-semibold uppercase tracking-wider text-gray-500 mb-3">Next scheduled</div>
+        {% for item in v2_pipeline_tomorrow|slice:":2" %}
+        <a href="{{ item.url }}" class="flex gap-2.5 py-1.5 text-sm border-b border-dashed border-gray-700 last:border-0 hover:opacity-80">
+          <div class="text-xs text-gray-400 min-w-[4rem] pt-0.5">Tomorrow</div>
+          <div class="min-w-0">
+            <div class="text-gray-100 truncate">{{ item.title|truncatechars:32 }}</div>
+            {% if item.time_label and item.time_label != "—" %}<div class="text-xs text-gray-500 truncate mt-0.5">{{ item.time_label }}</div>{% endif %}
+          </div>
+        </a>
+        {% endfor %}
+        {% for item in v2_pipeline_day_after|slice:":1" %}
+        <a href="{{ item.url }}" class="flex gap-2.5 py-1.5 text-sm border-b border-dashed border-gray-700 last:border-0 hover:opacity-80">
+          <div class="text-xs text-gray-400 min-w-[4rem] pt-0.5">{{ item.date|date:"D" }}</div>
+          <div class="min-w-0">
+            <div class="text-gray-100 truncate">{{ item.title|truncatechars:32 }}</div>
+            {% if item.time_label and item.time_label != "—" %}<div class="text-xs text-gray-500 truncate mt-0.5">{{ item.time_label }}</div>{% endif %}
+          </div>
+        </a>
+        {% endfor %}
+        {% if not v2_pipeline_tomorrow and not v2_pipeline_day_after %}
+        <div class="text-xs text-gray-500 italic">No items in next 48h</div>
+        {% endif %}
+      {% endif %}
+    </div>
+
+  </div>{# /v2-hero-body #}
+
+  {# Context footer band — only on open state, summarizes upcoming #}
+  {% if v2_hero_state == "open" and v2_pipeline_total %}
+  <div class="flex gap-6 px-4 sm:px-5 py-3 border-t border-gray-700 bg-black/10 text-xs text-gray-500 flex-wrap">
+    {% if v2_pipeline_tomorrow %}
+      {% with first=v2_pipeline_tomorrow.0 %}
+      <span><strong class="text-gray-300 font-semibold">Next scheduled:</strong> Tomorrow {% if first.time_label and first.time_label != "—" %}{{ first.time_label }} · {% endif %}{{ first.title|truncatechars:40 }}</span>
+      {% endwith %}
+    {% endif %}
+    {% if v2_pipeline_day_after %}
+      <span class="text-gray-600">│</span>
+      {% with first=v2_pipeline_day_after.0 %}
+      <span><strong class="text-gray-300 font-semibold">Then:</strong> {{ first.date|date:"D" }} {% if first.time_label and first.time_label != "—" %}{{ first.time_label }} · {% endif %}{{ first.title|truncatechars:40 }}</span>
+      {% endwith %}
+    {% endif %}
+    {% if v2_pipeline_rest %}
+      <span class="text-gray-600">│</span>
+      <span><strong class="text-gray-300 font-semibold">Rest of week:</strong> {{ v2_pipeline_rest|length }} item{{ v2_pipeline_rest|length|pluralize }}</span>
+    {% else %}
+      <span class="text-gray-600">│</span>
+      <span><strong class="text-gray-300 font-semibold">Rest of week:</strong> Open</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>{# /v2-hero #}

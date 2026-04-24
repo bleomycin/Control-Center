@@ -46,3 +46,4 @@ static/css/tailwind.css
 
 # Claude Code
 .claude/
+.planning/

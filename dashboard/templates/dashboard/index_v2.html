@@ -1,0 +1,279 @@
+{% extends "base.html" %}
+{% load humanize static choice_labels %}
+{% block title %}Dashboard - Control Center{% endblock %}
+{% block extra_head %}
+<style>
+  /* Skill theme tokens that have no direct Tailwind equivalent — scoped to v2 dashboard only. */
+  .v2 {
+    --v2-critical: #ef4444;
+    --v2-critical-text: #fca5a5;
+    --v2-critical-dim: rgba(127, 29, 29, 0.45);
+    --v2-high: #f97316;
+    --v2-high-text: #fdba74;
+    --v2-medium: #eab308;
+    --v2-medium-text: #fde047;
+    --v2-low: #6b7280;
+    --v2-success: #22c55e;
+    --v2-meeting: #60a5fa;
+    --v2-legal: #c084fc;
+  }
+
+  /* Alert strip — red gradient, mutes green on all-clear */
+  .v2-alert-strip {
+    background: linear-gradient(90deg, rgba(239, 68, 68, 0.18), rgba(239, 68, 68, 0.04));
+    border: 1px solid var(--v2-critical-dim);
+  }
+  .v2-alert-strip.muted {
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.03));
+    border-color: rgba(34, 197, 94, 0.25);
+  }
+
+  /* Hero shell morph animation */
+  .v2-hero { transition: all 300ms ease; }
+
+  /* Pulsing live indicator */
+  .v2-live-dot::before {
+    content: "●"; margin-right: 6px; color: var(--v2-success);
+    animation: v2-pulse 2s infinite;
+  }
+  @keyframes v2-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  /* Dense row with stripe/when/title/chip/action columns */
+  .v2-row {
+    display: grid;
+    grid-template-columns: 3px 80px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #374151;
+    transition: background 120ms ease;
+  }
+  .v2-row:hover { background: #2a3441; }
+  .v2-row:last-child { border-bottom: none; }
+  .v2-row-stripe { align-self: stretch; border-radius: 2px; min-height: 28px; }
+  .v2-row-stripe.critical { background: var(--v2-critical); }
+  .v2-row-stripe.high { background: var(--v2-high); }
+  .v2-row-stripe.medium { background: var(--v2-medium); }
+  .v2-row-stripe.low { background: var(--v2-low); }
+
+  .v2-row-when { font-size: 0.75rem; white-space: nowrap; color: #9ca3af; }
+  .v2-row-when.overdue { color: var(--v2-critical-text); font-weight: 600; }
+  .v2-row-when.soon { color: var(--v2-high-text); }
+  .v2-row-when.now { color: var(--v2-critical-text); font-weight: 700; }
+
+  /* Day band */
+  .v2-day-band {
+    padding: 6px 16px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #6b7280;
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .v2-day-band.tomorrow { color: var(--v2-high-text); }
+  .v2-day-band.overdue { color: var(--v2-critical-text); }
+
+  /* Chip system */
+  .v2-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .v2-chip-critical { background: var(--v2-critical-dim); color: var(--v2-critical-text); }
+  .v2-chip-high { background: rgba(124, 45, 18, 0.45); color: var(--v2-high-text); }
+  .v2-chip-medium { background: rgba(113, 63, 18, 0.4); color: var(--v2-medium-text); }
+  .v2-chip-low { background: #374151; color: #9ca3af; }
+  .v2-chip-meeting { background: rgba(30, 58, 138, 0.5); color: var(--v2-meeting); }
+  .v2-chip-legal { background: rgba(88, 28, 135, 0.5); color: var(--v2-legal); }
+
+  /* Inline list used on open-day hero enrichment */
+  .v2-inline-list {
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 6px;
+    padding: 12px;
+  }
+  .v2-ilist-item {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 0.875rem;
+    padding: 5px 0;
+  }
+  .v2-ilist-item + .v2-ilist-item {
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+  }
+  .v2-ilist-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--v2-critical);
+    flex-shrink: 0;
+  }
+
+  /* Section caret rotation */
+  .v2-section-head .v2-caret { display: inline-block; transition: transform 120ms ease; }
+  .v2-section-head.open .v2-caret { transform: rotate(90deg); }
+
+  /* Empty/faint row */
+  .v2-empty-row {
+    padding: 12px 16px;
+    color: #6b7280;
+    font-size: 0.875rem;
+    font-style: italic;
+  }
+
+  /* Asset footer toggle */
+  .v2-asset-expanded { display: none; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .v2-asset-expanded.open { display: grid; }
+  .v2-asset-footer .v2-caret { transition: transform 120ms ease; }
+  .v2-asset-footer.open .v2-caret { transform: rotate(90deg); }
+
+  /* Responsive: drop the hero 2-col to stack on narrow screens */
+  @media (max-width: 768px) {
+    .v2-hero-body { grid-template-columns: 1fr !important; }
+    .v2-hero-primary { border-right: none !important; border-bottom: 1px solid #374151; }
+    .v2-row { grid-template-columns: 3px 60px 1fr auto; }
+    .v2-row .v2-row-chip-hide-sm { display: none; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="v2">
+
+  {# ─── Header + eject chip ──────────────────────────────────────────────── #}
+  <div class="mb-4 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+      <p class="text-sm text-gray-400 mt-1">{{ today|date:"l, F j, Y" }}</p>
+    </div>
+    <a href="{% url 'dashboard:switch_version' version='legacy' %}"
+       title="Roll back to the previous dashboard"
+       class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-gray-300 bg-gray-800 border border-gray-700 hover:border-gray-500 hover:text-white transition-colors">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+      Classic Dashboard
+    </a>
+  </div>
+
+  {# ─── Liquidity alerts (kept from legacy — external cashflow concern) ──── #}
+  {% include "partials/_alerts.html" %}
+
+  {# ─── Alert strip ─────────────────────────────────────────────────────── #}
+  {% if v2_hero_state == "clear" %}
+  <div class="v2-alert-strip muted rounded-lg px-4 py-2.5 mb-4 flex items-center gap-5 flex-wrap">
+    <div class="flex items-center gap-2">
+      <span class="w-5 h-5 rounded-full bg-green-500 text-white flex items-center justify-center text-xs font-bold">✓</span>
+      <span class="text-sm text-green-300 font-medium">All caught up · 0 overdue · 0 stale</span>
+    </div>
+    <span class="text-xs text-gray-400">Open day — no pending items</span>
+  </div>
+  {% else %}
+  <div class="v2-alert-strip rounded-lg px-4 py-2.5 mb-4 flex items-center gap-5 flex-wrap">
+    {% if v2_overdue_count %}
+    <div class="flex items-center gap-2">
+      <span class="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">{{ v2_overdue_count }}</span>
+      <span class="text-sm text-red-300 font-medium">{% if v2_overdue_count == 1 %}Overdue task{% else %}Overdue tasks{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if v2_risk_property_count %}
+    <div class="flex items-center gap-2">
+      <span class="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">{{ v2_risk_property_count }}</span>
+      <span class="text-sm text-red-300 font-medium">{% if v2_risk_property_count == 1 %}Property at risk{% else %}Properties at risk{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if v2_risk_loan_count %}
+    <div class="flex items-center gap-2">
+      <span class="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">{{ v2_risk_loan_count }}</span>
+      <span class="text-sm text-red-300 font-medium">{% if v2_risk_loan_count == 1 %}Loan at risk{% else %}Loans at risk{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if v2_stale_count %}
+    <div class="flex items-center gap-2">
+      <span class="w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-bold">{{ v2_stale_count }}</span>
+      <span class="text-sm text-red-300 font-medium">Stale {% if v2_stale_count == 1 %}follow-up{% else %}follow-ups{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if v2_overdue_count or v2_risk_property_count or v2_risk_loan_count or v2_stale_count %}
+    <a href="{% url 'tasks:list' %}?status=overdue"
+       class="ml-auto bg-red-500 hover:bg-red-400 text-white text-xs font-semibold px-2.5 py-1 rounded-md transition-colors">
+      Triage now →
+    </a>
+    {% else %}
+    <span class="text-sm text-gray-400">No active alerts</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {# ─── Adaptive hero ────────────────────────────────────────────────────── #}
+  {% include "dashboard/partials/v2/_hero.html" %}
+
+  {# ─── Pipeline section ────────────────────────────────────────────────── #}
+  {% include "dashboard/partials/v2/_pipeline.html" %}
+
+  {# ─── Overdue section (hide entirely on all-clear) ────────────────────── #}
+  {% if v2_overdue_count %}
+  {% include "dashboard/partials/v2/_overdue.html" %}
+  {% endif %}
+
+  {# ─── Monitoring section (legal + risks + checklists — always visible) ── #}
+  {% if v2_monitoring_count %}
+  {% include "dashboard/partials/v2/_monitoring.html" %}
+  {% endif %}
+
+  {# ─── Asset footer (collapsed by default) ─────────────────────────────── #}
+  {% include "dashboard/partials/v2/_asset_footer.html" %}
+
+</div>
+
+<script>
+  // Collapsible section toggle — adds/removes "open" on the header,
+  // toggles a `.hidden` on the body. Keyboard: Enter/Space activates.
+  function _v2ToggleSection(head) {
+    var wasOpen = head.classList.contains('open');
+    head.classList.toggle('open');
+    head.setAttribute('aria-expanded', String(!wasOpen));
+    var body = head.nextElementSibling;
+    if (body) body.classList.toggle('hidden');
+  }
+  document.querySelectorAll('.v2-section-head').forEach(function(head) {
+    head.setAttribute('role', 'button');
+    head.setAttribute('tabindex', '0');
+    head.setAttribute('aria-expanded', head.classList.contains('open') ? 'true' : 'false');
+    head.addEventListener('click', function() { _v2ToggleSection(head); });
+    head.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        _v2ToggleSection(head);
+      }
+    });
+  });
+
+  // Asset footer expand/collapse (click + keyboard)
+  function _v2ToggleAssetFooter(el) {
+    var expanded = document.getElementById('v2-asset-expanded');
+    var wasOpen = el.classList.contains('open');
+    el.classList.toggle('open');
+    el.setAttribute('aria-expanded', String(!wasOpen));
+    if (expanded) expanded.classList.toggle('open');
+  }
+  document.querySelectorAll('.v2-asset-footer').forEach(function(el) {
+    el.setAttribute('role', 'button');
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('aria-expanded', 'false');
+    el.setAttribute('aria-controls', 'v2-asset-expanded');
+    el.addEventListener('click', function() { _v2ToggleAssetFooter(el); });
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        _v2ToggleAssetFooter(el);
+      }
+    });
+  });
+</script>
+<script src="{% static 'js/dismiss-alerts.js' %}"></script>
+{% endblock %}

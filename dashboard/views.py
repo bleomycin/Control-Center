@@ -222,7 +222,547 @@ def dashboard(request):
         "outstanding_checklists": outstanding_checklists,
     }
 
-    return render(request, "dashboard/index.html", context)
+    # Dashboard version toggle — "v2" (new urgency-first redesign) or "legacy".
+    # URL `?v=<version>` overrides + persists. Default: v2.
+    version_override = request.GET.get("v")
+    if version_override in ("v2", "legacy"):
+        request.session["dashboard_version"] = version_override
+    version = request.session.get("dashboard_version", "v2")
+
+    if version == "legacy":
+        return render(request, "dashboard/index.html", context)
+
+    # v2 context enrichment
+    context.update(_build_v2_context(
+        now=now,
+        today=today,
+        overdue_tasks=overdue_tasks,
+        upcoming_meetings=upcoming_meetings,
+        todays_tasks=todays_tasks,
+        upcoming_reminders=upcoming_reminders,
+        stale_followups=stale_followups,
+        at_risk_properties=at_risk_properties,
+        at_risk_loans=at_risk_loans,
+        active_legal_matters=active_legal_matters,
+        outstanding_checklists=outstanding_checklists,
+        property_count=property_count,
+        investment_count=investment_count,
+        active_loan_count=active_loan_count,
+        property_value=total_real_estate,
+        investment_value=total_investments,
+        loan_balance=total_liabilities,
+    ))
+    return render(request, "dashboard/index_v2.html", context)
+
+
+def switch_dashboard_version(request, version):
+    """Persist dashboard version preference in session and return to dashboard."""
+    if version in ("v2", "legacy"):
+        request.session["dashboard_version"] = version
+    return redirect("dashboard:index")
+
+
+def _priority_stripe_class(priority):
+    """Map Task.priority to the skill's urgency stripe class."""
+    if priority == "critical":
+        return "critical"
+    if priority == "high":
+        return "high"
+    if priority == "medium":
+        return "medium"
+    return "low"
+
+
+def _days_late(due_date, today):
+    return (today - due_date).days if due_date else 0
+
+
+def _build_v2_context(*, now, today, overdue_tasks, upcoming_meetings, todays_tasks,
+                     upcoming_reminders, stale_followups, at_risk_properties, at_risk_loans,
+                     active_legal_matters, outstanding_checklists,
+                     property_count, investment_count, active_loan_count,
+                     property_value, investment_value, loan_balance):
+    """Compute the v2 urgency-first dashboard context: hero state, pipeline bands,
+    overdue rows, monitoring rows, and alert strip counts."""
+    tomorrow = today + timedelta(days=1)
+    day_after = today + timedelta(days=2)
+    # End of "this week": day after tomorrow through 6 days from today (inclusive).
+    week_end = today + timedelta(days=6)
+
+    overdue_list = list(overdue_tasks.order_by("due_date"))
+    overdue_count = len(overdue_list)
+    oldest_overdue_days = _days_late(overdue_list[0].due_date, today) if overdue_list else 0
+
+    stale_count = stale_followups.count() if hasattr(stale_followups, "count") else len(list(stale_followups))
+    risk_property_count = at_risk_properties.count()
+    risk_loan_count = at_risk_loans.count()
+    risk_total = risk_property_count + risk_loan_count
+
+    # Lazy imports for cross-app queries used only in v2 enrichment.
+    from assets.models import Loan as _V2Loan
+    from checklists.models import Checklist as _V2Checklist
+    from healthcare.models import Appointment as _V2Appointment
+    from django.db.models import Count, F, Q as _V2Q
+
+    # ─── Today split: live / later ─────────────────────────────────────────────
+    # Dedupe by (source_model, pk) — the same Task can surface through multiple lenses
+    # (due_date=today + reminder_date=today), but should render once.
+    # Prefer the due-time presentation over the reminder-time presentation when both exist.
+    today_items = []  # unified list, each item: dict(when_dt, title, meta, url, type, priority, task)
+    today_seen = set()  # {("task", pk), ("appt", pk), ("loan", pk), ("hearing", pk)}
+
+    for t in upcoming_meetings.filter(due_date=today):
+        key = ("task", t.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        stakeholder = t.related_stakeholders.first()
+        when_dt = timezone.make_aware(dt.combine(t.due_date, t.due_time)) if t.due_time else None
+        today_items.append({
+            "task": t,
+            "when_dt": when_dt,
+            "time_label": t.due_time.strftime("%-I:%M %p") if t.due_time else "All day",
+            "title": t.title,
+            "meta": stakeholder.name if stakeholder else "",
+            "url": t.get_absolute_url(),
+            "type": "meeting",
+            "priority": t.priority,
+        })
+    for t in todays_tasks:
+        key = ("task", t.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        stakeholder = t.related_stakeholders.first() if hasattr(t, "related_stakeholders") else None
+        when_dt = timezone.make_aware(dt.combine(t.due_date, t.due_time)) if t.due_time else None
+        today_items.append({
+            "task": t,
+            "when_dt": when_dt,
+            "time_label": t.due_time.strftime("%-I:%M %p") if t.due_time else "Today",
+            "title": t.title,
+            "meta": stakeholder.name if stakeholder else t.get_direction_display(),
+            "url": t.get_absolute_url(),
+            "type": "task",
+            "priority": t.priority,
+        })
+    for r in upcoming_reminders.filter(reminder_date__date=today):
+        key = ("task", r.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        stakeholder = r.related_stakeholders.first() if hasattr(r, "related_stakeholders") else None
+        today_items.append({
+            "task": r,
+            "when_dt": r.reminder_date,
+            "time_label": timezone.localtime(r.reminder_date).strftime("%-I:%M %p"),
+            "title": r.title,
+            "meta": stakeholder.name if stakeholder else "Reminder",
+            "url": r.get_absolute_url(),
+            "type": "reminder",
+            "priority": r.priority,
+        })
+    # Healthcare appointments due today — SILENT-DROP guard (legacy shows these).
+    for a in _V2Appointment.objects.filter(date=today).exclude(
+        status__in=["completed", "cancelled"]
+    ).select_related("provider"):
+        key = ("appt", a.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        when_dt = timezone.make_aware(dt.combine(a.date, a.time)) if a.time else None
+        provider_name = getattr(a.provider, "name", "") if a.provider_id else ""
+        today_items.append({
+            "task": a,
+            "when_dt": when_dt,
+            "time_label": a.time.strftime("%-I:%M %p") if a.time else "All day",
+            "title": a.title,
+            "meta": provider_name or "Appointment",
+            "url": a.get_absolute_url(),
+            "type": "appointment",
+            "priority": "medium",
+        })
+    # Loan payments due today — SILENT-DROP guard (legacy shows these).
+    for loan in _V2Loan.objects.filter(status="active", next_payment_date=today):
+        key = ("loan", loan.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        today_items.append({
+            "task": loan,
+            "when_dt": None,
+            "time_label": "All day",
+            "title": f"Payment due: {loan.name}",
+            "meta": "Loan payment",
+            "url": loan.get_absolute_url(),
+            "type": "payment",
+            "priority": "high",
+        })
+    # Legal hearings today — SILENT-DROP guard (legacy shows these).
+    for m in active_legal_matters.filter(next_hearing_date=today):
+        key = ("hearing", m.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        today_items.append({
+            "task": m,
+            "when_dt": None,
+            "time_label": "All day",
+            "title": f"Hearing: {m.title}",
+            "meta": m.case_number or "Legal hearing",
+            "url": m.get_absolute_url(),
+            "type": "hearing",
+            "priority": "high",
+        })
+    # Checklists with due_date=today — SILENT-DROP guard.
+    for cl in outstanding_checklists:
+        if getattr(cl, "due_date", None) != today:
+            continue
+        key = ("checklist", cl.pk)
+        if key in today_seen:
+            continue
+        today_seen.add(key)
+        today_items.append({
+            "task": cl,
+            "when_dt": None,
+            "time_label": "All day",
+            "title": f"Checklist: {cl.name}",
+            "meta": f"{cl.done_items}/{cl.total_items}",
+            "url": cl.get_absolute_url(),
+            "type": "checklist",
+            "priority": "medium",
+        })
+    today_items.sort(key=lambda i: i["when_dt"] or now.replace(hour=23, minute=59))
+
+    # Partition today items into past / live / future. "Past" still matters —
+    # the user may need to log notes or mark them done after the fact.
+    live_item = None
+    today_past = []
+    today_future = []
+    for item in today_items:
+        if item["when_dt"]:
+            delta = item["when_dt"] - now
+            if timedelta(minutes=-5) <= delta <= timedelta(minutes=15):
+                if live_item is None:
+                    live_item = item
+                    continue
+            if item["when_dt"] < now:
+                item_copy = dict(item, is_past=True)
+                today_past.append(item_copy)
+            else:
+                today_future.append(dict(item, is_past=False))
+        else:
+            # No time — treat as "later today" (e.g. all-day tasks)
+            today_future.append(dict(item, is_past=False))
+    later_items = today_future
+    # Side-panel unified list: past first (muted), then live, then future.
+    today_schedule = today_past + today_future
+
+    # ─── Hero state ────────────────────────────────────────────────────────────
+    if live_item:
+        hero_state = "live"
+    elif later_items:
+        hero_state = "later"
+    elif overdue_count == 0 and stale_count == 0 and risk_total == 0:
+        hero_state = "clear"
+    else:
+        hero_state = "open"
+
+    # Time-until-next-item label for "later" state
+    next_in_label = ""
+    if later_items and later_items[0]["when_dt"]:
+        delta = later_items[0]["when_dt"] - now
+        hours = int(delta.total_seconds() // 3600)
+        minutes = int((delta.total_seconds() % 3600) // 60)
+        if hours >= 1:
+            next_in_label = f"Next item in {hours}h"
+        elif minutes > 0:
+            next_in_label = f"Next item in {minutes} min"
+        else:
+            next_in_label = "Next item now"
+
+    # ─── Pipeline day bands: Tomorrow / Day After / Rest of Week ──────────────
+    # Pipeline covers ALL time-anchored items in the 7-day horizon: meetings, tasks,
+    # reminder-only tasks (due_date=None but reminder_date set), appointments,
+    # loan payments, legal hearings, and checklists with due_date. Anything with a
+    # specific date in [tomorrow, week_end] surfaces here — never silently dropped.
+    def _pipeline_items_for(date_from, date_to):
+        items = []
+        seen = set()
+
+        def _add(key, row):
+            if key in seen:
+                return
+            seen.add(key)
+            items.append(row)
+
+        # Meetings
+        for t in upcoming_meetings.filter(due_date__gte=date_from, due_date__lte=date_to):
+            stakeholder = t.related_stakeholders.first()
+            _add(("task", t.pk), {
+                "task": t,
+                "date": t.due_date,
+                "sort_time": t.due_time,
+                "time_label": t.due_time.strftime("%-I:%M %p") if t.due_time else "—",
+                "title": t.title,
+                "meta": stakeholder.name if stakeholder else "",
+                "url": t.get_absolute_url(),
+                "type": "meeting",
+                "priority": t.priority,
+                "stripe": _priority_stripe_class(t.priority),
+                "chip_class": "chip-meeting",
+                "chip_label": "Meeting",
+                "action_label": "+ Notes",
+            })
+        # Non-meeting tasks with due_date in range
+        for t in Task.objects.filter(
+            due_date__gte=date_from, due_date__lte=date_to,
+        ).exclude(status="complete").exclude(task_type="meeting").prefetch_related("related_stakeholders"):
+            stakeholder = t.related_stakeholders.first()
+            _add(("task", t.pk), {
+                "task": t,
+                "date": t.due_date,
+                "sort_time": t.due_time,
+                "time_label": t.due_time.strftime("%-I:%M %p") if t.due_time else "—",
+                "title": t.title,
+                "meta": (stakeholder.name if stakeholder else t.get_direction_display()),
+                "url": t.get_absolute_url(),
+                "type": "task",
+                "priority": t.priority,
+                "stripe": _priority_stripe_class(t.priority),
+                "chip_class": "chip-{}".format(t.priority),
+                "chip_label": t.get_priority_display(),
+                "action_label": "Done",
+            })
+        # Reminder-only tasks (due_date=None, reminder firing in range) —
+        # SILENT-DROP guard.
+        for r in Task.objects.filter(
+            due_date__isnull=True,
+            reminder_date__date__gte=date_from,
+            reminder_date__date__lte=date_to,
+            reminder_date__gte=now,
+        ).exclude(status="complete").prefetch_related("related_stakeholders"):
+            stakeholder = r.related_stakeholders.first()
+            local_reminder = timezone.localtime(r.reminder_date)
+            _add(("task", r.pk), {
+                "task": r,
+                "date": local_reminder.date(),
+                "sort_time": local_reminder.time(),
+                "time_label": local_reminder.strftime("%-I:%M %p"),
+                "title": r.title,
+                "meta": stakeholder.name if stakeholder else "Reminder-only",
+                "url": r.get_absolute_url(),
+                "type": "reminder",
+                "priority": r.priority,
+                "stripe": _priority_stripe_class(r.priority),
+                "chip_class": "chip-legal",
+                "chip_label": "Reminder",
+                "action_label": "Open",
+            })
+        # Healthcare appointments — SILENT-DROP guard (legacy deadlines included these).
+        for a in _V2Appointment.objects.filter(
+            date__gte=date_from, date__lte=date_to,
+        ).exclude(status__in=["completed", "cancelled"]).select_related("provider"):
+            provider_name = getattr(a.provider, "name", "") if a.provider_id else ""
+            _add(("appt", a.pk), {
+                "task": a,
+                "date": a.date,
+                "sort_time": a.time,
+                "time_label": a.time.strftime("%-I:%M %p") if a.time else "—",
+                "title": a.title,
+                "meta": provider_name or "Appointment",
+                "url": a.get_absolute_url(),
+                "type": "appointment",
+                "priority": "medium",
+                "stripe": "medium",
+                "chip_class": "chip-meeting",
+                "chip_label": "Appt",
+                "action_label": "View",
+            })
+        # Loan payments due in range — SILENT-DROP guard.
+        for loan in _V2Loan.objects.filter(
+            status="active",
+            next_payment_date__gte=date_from,
+            next_payment_date__lte=date_to,
+        ):
+            _add(("loan", loan.pk), {
+                "task": loan,
+                "date": loan.next_payment_date,
+                "sort_time": None,
+                "time_label": "—",
+                "title": f"Payment: {loan.name}",
+                "meta": "Loan payment",
+                "url": loan.get_absolute_url(),
+                "type": "payment",
+                "priority": "high",
+                "stripe": "critical",
+                "chip_class": "chip-critical",
+                "chip_label": "Payment",
+                "action_label": "View",
+            })
+        # Legal hearings in range — SILENT-DROP guard.
+        for m in active_legal_matters.filter(
+            next_hearing_date__gte=date_from,
+            next_hearing_date__lte=date_to,
+        ):
+            _add(("hearing", m.pk), {
+                "task": m,
+                "date": m.next_hearing_date,
+                "sort_time": None,
+                "time_label": "—",
+                "title": f"Hearing: {m.title}",
+                "meta": m.case_number or "Legal hearing",
+                "url": m.get_absolute_url(),
+                "type": "hearing",
+                "priority": "high",
+                "stripe": "high",
+                "chip_class": "chip-legal",
+                "chip_label": "Hearing",
+                "action_label": "View",
+            })
+        # Checklists with due_date in range — SILENT-DROP guard.
+        for cl in outstanding_checklists:
+            cl_due = getattr(cl, "due_date", None)
+            if cl_due is None or cl_due < date_from or cl_due > date_to:
+                continue
+            _add(("checklist", cl.pk), {
+                "task": cl,
+                "date": cl_due,
+                "sort_time": None,
+                "time_label": "—",
+                "title": f"Checklist: {cl.name}",
+                "meta": f"{cl.done_items}/{cl.total_items}",
+                "url": cl.get_absolute_url(),
+                "type": "checklist",
+                "priority": "medium",
+                "stripe": "medium",
+                "chip_class": "chip-low",
+                "chip_label": "Checklist",
+                "action_label": "Open",
+            })
+        # Sort by (date, all-day-last, actual-time). Using the real `time` object
+        # avoids the 12-hour-string bug where "10:00 AM" sorts before "2:00 AM".
+        items.sort(key=lambda i: (
+            i["date"],
+            i["sort_time"] is None,
+            i["sort_time"] or time(0, 0),
+        ))
+        return items
+
+    pipeline_tomorrow = _pipeline_items_for(tomorrow, tomorrow)
+    pipeline_day_after = _pipeline_items_for(day_after, day_after)
+    pipeline_rest = _pipeline_items_for(day_after + timedelta(days=1), week_end)
+
+    pipeline_total = len(pipeline_tomorrow) + len(pipeline_day_after) + len(pipeline_rest)
+    pipeline_meetings = sum(1 for i in pipeline_tomorrow + pipeline_day_after + pipeline_rest if i["type"] == "meeting")
+    pipeline_other = pipeline_total - pipeline_meetings
+
+    # ─── Overdue rows ──────────────────────────────────────────────────────────
+    overdue_rows = []
+    for t in overdue_list:
+        stakeholder = t.related_stakeholders.first()
+        days_late = _days_late(t.due_date, today)
+        overdue_rows.append({
+            "task": t,
+            "days_late": days_late,
+            "when_label": f"{days_late}d late" if days_late > 0 else "Today",
+            "title": t.title,
+            "meta": (stakeholder.name + " · " if stakeholder else "") + f"due {t.due_date.strftime('%b %-d')}",
+            "url": t.get_absolute_url(),
+            "stripe": _priority_stripe_class(t.priority),
+            "chip_class": "chip-{}".format(t.priority),
+            "chip_label": t.get_priority_display(),
+        })
+
+    # ─── Monitoring rows: legal matters + at-risk assets + checklists ──────────
+    monitoring_rows = []
+    for prop in at_risk_properties:
+        monitoring_rows.append({
+            "url": prop.get_absolute_url(),
+            "when_label": "ongoing",
+            "title": f"{prop.name} — {prop.get_status_display()}",
+            "meta": "Property at risk",
+            "stripe": "medium",
+            "chip_class": "chip-critical",
+            "chip_label": "Risk",
+            "action_label": "View",
+        })
+    for loan in at_risk_loans:
+        monitoring_rows.append({
+            "url": loan.get_absolute_url(),
+            "when_label": "ongoing",
+            "title": f"{loan.name} — {loan.get_status_display()}",
+            "meta": "Loan at risk",
+            "stripe": "medium",
+            "chip_class": "chip-critical",
+            "chip_label": "Risk",
+            "action_label": "View",
+        })
+    for matter in active_legal_matters:
+        matter_type_label = get_choice_label("matter_type", matter.matter_type) or matter.matter_type
+        monitoring_rows.append({
+            "url": matter.get_absolute_url(),
+            "when_label": matter.get_status_display().lower() if matter.status == "active" else "pending",
+            "title": matter.title,
+            "meta": (matter.case_number or matter_type_label or "Legal matter"),
+            "stripe": "low",
+            "chip_class": "chip-legal",
+            "chip_label": "Legal",
+            "action_label": "View",
+        })
+    for cl in outstanding_checklists:
+        cl_due = getattr(cl, "due_date", None)
+        # Skip if already surfaced in the hero (due today) or pipeline
+        # (due within [tomorrow, week_end]). Undated and past-due checklists
+        # still appear here — Monitoring owns them when no other section does.
+        if cl_due is not None and today <= cl_due <= week_end:
+            continue
+        monitoring_rows.append({
+            "url": cl.get_absolute_url(),
+            "when_label": f"{cl.done_items}/{cl.total_items}",
+            "title": cl.name,
+            "meta": f"{cl.remaining} items remaining",
+            "stripe": "low",
+            "chip_class": "chip-low",
+            "chip_label": "Checklist",
+            "action_label": "Open",
+        })
+    monitoring_count = len(monitoring_rows)
+
+    # ─── Net position for asset footer ────────────────────────────────────────
+    net_position = (property_value or 0) + (investment_value or 0) - (loan_balance or 0)
+
+    return {
+        "v2_hero_state": hero_state,
+        "v2_live_item": live_item,
+        "v2_later_items": later_items[:4],
+        "v2_today_schedule": today_schedule,
+        "v2_today_past_count": len(today_past),
+        "v2_today_future_count": len(today_future),
+        "v2_today_total_count": len(today_items),
+        "v2_next_in_label": next_in_label,
+        "v2_overdue_rows": overdue_rows,
+        "v2_overdue_count": overdue_count,
+        "v2_oldest_overdue_days": oldest_overdue_days,
+        "v2_pipeline_tomorrow": pipeline_tomorrow,
+        "v2_pipeline_day_after": pipeline_day_after,
+        "v2_pipeline_rest": pipeline_rest,
+        "v2_pipeline_total": pipeline_total,
+        "v2_pipeline_meetings": pipeline_meetings,
+        "v2_pipeline_other": pipeline_other,
+        "v2_pipeline_day_after_label": day_after.strftime("%a · %b %-d"),
+        "v2_pipeline_rest_label": f"{(day_after + timedelta(days=1)).strftime('%a %b %-d')} – {week_end.strftime('%a %b %-d')}",
+        "v2_tomorrow_label": tomorrow.strftime("%a %b %-d"),
+        "v2_monitoring_rows": monitoring_rows,
+        "v2_monitoring_count": monitoring_count,
+        "v2_risk_property_count": risk_property_count,
+        "v2_risk_loan_count": risk_loan_count,
+        "v2_stale_count": stale_count,
+        "v2_net_position": net_position,
+        "v2_total_asset_count": (property_count or 0) + (investment_count or 0),
+        "v2_active_loan_count": active_loan_count,
+        "v2_property_count": property_count,
+        "v2_investment_count": investment_count,
+    }
 
 
 def _word_q(fields, query):

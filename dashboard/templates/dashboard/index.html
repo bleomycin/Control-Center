@@ -2,9 +2,17 @@
 {% load humanize static %}
 {% block title %}Dashboard - Control Center{% endblock %}
 {% block content %}
-<div class="mb-6">
-    <h1 class="text-2xl font-bold text-white">Dashboard</h1>
-    <p class="text-sm text-gray-400 mt-1">Your command center</p>
+<div class="mb-6 flex items-start justify-between gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+        <p class="text-sm text-gray-400 mt-1">Your command center</p>
+    </div>
+    <a href="{% url 'dashboard:switch_version' version='v2' %}"
+       class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-blue-300 bg-blue-900/30 border border-blue-900/60 hover:bg-blue-900/50 hover:text-blue-200 transition-colors">
+        <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+        Try new Dashboard
+        <span aria-hidden="true">→</span>
+    </a>
 </div>
 
 <!-- Liquidity Alerts (dismissable) -->

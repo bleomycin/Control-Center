@@ -1,0 +1,49 @@
+{% comment %}Pipeline section — day-banded list (Tomorrow / Day After / Rest of Week).
+Spec: .claude/skills/sketch-findings-control-center/references/urgency-and-density.md{% endcomment %}
+<div class="bg-gray-800 border border-gray-700 rounded-lg mb-4 overflow-hidden">
+  <div class="v2-section-head open flex justify-between items-center px-4 py-2.5 border-b border-gray-700 bg-black/20 cursor-pointer hover:bg-black/30">
+    <div class="text-xs font-bold uppercase tracking-wider text-gray-100 flex items-center gap-1.5">
+      <span class="v2-caret text-gray-500 text-[10px]">▶</span>
+      Pipeline · Tomorrow → This Week
+    </div>
+    <div class="text-xs text-gray-500">
+      {% if v2_pipeline_total %}
+        {{ v2_pipeline_meetings }} meeting{{ v2_pipeline_meetings|pluralize }} · {{ v2_pipeline_other }} other
+      {% else %}
+        Open week
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    {# Tomorrow band #}
+    <div class="v2-day-band tomorrow">
+      Tomorrow · {{ v2_tomorrow_label }} · {{ v2_pipeline_tomorrow|length }} item{{ v2_pipeline_tomorrow|length|pluralize }}
+    </div>
+    {% for row in v2_pipeline_tomorrow %}
+      {% include "dashboard/partials/v2/_row.html" %}
+    {% empty %}
+      <div class="v2-empty-row">Nothing scheduled tomorrow</div>
+    {% endfor %}
+
+    {# Day-after band #}
+    <div class="v2-day-band">
+      {{ v2_pipeline_day_after_label }} · {{ v2_pipeline_day_after|length }} item{{ v2_pipeline_day_after|length|pluralize }}
+    </div>
+    {% for row in v2_pipeline_day_after %}
+      {% include "dashboard/partials/v2/_row.html" %}
+    {% empty %}
+      <div class="v2-empty-row">Nothing scheduled that day</div>
+    {% endfor %}
+
+    {# Rest of week band #}
+    <div class="v2-day-band">
+      {{ v2_pipeline_rest_label }} · {{ v2_pipeline_rest|length }} item{{ v2_pipeline_rest|length|pluralize }}
+    </div>
+    {% for row in v2_pipeline_rest %}
+      {% include "dashboard/partials/v2/_row.html" %}
+    {% empty %}
+      <div class="v2-empty-row">Rest of week is open — good window for deep work</div>
+    {% endfor %}
+  </div>
+</div>

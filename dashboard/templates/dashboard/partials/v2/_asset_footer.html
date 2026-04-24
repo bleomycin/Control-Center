@@ -1,0 +1,27 @@
+{% load humanize %}
+{# Asset footer — collapsed by default; click to expand net-position breakdown inline. #}
+<div class="v2-asset-footer mt-5 px-4 py-3 rounded-md border border-gray-700 bg-black/20 hover:bg-gray-800 flex items-center gap-4 cursor-pointer">
+  <span class="v2-caret text-gray-500 text-[10px]">▶</span>
+  <span class="text-xs font-semibold uppercase tracking-wider text-gray-500">Asset Overview</span>
+  <span class="text-xs text-gray-400 hidden sm:inline">Net Position</span>
+  <span class="text-sm text-gray-300 ml-auto">
+    <span class="text-gray-100 font-semibold">${{ v2_net_position|floatformat:0|intcomma }}</span>
+    <span class="hidden sm:inline">across {{ v2_property_count|default:0 }} {{ v2_property_count|pluralize:"property,properties" }},
+    {{ v2_investment_count|default:0 }} investment{{ v2_investment_count|pluralize }},
+    {{ v2_active_loan_count|default:0 }} loan{{ v2_active_loan_count|pluralize }}</span>
+  </span>
+</div>
+<div id="v2-asset-expanded" class="v2-asset-expanded px-4 py-4 border border-t-0 border-gray-700 rounded-b-md bg-gray-800">
+  <a href="{% url 'assets:realestate_list' %}" class="block hover:opacity-80 transition-opacity">
+    <div class="text-[0.6875rem] font-semibold uppercase tracking-wider text-gray-500">Properties ({{ v2_property_count }})</div>
+    <div class="text-lg font-semibold text-green-400 mt-1">${{ property_value|floatformat:0|intcomma }}</div>
+  </a>
+  <a href="{% url 'assets:investment_list' %}" class="block hover:opacity-80 transition-opacity">
+    <div class="text-[0.6875rem] font-semibold uppercase tracking-wider text-gray-500">Investments ({{ v2_investment_count }})</div>
+    <div class="text-lg font-semibold text-purple-400 mt-1">${{ investment_value|floatformat:0|intcomma }}</div>
+  </a>
+  <a href="{% url 'assets:loan_list' %}" class="block hover:opacity-80 transition-opacity">
+    <div class="text-[0.6875rem] font-semibold uppercase tracking-wider text-gray-500">Active Loans ({{ v2_active_loan_count }})</div>
+    <div class="text-lg font-semibold text-orange-400 mt-1">${{ loan_balance|floatformat:0|intcomma }}</div>
+  </a>
+</div>
