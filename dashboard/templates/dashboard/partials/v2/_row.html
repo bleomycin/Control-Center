@@ -1,8 +1,8 @@
-{% comment %}Dense row: [stripe] [when] [title/meta] [chip] [action]
-Shared by pipeline, overdue, and monitoring sections.{% endcomment %}
+{% comment %}Dense row for pipeline section: [stripe] [time] [title/meta] [chip] [action].
+Overdue and monitoring sections render inline (different when-column semantics).{% endcomment %}
 <a href="{{ row.url }}" class="v2-row no-underline">
   <div class="v2-row-stripe {{ row.stripe|default:'low' }}"></div>
-  <div class="v2-row-when {% if row.days_late %}overdue{% elif row.time_label == 'Today' %}now{% elif row.date %}{% endif %}">{{ row.when_label|default:row.time_label }}</div>
+  <div class="v2-row-when">{{ row.time_label }}</div>
   <div class="min-w-0">
     <div class="text-sm text-gray-100 truncate">{{ row.title }}</div>
     {% if row.meta %}<div class="text-xs text-gray-500 truncate mt-0.5">{{ row.meta }}</div>{% endif %}
