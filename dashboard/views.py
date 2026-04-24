@@ -648,12 +648,17 @@ def _build_v2_context(*, now, today, overdue_tasks, upcoming_meetings, todays_ta
         ))
         return items
 
-    pipeline_tomorrow = _pipeline_items_for(tomorrow, tomorrow)
-    pipeline_day_after = _pipeline_items_for(day_after, day_after)
-    pipeline_rest = _pipeline_items_for(day_after + timedelta(days=1), week_end)
+    # One query per item type over the full 7-day horizon, then partition
+    # into day bands in Python. Sort is stable under partitioning because
+    # _pipeline_items_for already orders by (date, all-day-last, time).
+    pipeline_all = _pipeline_items_for(tomorrow, week_end)
+    rest_start = day_after + timedelta(days=1)
+    pipeline_tomorrow = [i for i in pipeline_all if i["date"] == tomorrow]
+    pipeline_day_after = [i for i in pipeline_all if i["date"] == day_after]
+    pipeline_rest = [i for i in pipeline_all if rest_start <= i["date"] <= week_end]
 
-    pipeline_total = len(pipeline_tomorrow) + len(pipeline_day_after) + len(pipeline_rest)
-    pipeline_meetings = sum(1 for i in pipeline_tomorrow + pipeline_day_after + pipeline_rest if i["type"] == "meeting")
+    pipeline_total = len(pipeline_all)
+    pipeline_meetings = sum(1 for i in pipeline_all if i["type"] == "meeting")
     pipeline_other = pipeline_total - pipeline_meetings
 
     # ─── Overdue rows ──────────────────────────────────────────────────────────
