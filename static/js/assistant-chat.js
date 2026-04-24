@@ -14,6 +14,21 @@ if (typeof marked !== 'undefined') {
     marked.setOptions({ breaks: true, gfm: true });
 }
 
+// Mirror of dashboard/templatetags/markdown_filter.py:_APP_PREFIXES /
+// _BARE_APP_HREF. During streaming, markdown is rendered client-side by
+// marked.js — the server-side filter only runs after the stream ends.
+// Apply the same bare-app-path repair here so mid-stream link clicks
+// don't hit /assistant/<prefix>/... 404s.
+var _APP_PREFIXES = [
+    'assets', 'stakeholders', 'legal', 'tasks', 'cashflow', 'notes',
+    'healthcare', 'documents', 'emails', 'checklists', 'assistant',
+    'settings'
+];
+var _BARE_APP_HREF = new RegExp(
+    '(<a\\s[^>]*?\\bhref=")(' + _APP_PREFIXES.join('|') + ')/',
+    'gi'
+);
+
 function escapeHtml(text) {
     var div = document.createElement('div');
     div.textContent = text;
@@ -21,7 +36,7 @@ function escapeHtml(text) {
 }
 
 function renderMarkdown(text) {
-    return marked.parse(text);
+    return marked.parse(text).replace(_BARE_APP_HREF, '$1/$2/');
 }
 
 /**

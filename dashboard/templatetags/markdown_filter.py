@@ -13,6 +13,20 @@ _BLOCK_PATTERNS = re.compile(
     re.MULTILINE,
 )
 
+# Known root-mounted app prefixes from config/urls.py. Used to repair
+# LLM-emitted markdown links that drop the leading slash (e.g.
+# [x](assets/real-estate/1/) → href="assets/real-estate/1/"), which
+# browsers otherwise resolve relative to the current page.
+_APP_PREFIXES = (
+    "assets", "stakeholders", "legal", "tasks", "cashflow", "notes",
+    "healthcare", "documents", "emails", "checklists", "assistant",
+    "settings",
+)
+_BARE_APP_HREF = re.compile(
+    r'(<a\s[^>]*?\bhref=")(' + "|".join(_APP_PREFIXES) + r')/',
+    re.IGNORECASE,
+)
+
 
 @register.filter
 def render_markdown(value):
@@ -27,4 +41,5 @@ def render_markdown(value):
         text,
         extensions=["nl2br", "fenced_code", "tables", "sane_lists"],
     )
+    html = _BARE_APP_HREF.sub(r'\1/\2/', html)
     return mark_safe(html)

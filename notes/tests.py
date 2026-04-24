@@ -380,6 +380,50 @@ class MarkdownRenderTests(TestCase):
         from dashboard.templatetags.markdown_filter import render_markdown
         self.assertEqual(render_markdown(""), "")
 
+    def test_bare_app_href_gets_leading_slash(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        html = render_markdown("[Ascaya](assets/real-estate/124/)")
+        self.assertIn('href="/assets/real-estate/124/"', html)
+        self.assertNotIn('href="assets/real-estate/124/"', html)
+
+    def test_bare_app_href_covers_all_prefixes(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        for prefix in (
+            "assets", "stakeholders", "legal", "tasks", "cashflow", "notes",
+            "healthcare", "documents", "emails", "checklists", "assistant",
+        ):
+            html = render_markdown(f"[x]({prefix}/5/)")
+            self.assertIn(f'href="/{prefix}/5/"', html,
+                          f"prefix {prefix!r} was not rewritten")
+
+    def test_already_rooted_href_is_untouched(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        html = render_markdown("[Thomas](/stakeholders/482/)")
+        self.assertIn('href="/stakeholders/482/"', html)
+
+    def test_external_url_is_untouched(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        html = render_markdown("[Google](https://example.com/assets/1/)")
+        self.assertIn('href="https://example.com/assets/1/"', html)
+
+    def test_mailto_href_is_untouched(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        html = render_markdown("[Email](mailto:foo@example.com)")
+        self.assertIn('href="mailto:foo@example.com"', html)
+
+    def test_anchor_href_is_untouched(self):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        html = render_markdown("[Top](#section)")
+        self.assertIn('href="#section"', html)
+
+    def test_unknown_prefix_href_is_untouched(self):
+        # If a user writes markdown linking to a non-app path, we leave it
+        # alone rather than silently rewrite it. Only known app prefixes
+        # are considered broken-needs-fixing.
+        from dashboard.templatetags.markdown_filter import render_markdown
+        html = render_markdown("[Docs](documentation/intro.md)")
+        self.assertIn('href="documentation/intro.md"', html)
+
     def test_pdf_strips_markdown(self):
         note = Note.objects.create(
             title="PDF MD", content="**bold** and *italic*", date=timezone.now()

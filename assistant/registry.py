@@ -269,12 +269,6 @@ def get_schema_text():
         app_label = model._meta.app_label
         lines.append(f"\n## {app_label}.{name}")
 
-        if hasattr(model, "get_absolute_url"):
-            try:
-                lines.append(f"  URL pattern: /{app_label}/{{pk}}/")
-            except Exception:
-                pass
-
         for fi in get_field_info(model):
             parts = [f"  - {fi['name']}: {fi['type']}"]
             if fi.get("required"):
