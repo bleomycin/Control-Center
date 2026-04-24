@@ -1741,3 +1741,139 @@ class V2ChecklistNoDoubleAppearanceTests(TestCase):
             "Past Due CL", mon,
             "Past-due checklist must continue to render in monitoring"
         )
+
+
+class V2PipelineConsolidationTests(_FixtureMixin, TestCase):
+    """Lock the invariants of the single-fetch pipeline implementation.
+
+    _build_v2_context fetches all pipeline items once over the full 7-day
+    horizon and partitions by date in Python. These tests guard the
+    behaviors that refactor could silently break: no double-counting
+    across bands, header counters reflect reality, intra-band time sort
+    survives partitioning, and every fixture item appears exactly once.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self._time_patcher = _freeze_time(FIXED_NOW)
+        self._time_patcher.start()
+
+    def tearDown(self):
+        self._time_patcher.stop()
+
+    def _context(self):
+        """Drive the real view and return the resolved template context."""
+        from dashboard import views as v
+        from django.shortcuts import render as _real_render
+        captured = {}
+        def _spy(request, template, context):
+            captured["context"] = context
+            return _real_render(request, template, context)
+        orig, v.render = v.render, _spy
+        try:
+            self.client.get("/?v=v2")
+        finally:
+            v.render = orig
+        return captured["context"]
+
+    def test_pipeline_total_equals_sum_of_bands(self):
+        ctx = self._context()
+        total_bands = (
+            len(ctx["v2_pipeline_tomorrow"])
+            + len(ctx["v2_pipeline_day_after"])
+            + len(ctx["v2_pipeline_rest"])
+        )
+        self.assertEqual(
+            ctx["v2_pipeline_total"], total_bands,
+            "v2_pipeline_total must equal the sum of the three bands",
+        )
+
+    def test_pipeline_meetings_plus_other_equals_total(self):
+        ctx = self._context()
+        self.assertEqual(
+            ctx["v2_pipeline_meetings"] + ctx["v2_pipeline_other"],
+            ctx["v2_pipeline_total"],
+            "Meeting + other partition must sum to total",
+        )
+        all_items = (
+            ctx["v2_pipeline_tomorrow"]
+            + ctx["v2_pipeline_day_after"]
+            + ctx["v2_pipeline_rest"]
+        )
+        rendered_meetings = sum(1 for i in all_items if i["type"] == "meeting")
+        self.assertEqual(
+            ctx["v2_pipeline_meetings"], rendered_meetings,
+            "v2_pipeline_meetings must equal rendered meeting rows",
+        )
+
+    def test_no_item_appears_in_multiple_pipeline_bands(self):
+        """Global seen-set must not let the same (type, pk) cross bands."""
+        ctx = self._context()
+
+        def key(i):
+            t = i.get("task")
+            return (i.get("type"), t.__class__.__name__, getattr(t, "pk", None))
+
+        tomorrow_keys = {key(i) for i in ctx["v2_pipeline_tomorrow"]}
+        day_after_keys = {key(i) for i in ctx["v2_pipeline_day_after"]}
+        rest_keys = {key(i) for i in ctx["v2_pipeline_rest"]}
+
+        self.assertFalse(
+            tomorrow_keys & day_after_keys,
+            f"Item(s) in both tomorrow and day-after: {tomorrow_keys & day_after_keys}",
+        )
+        self.assertFalse(
+            tomorrow_keys & rest_keys,
+            f"Item(s) in both tomorrow and rest: {tomorrow_keys & rest_keys}",
+        )
+        self.assertFalse(
+            day_after_keys & rest_keys,
+            f"Item(s) in both day-after and rest: {day_after_keys & rest_keys}",
+        )
+
+    def test_tomorrow_band_sort_order_preserved(self):
+        """Partitioning a globally-sorted list must preserve intra-band order.
+
+        The fixture creates three Tomorrow items at due_time 10:00, 11:00, 12:00.
+        After partition, they must render in that order — not the reverse, not
+        random. Guards against the 12-hour-string sort bug and against
+        partitioning that doesn't preserve stable order.
+        """
+        ctx = self._context()
+        tomorrow = ctx["v2_pipeline_tomorrow"]
+        # Fixture times
+        expected_times = [time(10, 0), time(11, 0), time(12, 0)]
+        actual_times = [i["sort_time"] for i in tomorrow if i["sort_time"] is not None]
+        # Filter to the three fixture items by title
+        fixture_items = [i for i in tomorrow if i["title"].startswith("Tomorrow Item ")]
+        fixture_times = [i["sort_time"] for i in fixture_items]
+        self.assertEqual(
+            fixture_times, expected_times,
+            f"Tomorrow band time order wrong. Got {fixture_times}, expected {expected_times}",
+        )
+
+    def test_every_fixture_pipeline_item_appears_exactly_once(self):
+        """Union of the three bands must equal the full pipeline fixture set,
+        counted with multiplicity — no items dropped, none duplicated."""
+        ctx = self._context()
+        all_items = (
+            ctx["v2_pipeline_tomorrow"]
+            + ctx["v2_pipeline_day_after"]
+            + ctx["v2_pipeline_rest"]
+        )
+        task_pks_in_pipeline = [
+            i["task"].pk for i in all_items
+            if i.get("task") is not None and isinstance(i["task"], Task)
+        ]
+        from collections import Counter
+        cnt = Counter(task_pks_in_pipeline)
+        dupes = {pk: n for pk, n in cnt.items() if n > 1}
+        self.assertFalse(dupes, f"Task(s) appear multiple times in pipeline: {dupes}")
+
+        expected = self.tomorrow_pks | self.day_after_pks | self.rest_of_week_pks
+        rendered = set(task_pks_in_pipeline)
+        self.assertSetEqual(
+            rendered, expected,
+            f"Pipeline task set mismatch. Missing: {expected - rendered}. "
+            f"Unexpected: {rendered - expected}.",
+        )
