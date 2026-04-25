@@ -1634,10 +1634,77 @@ class ReadDocumentToolTests(TestCase):
             result = read_document(id=self.doc_drive.pk)
         self.assertIn("error", result)
 
+    def test_offset_forwarded_to_extract_drive(self):
+        from .tools import read_document
+        fake_result = {
+            "text": "body",
+            "truncated": False,
+            "warning": None,
+            "total_chars": 4,
+            "offset": 1000,
+            "next_offset": None,
+        }
+        with patch("documents.gdrive.is_connected", return_value=True), \
+             patch("documents.extract.extract_text_from_drive",
+                    return_value=fake_result) as mock_extract:
+            read_document(id=self.doc_drive.pk, offset=1000)
+        mock_extract.assert_called_once_with(
+            "drive_id_abc", "application/pdf", offset=1000,
+        )
+
+    def test_truncated_envelope_exposes_next_offset(self):
+        from .tools import read_document
+        fake_result = {
+            "text": "slice body",
+            "truncated": True,
+            "warning": None,
+            "total_chars": 500_000,
+            "offset": 0,
+            "next_offset": 200_000,
+        }
+        with patch("documents.gdrive.is_connected", return_value=True), \
+             patch("documents.extract.extract_text_from_drive",
+                    return_value=fake_result):
+            result = read_document(id=self.doc_drive.pk)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["total_chars"], 500_000)
+        self.assertEqual(result["offset"], 0)
+        self.assertEqual(result["next_offset"], 200_000)
+        self.assertIn("Notice:", result["content"])
+        self.assertIn("200000", result["content"])
+        self.assertIn("NOT read", result["content"])
+
+    def test_final_slice_has_no_next_offset(self):
+        from .tools import read_document
+        fake_result = {
+            "text": "final body",
+            "truncated": False,
+            "warning": None,
+            "total_chars": 500_000,
+            "offset": 400_000,
+            "next_offset": None,
+        }
+        with patch("documents.gdrive.is_connected", return_value=True), \
+             patch("documents.extract.extract_text_from_drive",
+                    return_value=fake_result):
+            result = read_document(id=self.doc_drive.pk, offset=400_000)
+        self.assertFalse(result["truncated"])
+        self.assertNotIn("next_offset", result)
+        self.assertNotIn("Notice:", result["content"])
+
 
 class ReadDocumentToolSummaryTests(TestCase):
     def test_describe_input(self):
         result = _tool_summary("read_document", {"id": 7})
+        self.assertEqual(result, "Document #7")
+
+    def test_describe_input_with_offset(self):
+        result = _tool_summary("read_document", {"id": 7, "offset": 50_000})
+        self.assertIn("Document #7", result)
+        self.assertIn("50000", result)
+
+    def test_describe_input_offset_zero_omitted(self):
+        result = _tool_summary("read_document", {"id": 7, "offset": 0})
         self.assertEqual(result, "Document #7")
 
     def test_tool_definition_registered(self):
@@ -1646,9 +1713,27 @@ class ReadDocumentToolSummaryTests(TestCase):
         self.assertIn("read_document", names)
         self.assertIs(TOOL_HANDLERS["read_document"], read_document)
 
+    def test_tool_definition_exposes_offset_param(self):
+        from .tools import TOOL_DEFINITIONS
+        defn = next(t for t in TOOL_DEFINITIONS if t["name"] == "read_document")
+        self.assertIn("offset", defn["input_schema"]["properties"])
+        self.assertEqual(
+            defn["input_schema"]["properties"]["offset"]["type"], "integer",
+        )
+
     def test_system_prompt_mentions_read_document(self):
         from .client import _build_system_prompt
         blocks = _build_system_prompt()
         prompt_text = " ".join(b["text"] for b in blocks)
         self.assertIn("read_document", prompt_text)
         self.assertIn("Linked documents", prompt_text)
+
+    def test_system_prompt_truncation_guidance(self):
+        from .client import _build_system_prompt
+        blocks = _build_system_prompt()
+        prompt_text = " ".join(b["text"] for b in blocks)
+        # Model must know to react to truncated responses, not silently
+        # hallucinate past the cutoff.
+        self.assertIn("truncated", prompt_text)
+        self.assertIn("next_offset", prompt_text)
+        self.assertIn("NEVER cite", prompt_text)

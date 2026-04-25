@@ -1010,17 +1010,89 @@ class ExtractPlaintextTests(TestCase):
 class ExtractTruncationTests(TestCase):
     def test_long_text_is_truncated_to_max_chars(self):
         from documents import extract
-        big = ("hello " * 20_000).encode()  # 120k chars
+        # Build input strictly larger than MAX_CHARS so the test stays
+        # valid if MAX_CHARS changes in the future.
+        size = extract.MAX_CHARS + 50_000
+        big = ("x" * size).encode()
         result = extract._extract_by_mime(big, "text/plain")
         self.assertTrue(result["truncated"])
-        self.assertLessEqual(len(result["text"]), extract.MAX_CHARS + 100)
+        self.assertLessEqual(len(result["text"]), extract.MAX_CHARS + 200)
         self.assertIn("[truncated", result["text"])
+        self.assertEqual(result["total_chars"], size)
+        self.assertEqual(result["offset"], 0)
+        self.assertEqual(result["next_offset"], extract.MAX_CHARS)
 
     def test_short_text_not_truncated(self):
         from documents import extract
         result = extract._extract_by_mime(b"hello", "text/plain")
         self.assertFalse(result["truncated"])
         self.assertNotIn("[truncated", result["text"])
+        self.assertEqual(result["total_chars"], 5)
+        self.assertEqual(result["offset"], 0)
+        self.assertIsNone(result["next_offset"])
+
+
+class ExtractOffsetTests(TestCase):
+    """Verify offset-based pagination returns the expected slices."""
+
+    def test_offset_returns_slice_starting_at_offset(self):
+        from documents import extract
+        # 3 * MAX_CHARS worth of distinguishable content
+        body = ("A" * extract.MAX_CHARS
+                + "B" * extract.MAX_CHARS
+                + "C" * extract.MAX_CHARS)
+        result = extract._extract_by_mime(body.encode(), "text/plain",
+                                           offset=extract.MAX_CHARS)
+        self.assertTrue(result["truncated"])
+        self.assertTrue(result["text"].startswith("B"))
+        self.assertNotIn("A" * 10, result["text"])
+        self.assertEqual(result["offset"], extract.MAX_CHARS)
+        self.assertEqual(result["next_offset"], 2 * extract.MAX_CHARS)
+
+    def test_offset_at_final_slice_marks_complete(self):
+        from documents import extract
+        body = "A" * extract.MAX_CHARS + "B" * 1000
+        result = extract._extract_by_mime(body.encode(), "text/plain",
+                                           offset=extract.MAX_CHARS)
+        self.assertFalse(result["truncated"])
+        self.assertIsNone(result["next_offset"])
+        self.assertEqual(result["text"], "B" * 1000)
+
+    def test_offset_past_end_returns_warning(self):
+        from documents import extract
+        result = extract._extract_by_mime(b"hello", "text/plain", offset=50_000)
+        self.assertEqual(result["text"], "")
+        self.assertFalse(result["truncated"])
+        self.assertIn("past the end", result["warning"])
+        self.assertIsNone(result["next_offset"])
+
+    def test_negative_offset_clamped_to_zero(self):
+        from documents import extract
+        result = extract._extract_by_mime(b"hello world", "text/plain",
+                                           offset=-50)
+        self.assertEqual(result["offset"], 0)
+        self.assertIn("hello world", result["text"])
+
+    def test_pagination_chain_covers_entire_document(self):
+        from documents import extract
+        total = 3 * extract.MAX_CHARS + 500
+        body = ("z" * total).encode()
+        slices = []
+        offset = 0
+        for _ in range(10):  # safety cap
+            result = extract._extract_by_mime(body, "text/plain", offset=offset)
+            slices.append(result)
+            if not result["truncated"]:
+                break
+            offset = result["next_offset"]
+        # Reassembled slice prefixes (before the truncation marker) should
+        # account for the full document.
+        total_read = sum(
+            min(extract.MAX_CHARS, s["total_chars"] - s["offset"])
+            for s in slices
+        )
+        self.assertEqual(total_read, total)
+        self.assertFalse(slices[-1]["truncated"])
 
 
 class ExtractDriveDispatchTests(TestCase):

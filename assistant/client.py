@@ -190,6 +190,12 @@ Entities may have attached Documents (PDFs, DOCX, XLSX, Google Docs/Sheets/Slide
 When you call get_record on an entity, the response includes a `documents` field listing linked documents as `{id, str}` pairs (where `str` is the document title). To read the actual content, call `read_document(id=DOC_ID)`. Supported formats: PDF, DOCX, XLSX, Google Docs/Sheets/Slides, plain text/CSV/markdown. Other formats and scanned PDFs return an explicit error or warning — when that happens, tell the user directly rather than guessing at the content.
 When the user's question can't be fully answered from record metadata alone and a relevant-looking document is linked, read it. When in doubt, read it — missing buried information is worse than reading an extra document. Batch multiple `read_document` calls in a single iteration when several documents may be relevant (e.g., comparing terms across three insurance policies). Always cite the document by title in your answer so the user knows where the information came from.
 
+**Truncation and pagination.** The `read_document` response includes a `truncated` flag plus `total_chars`, `offset`, and `next_offset`. If `truncated` is true, you only saw characters `offset`–`next_offset` of a `total_chars`-character document — content past the cutoff is NOT in your context. Rules:
+1. Tell the user the document was truncated (e.g., "I read the first ~30 pages of the 50-page agreement").
+2. NEVER cite, quote, paraphrase, or infer section numbers, clause text, exhibit contents, article titles, page numbers, or any specifics from positions past the slice you actually read. Do not fill gaps from training knowledge of how similar documents are typically structured.
+3. If the user's question likely needs content past the cutoff, call `read_document` again with `offset=<next_offset>` to continue reading. You can chain these calls across turns if needed.
+4. If a full read isn't practical (very large document, broad question), tell the user and ask them to narrow the question.
+
 ## Page context hints
 When the user sends a message from the quick assistant drawer, the message may begin with a context hint like `[Context: viewing Stakeholder #482 "Thomas Wright"]`. This tells you what page the user is currently looking at. Use this context to understand what entity they're referring to (e.g., "what tasks does this person have?" means the stakeholder in the context). Do NOT repeat the context hint back to the user — just use it to inform your response.
 
@@ -437,7 +443,11 @@ def _tool_summary(name, tool_input):
     elif name == "read_email":
         return f'EmailLink #{tool_input.get("id", "")}'
     elif name == "read_document":
-        return f'Document #{tool_input.get("id", "")}'
+        s = f'Document #{tool_input.get("id", "")}'
+        offset = tool_input.get("offset")
+        if offset:
+            s += f" (offset {offset})"
+        return s
     return ""
 
 
@@ -803,9 +813,11 @@ def stream_message(session, user_text, mode="fast", effort=""):
                                     last_thinking_keepalive = now
 
                     response = stream.get_final_message()
+                    # MessageStream exposes request_id from response headers;
+                    # the ParsedMessage returned by get_final_message() does not.
+                    req_id = stream.request_id
 
                 # Log request_id and actual model used
-                req_id = getattr(response, '_request_id', None)
                 logger.info(f"OK model={response.model} request_id={req_id}")
 
                 break  # Success — exit retry loop

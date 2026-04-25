@@ -710,8 +710,13 @@ def read_email(id):
     return {"content": "\n".join(parts)}
 
 
-def read_document(id):
-    """Fetch the text content of a linked Document (Drive or local file)."""
+def read_document(id, offset=0):
+    """Fetch the text content of a linked Document (Drive or local file).
+
+    Pass `offset` to resume past a prior truncation cut-off. The returned
+    envelope includes `total_chars`, `offset`, and (when truncated)
+    `next_offset` so the caller can paginate.
+    """
     from documents.models import Document
     from documents import extract, gdrive
 
@@ -724,10 +729,10 @@ def read_document(id):
         if not gdrive.is_connected():
             return {"error": "Google Drive is not connected"}
         result = extract.extract_text_from_drive(
-            doc.gdrive_file_id, doc.gdrive_mime_type,
+            doc.gdrive_file_id, doc.gdrive_mime_type, offset=offset,
         )
     elif doc.file:
-        result = extract.extract_text_from_local(doc.file.path)
+        result = extract.extract_text_from_local(doc.file.path, offset=offset)
     else:
         return {"error": "Document has no file content (no Drive link or local upload)"}
 
@@ -748,13 +753,26 @@ def read_document(id):
         )
     if result.get("warning"):
         parts.append(f"Warning: {result['warning']}")
+    if result.get("truncated"):
+        parts.append(
+            f"Notice: Showing chars {result.get('offset', 0)}–"
+            f"{result.get('next_offset')} of {result.get('total_chars')}. "
+            f"Content past char {result.get('next_offset')} was NOT read. "
+            f"Call read_document again with offset={result.get('next_offset')} to continue."
+        )
     parts.append("")
     parts.append(result.get("text", ""))
 
-    return {
+    envelope = {
         "content": "\n".join(parts),
         "truncated": result.get("truncated", False),
+        "total_chars": result.get("total_chars", 0),
+        "offset": result.get("offset", 0),
     }
+    next_offset = result.get("next_offset")
+    if next_offset is not None:
+        envelope["next_offset"] = next_offset
+    return envelope
 
 
 # Anthropic tool definitions
@@ -906,7 +924,26 @@ TOOL_DEFINITIONS = [
     {
         "name": "read_document",
         "strict": True,
-        "description": "Fetch the full text content of a linked Document. Use when an entity has a `documents` relation containing a record whose title, filename, or category suggests it may answer the user's question. Supports PDF, DOCX, XLSX, Google Docs/Sheets/Slides, and plain text/CSV/markdown. Scanned PDFs and image-only documents return an empty body with a warning — surface that warning to the user verbatim. When in doubt, read the document — missing buried information is worse than reading an extra file.",
+        "description": (
+            "Fetch the text content of a linked Document. Use when an entity has a "
+            "`documents` relation containing a record whose title, filename, or "
+            "category suggests it may answer the user's question. Supports PDF, "
+            "DOCX, XLSX, Google Docs/Sheets/Slides, and plain text/CSV/markdown. "
+            "Scanned PDFs and image-only documents return an empty body with a "
+            "warning — surface that warning to the user verbatim. When in doubt, "
+            "read the document — missing buried information is worse than reading "
+            "an extra file.\n\n"
+            "The response envelope includes `truncated`, `total_chars`, `offset`, "
+            "and (when truncated) `next_offset`. If `truncated` is true, you only "
+            "saw characters `offset`–`next_offset` of a `total_chars`-character "
+            "document — content past the cutoff is NOT in your context. You MUST "
+            "NOT cite, quote, paraphrase, or infer section numbers, clause text, "
+            "exhibit contents, or any specifics from positions past the slice you "
+            "read. If the user's question likely needs later content, re-call "
+            "read_document with `offset=<next_offset>` to continue reading; "
+            "otherwise tell the user the document was truncated and ask them to "
+            "narrow the question."
+        ),
         "input_schema": {
             "type": "object",
             "additionalProperties": False,
@@ -914,6 +951,11 @@ TOOL_DEFINITIONS = [
                 "id": {
                     "type": "integer",
                     "description": "The Document record ID (from search, query, or get_record results).",
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Character offset to start reading from. Omit (or 0) to start at the beginning. Pass the `next_offset` from a prior truncated result to continue reading past the cutoff.",
+                    "default": 0,
                 },
             },
             "required": ["id"],
