@@ -211,3 +211,70 @@ class ChecklistPdfTests(TestCase):
         resp = self.client.get(f"/stakeholders/{s.pk}/pdf/")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp["Content-Type"], "application/pdf")
+
+
+class ReferenceChecklistTests(TestCase):
+    """Reference lists are bullet-style notes that don't surface on the dashboard."""
+
+    def setUp(self):
+        self.client = Client()
+        self.stakeholder = Stakeholder.objects.create(
+            name="Ref Test", entity_type="contact",
+        )
+
+    def test_default_is_not_reference(self):
+        cl = Checklist.objects.create(
+            name="Tracked", related_stakeholder=self.stakeholder,
+        )
+        self.assertFalse(cl.is_reference)
+
+    def test_create_reference_via_form(self):
+        resp = self.client.post(
+            f"/checklists/stakeholder/{self.stakeholder.pk}/add/",
+            {"name": "Contact prefs", "is_reference": "True"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        cl = Checklist.objects.first()
+        self.assertTrue(cl.is_reference)
+
+    def test_create_tracked_via_form(self):
+        resp = self.client.post(
+            f"/checklists/stakeholder/{self.stakeholder.pk}/add/",
+            {"name": "To-do", "is_reference": "False"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        cl = Checklist.objects.first()
+        self.assertFalse(cl.is_reference)
+
+    def test_reference_excluded_from_dashboard_outstanding(self):
+        """Reference checklists with incomplete items must NOT appear on the dashboard."""
+        ref_cl = Checklist.objects.create(
+            name="Reference notes", is_reference=True,
+            related_stakeholder=self.stakeholder,
+        )
+        ChecklistItem.objects.create(checklist=ref_cl, title="Note 1")
+        tracked_cl = Checklist.objects.create(
+            name="Real work", related_stakeholder=self.stakeholder,
+        )
+        ChecklistItem.objects.create(checklist=tracked_cl, title="Do thing")
+
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        # Reference list name must NOT appear on the dashboard
+        self.assertNotContains(resp, "Reference notes")
+        # Tracked list should still appear (depending on dashboard widget visibility)
+        # We don't assert presence — only absence of the reference one is the contract.
+
+    def test_reference_renders_bullets_not_checkboxes(self):
+        cl = Checklist.objects.create(
+            name="Bullet list", is_reference=True,
+            related_stakeholder=self.stakeholder,
+        )
+        ChecklistItem.objects.create(checklist=cl, title="Bullet item")
+        resp = self.client.get(f"/stakeholders/{self.stakeholder.pk}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Bullet item")
+        # REF badge should appear in header
+        self.assertContains(resp, "Reference list")  # title attribute substring
+        # The toggle URL for items must NOT be wired up for reference items
+        self.assertNotContains(resp, f"item_toggle")  # no toggle endpoint linked

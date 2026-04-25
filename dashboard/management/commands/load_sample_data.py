@@ -2223,9 +2223,10 @@ class Command(BaseCommand):
         cl_pks = []
         ci_pks = []
 
-        def _make_checklist(name, due_date=None, **fk_kwargs):
+        def _make_checklist(name, due_date=None, is_reference=False, **fk_kwargs):
             cl = Checklist.objects.create(
-                name=name, due_date=due_date, sort_order=len(cl_pks), **fk_kwargs,
+                name=name, due_date=due_date, is_reference=is_reference,
+                sort_order=len(cl_pks), **fk_kwargs,
             )
             cl_pks.append(cl.pk)
             return cl
@@ -2236,6 +2237,13 @@ class Command(BaseCommand):
                     checklist=cl, title=title, is_completed=completed,
                     sort_order=i,
                     completed_at=now - timezone.timedelta(days=i + 1) if completed else None,
+                )
+                ci_pks.append(item.pk)
+
+        def _make_reference_items(cl, titles):
+            for i, title in enumerate(titles):
+                item = ChecklistItem.objects.create(
+                    checklist=cl, title=title, sort_order=i,
                 )
                 ci_pks.append(item.pk)
 
@@ -2291,6 +2299,34 @@ class Command(BaseCommand):
                 ("Review prior correspondence", True),
                 ("Prepare agenda", False),
                 ("Confirm attendees", False),
+            ])
+
+        # 5. Reference list — stakeholder communication preferences
+        if tom:
+            cl5 = _make_checklist(
+                "Tom's preferred contact channels",
+                is_reference=True,
+                related_stakeholder=tom,
+            )
+            _make_reference_items(cl5, [
+                "Signal — preferred for anything time-sensitive",
+                "Email — Mon–Thu only, never on weekends",
+                "Phone — emergencies only; assistant screens",
+                "Don't CC his EA — wants direct comms only",
+            ])
+
+        # 6. Reference list — property quirks
+        if magnolia:
+            cl6 = _make_checklist(
+                "Property quirks & house rules",
+                is_reference=True,
+                related_property=magnolia,
+            )
+            _make_reference_items(cl6, [
+                "Front gate code rotates monthly — get from PM",
+                "Boiler pilot light blows out in heavy wind",
+                "HOA fines for any visible solar panels facing street",
+                "City inspector visits Q1 each year",
             ])
 
         return {

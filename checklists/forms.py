@@ -7,10 +7,11 @@ from .models import Checklist, ChecklistItem
 class ChecklistForm(TailwindFormMixin, forms.ModelForm):
     class Meta:
         model = Checklist
-        fields = ["name", "due_date"]
+        fields = ["name", "due_date", "is_reference"]
         widgets = {
             "name": forms.TextInput(attrs={"placeholder": "Checklist name..."}),
             "due_date": forms.DateInput(attrs={"type": "date", "title": "Due date (optional)"}),
+            "is_reference": forms.HiddenInput(),
         }
 
 

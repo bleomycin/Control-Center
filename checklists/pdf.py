@@ -13,7 +13,15 @@ def append_checklist_sections(sections, entity_obj, fk_field):
     """
     for cl in Checklist.objects.filter(**{fk_field: entity_obj}).prefetch_related("items"):
         items = cl.items.all()
-        if items:
+        if not items:
+            continue
+        if cl.is_reference:
+            sections.append({
+                "heading": f"Reference: {cl.name}",
+                "type": "text",
+                "content": "<br/>".join(f"&bull;&nbsp; {i.title}" for i in items),
+            })
+        else:
             heading = f"Checklist: {cl.name}"
             if cl.due_date:
                 heading += f" (due {cl.due_date.strftime('%b %d, %Y')})"

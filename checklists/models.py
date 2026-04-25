@@ -30,6 +30,7 @@ class Checklist(models.Model):
     )
 
     due_date = models.DateField(null=True, blank=True)
+    is_reference = models.BooleanField(default=False)
     sort_order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 

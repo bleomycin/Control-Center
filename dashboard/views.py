@@ -170,7 +170,8 @@ def dashboard(request):
     from checklists.models import Checklist as DashChecklist
     from django.db.models import Count, F, Max
     outstanding_checklists = (
-        DashChecklist.objects.annotate(
+        DashChecklist.objects.filter(is_reference=False)
+        .annotate(
             total_items=Count("items"),
             done_items=Count("items", filter=Q(items__is_completed=True)),
             last_activity=Max("items__completed_at"),
@@ -184,7 +185,7 @@ def dashboard(request):
 
     # Checklists in upcoming deadlines
     for cl in DashChecklist.objects.filter(
-        due_date__gte=today, due_date__lte=deadline_horizon,
+        is_reference=False, due_date__gte=today, due_date__lte=deadline_horizon,
     ).annotate(
         total_items=Count("items"),
         done_items=Count("items", filter=Q(items__is_completed=True)),
