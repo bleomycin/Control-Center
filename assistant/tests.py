@@ -1037,10 +1037,13 @@ class ToolDefinitionCacheTests(TestCase):
         # TTL must match system prompt (1h) — tools are processed first in hierarchy
         self.assertEqual(last_tool["cache_control"]["ttl"], "1h")
 
-    def test_last_tool_is_read_email(self):
+    def test_last_tool_is_cache_breakpoint(self):
+        # The last tool definition is the cache breakpoint — anything ahead
+        # of it (the rest of the tools, system prompt fragments) gets cached.
+        # When new tools are added at the end, this name updates.
         from .tools import TOOL_DEFINITIONS
         last_tool = TOOL_DEFINITIONS[-1]
-        self.assertEqual(last_tool["name"], "read_email")
+        self.assertEqual(last_tool["name"], "read_document")
 
     def test_other_tools_no_cache_control(self):
         """Only the last tool should have cache_control."""
@@ -1552,3 +1555,100 @@ class DateTimeHandlingTests(TestCase):
         self.assertIn("Timezone:", stats_text)
         self.assertIn("America/Los_Angeles", stats_text)
         self.assertIn("ISO format", stats_text)
+
+
+# ===========================================================================
+# read_document tool
+# ===========================================================================
+
+
+class ReadDocumentToolTests(TestCase):
+    def setUp(self):
+        from documents.models import Document
+        self.doc_drive = Document.objects.create(
+            title="Oak Ave Lease",
+            category="lease",
+            description="Lease for 1200 Oak Ave.",
+            gdrive_file_id="drive_id_abc",
+            gdrive_url="https://drive.google.com/file/d/drive_id_abc/view",
+            gdrive_mime_type="application/pdf",
+            gdrive_file_name="oak_ave_lease.pdf",
+        )
+        self.doc_no_content = Document.objects.create(
+            title="Metadata Only Document",
+            category="note",
+        )
+
+    def test_404(self):
+        from .tools import read_document
+        result = read_document(id=99999)
+        self.assertIn("error", result)
+        self.assertIn("not found", result["error"])
+
+    def test_no_file_or_drive(self):
+        from .tools import read_document
+        result = read_document(id=self.doc_no_content.pk)
+        self.assertIn("error", result)
+        self.assertIn("no file content", result["error"].lower())
+
+    def test_drive_disconnected(self):
+        from .tools import read_document
+        with patch("documents.gdrive.is_connected", return_value=False):
+            result = read_document(id=self.doc_drive.pk)
+        self.assertIn("error", result)
+        self.assertIn("not connected", result["error"].lower())
+
+    def test_drive_happy_path(self):
+        from .tools import read_document
+        from documents.tests import _build_pdf_bytes
+        pdf_bytes = _build_pdf_bytes([
+            "Tenant: Tom Driscoll",
+            "Monthly rent: $4,250",
+        ])
+        with patch("documents.gdrive.is_connected", return_value=True), \
+             patch("documents.gdrive.download_file_bytes", return_value=pdf_bytes):
+            result = read_document(id=self.doc_drive.pk)
+        self.assertNotIn("error", result)
+        self.assertIn("Title: Oak Ave Lease", result["content"])
+        self.assertIn("Filename: oak_ave_lease.pdf", result["content"])
+        self.assertIn("Category: lease", result["content"])
+        self.assertIn("Tom Driscoll", result["content"])
+        self.assertIn("$4,250", result["content"])
+        self.assertFalse(result["truncated"])
+
+    def test_drive_happy_path_with_warning_for_empty_pdf(self):
+        from .tools import read_document
+        from documents.tests import _build_pdf_bytes
+        empty_pdf = _build_pdf_bytes([" "])
+        with patch("documents.gdrive.is_connected", return_value=True), \
+             patch("documents.gdrive.download_file_bytes", return_value=empty_pdf):
+            result = read_document(id=self.doc_drive.pk)
+        self.assertNotIn("error", result)
+        self.assertIn("Warning:", result["content"])
+        self.assertIn("scanned", result["content"].lower())
+
+    def test_drive_extract_failure_propagates_error(self):
+        from .tools import read_document
+        with patch("documents.gdrive.is_connected", return_value=True), \
+             patch("documents.gdrive.download_file_bytes", return_value=None):
+            result = read_document(id=self.doc_drive.pk)
+        self.assertIn("error", result)
+
+
+class ReadDocumentToolSummaryTests(TestCase):
+    def test_describe_input(self):
+        result = _tool_summary("read_document", {"id": 7})
+        self.assertEqual(result, "Document #7")
+
+    def test_tool_definition_registered(self):
+        from .tools import TOOL_DEFINITIONS, TOOL_HANDLERS, read_document
+        names = {t["name"] for t in TOOL_DEFINITIONS}
+        self.assertIn("read_document", names)
+        self.assertIs(TOOL_HANDLERS["read_document"], read_document)
+
+    def test_system_prompt_mentions_read_document(self):
+        from .client import _build_system_prompt
+        blocks = _build_system_prompt()
+        prompt_text = " ".join(b["text"] for b in blocks)
+        self.assertIn("read_document", prompt_text)
+        self.assertIn("Linked documents", prompt_text)

@@ -710,6 +710,53 @@ def read_email(id):
     return {"content": "\n".join(parts)}
 
 
+def read_document(id):
+    """Fetch the text content of a linked Document (Drive or local file)."""
+    from documents.models import Document
+    from documents import extract, gdrive
+
+    try:
+        doc = Document.objects.get(pk=id)
+    except Document.DoesNotExist:
+        return {"error": f"Document with id={id} not found"}
+
+    if doc.gdrive_file_id:
+        if not gdrive.is_connected():
+            return {"error": "Google Drive is not connected"}
+        result = extract.extract_text_from_drive(
+            doc.gdrive_file_id, doc.gdrive_mime_type,
+        )
+    elif doc.file:
+        result = extract.extract_text_from_local(doc.file.path)
+    else:
+        return {"error": "Document has no file content (no Drive link or local upload)"}
+
+    if "error" in result:
+        return result
+
+    parts = [f"Title: {doc.title}"]
+    if doc.gdrive_file_name:
+        parts.append(f"Filename: {doc.gdrive_file_name}")
+    if doc.category:
+        parts.append(f"Category: {doc.category}")
+    if doc.description:
+        parts.append(f"Description: {doc.description}")
+    entities = doc.linked_entities
+    if entities:
+        parts.append(
+            "Linked to: " + ", ".join(f"{label}: {obj}" for label, obj in entities),
+        )
+    if result.get("warning"):
+        parts.append(f"Warning: {result['warning']}")
+    parts.append("")
+    parts.append(result.get("text", ""))
+
+    return {
+        "content": "\n".join(parts),
+        "truncated": result.get("truncated", False),
+    }
+
+
 # Anthropic tool definitions
 TOOL_DEFINITIONS = [
     {
@@ -855,6 +902,22 @@ TOOL_DEFINITIONS = [
             },
             "required": ["id"],
         },
+    },
+    {
+        "name": "read_document",
+        "strict": True,
+        "description": "Fetch the full text content of a linked Document. Use when an entity has a `documents` relation containing a record whose title, filename, or category suggests it may answer the user's question. Supports PDF, DOCX, XLSX, Google Docs/Sheets/Slides, and plain text/CSV/markdown. Scanned PDFs and image-only documents return an empty body with a warning — surface that warning to the user verbatim. When in doubt, read the document — missing buried information is worse than reading an extra file.",
+        "input_schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "description": "The Document record ID (from search, query, or get_record results).",
+                },
+            },
+            "required": ["id"],
+        },
         "cache_control": {"type": "ephemeral", "ttl": "1h"},
     },
 ]
@@ -870,4 +933,5 @@ TOOL_HANDLERS = {
     "list_models": list_models,
     "summarize": summarize,
     "read_email": read_email,
+    "read_document": read_document,
 }

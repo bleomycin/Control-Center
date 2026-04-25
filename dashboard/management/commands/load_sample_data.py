@@ -2107,8 +2107,16 @@ class Command(BaseCommand):
              "Clean report. No RECs identified. Expired — new assessment needed."),
         ]
 
+        import re
+        gdrive_id_re = re.compile(r"/file/d/([^/]+)/")
+
         for (title, category, dt, exp_date, desc, gdrive_url,
              prop_name, inv_name, pol_name, legal_name, sh_name, notes) in doc_data:
+            file_id = ""
+            if gdrive_url:
+                m = gdrive_id_re.search(gdrive_url)
+                if m:
+                    file_id = m.group(1)
             doc = Document.objects.create(
                 title=title,
                 category=category,
@@ -2116,7 +2124,9 @@ class Command(BaseCommand):
                 expiration_date=exp_date,
                 description=desc,
                 gdrive_url=gdrive_url,
-                gdrive_file_name=title if gdrive_url else "",
+                gdrive_file_id=file_id,
+                gdrive_mime_type="application/pdf" if file_id else "",
+                gdrive_file_name=f"{title}.pdf" if gdrive_url else "",
                 related_property=properties.get(prop_name),
                 related_investment=investments.get(inv_name),
                 related_policy=insurance.get(pol_name),
@@ -2126,9 +2136,57 @@ class Command(BaseCommand):
             )
             doc_pks.append(doc.pk)
 
+        # Local-file Document: a real, readable PDF on disk so the assistant's
+        # read_document tool can be verified end-to-end without Google Drive
+        # being connected. Generated on the fly with reportlab.
+        local_pdf = self._build_sample_pdf_bytes()
+        if local_pdf:
+            from django.core.files.base import ContentFile
+            local_doc = Document(
+                title="Oak Ave Lease Summary (sample)",
+                category="lease",
+                date=today - timedelta(days=30),
+                description="Sample local-file PDF for testing the assistant's read_document tool.",
+                related_property=properties.get("1200 Oak Avenue"),
+                related_stakeholder=stakeholders.get("Tom Driscoll"),
+                notes_text="Local-file demo. The assistant should be able to read this without Drive.",
+            )
+            local_doc.file.save(
+                "oak_ave_lease_summary.pdf",
+                ContentFile(local_pdf),
+                save=True,
+            )
+            doc_pks.append(local_doc.pk)
+
         return {
             "documents.document": doc_pks,
         }
+
+    @staticmethod
+    def _build_sample_pdf_bytes():
+        """Generate a small readable PDF using reportlab (already in deps)."""
+        try:
+            from io import BytesIO
+            from reportlab.lib.pagesizes import letter
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet
+        except ImportError:
+            return None
+        buf = BytesIO()
+        pdf = SimpleDocTemplate(buf, pagesize=letter)
+        styles = getSampleStyleSheet()
+        story = [
+            Paragraph("1200 Oak Avenue — Lease Summary", styles["Title"]),
+            Spacer(1, 12),
+            Paragraph("Tenant: Tom Driscoll", styles["Normal"]),
+            Paragraph("Monthly rent: $4,250", styles["Normal"]),
+            Paragraph("Term: 24 months", styles["Normal"]),
+            Paragraph("Pet policy: Dogs under 30 lbs allowed with $500 deposit.", styles["Normal"]),
+            Paragraph("Late fee: 5% after grace period of 5 days.", styles["Normal"]),
+            Paragraph("Renewal option: Tenant may renew for an additional 12 months at the then-current market rate.", styles["Normal"]),
+        ]
+        pdf.build(story)
+        return buf.getvalue()
 
     # -----------------------------------------------------------------------
     # EMAIL LINKS

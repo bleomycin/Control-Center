@@ -857,3 +857,257 @@ class DocumentFormPickerFieldsTest(TestCase):
         """Form remains valid when no Drive metadata is provided."""
         form = DocumentForm(data={"title": "No Drive Doc"})
         self.assertTrue(form.is_valid())
+
+
+# ===========================================================================
+# Text extraction (extract.py)
+# ===========================================================================
+
+
+def _build_pdf_bytes(paragraphs):
+    """Build a tiny PDF with reportlab for use in tests."""
+    from io import BytesIO
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph
+    from reportlab.lib.styles import getSampleStyleSheet
+    buf = BytesIO()
+    pdf = SimpleDocTemplate(buf, pagesize=letter)
+    styles = getSampleStyleSheet()
+    pdf.build([Paragraph(p, styles["Normal"]) for p in paragraphs])
+    return buf.getvalue()
+
+
+def _build_docx_bytes(paragraphs):
+    from io import BytesIO
+    import docx
+    document = docx.Document()
+    for p in paragraphs:
+        document.add_paragraph(p)
+    buf = BytesIO()
+    document.save(buf)
+    return buf.getvalue()
+
+
+def _build_xlsx_bytes(sheets):
+    """sheets is dict of {sheet_name: [[cell, cell], [cell, cell]]}."""
+    from io import BytesIO
+    from openpyxl import Workbook
+    wb = Workbook()
+    # Workbook ships with one default sheet; replace it
+    default = wb.active
+    wb.remove(default)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(title=name)
+        for row in rows:
+            ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+class ExtractPdfTests(TestCase):
+    def test_extract_pdf_returns_paragraph_text(self):
+        from documents import extract
+        pdf_bytes = _build_pdf_bytes([
+            "Tenant: Tom Driscoll",
+            "Monthly rent: $4,250",
+            "Pet policy: dogs under 30 lbs allowed",
+        ])
+        result = extract._extract_by_mime(pdf_bytes, "application/pdf")
+        self.assertNotIn("error", result)
+        self.assertIn("Tom Driscoll", result["text"])
+        self.assertIn("$4,250", result["text"])
+        self.assertFalse(result["truncated"])
+        self.assertIsNone(result["warning"])
+
+    def test_extract_pdf_empty_returns_warning(self):
+        from documents import extract
+        # Bytes that pypdf can open but with no text content
+        empty_pdf = _build_pdf_bytes([" "])
+        result = extract._extract_by_mime(empty_pdf, "application/pdf")
+        self.assertNotIn("error", result)
+        self.assertEqual(result["text"].strip(), "")
+        self.assertIsNotNone(result["warning"])
+        self.assertIn("scanned", result["warning"].lower())
+
+    def test_extract_pdf_malformed_does_not_crash(self):
+        from documents import extract
+        result = extract._extract_by_mime(b"not a pdf", "application/pdf")
+        self.assertNotIn("error", result)
+        self.assertEqual(result["text"].strip(), "")
+        self.assertIsNotNone(result["warning"])
+
+
+class ExtractDocxTests(TestCase):
+    def test_extract_docx_returns_paragraph_text(self):
+        from documents import extract
+        data = _build_docx_bytes([
+            "Engagement letter for Helen Park",
+            "Hourly rate: $650",
+            "Retainer: $5,000",
+        ])
+        result = extract._extract_by_mime(data, extract.DOCX_MIME)
+        self.assertNotIn("error", result)
+        self.assertIn("Helen Park", result["text"])
+        self.assertIn("$650", result["text"])
+
+
+class ExtractXlsxTests(TestCase):
+    def test_extract_xlsx_emits_sheet_headers_and_rows(self):
+        from documents import extract
+        data = _build_xlsx_bytes({
+            "Capital Calls": [
+                ["Date", "Amount", "Fund"],
+                ["2026-01-15", 50000, "Redwood II"],
+                ["2026-04-15", 75000, "Redwood II"],
+            ],
+            "Distributions": [
+                ["Date", "Amount"],
+                ["2026-03-01", 12000],
+            ],
+        })
+        result = extract._extract_by_mime(data, extract.XLSX_MIME)
+        self.assertNotIn("error", result)
+        self.assertIn("=== Sheet: Capital Calls ===", result["text"])
+        self.assertIn("Redwood II", result["text"])
+        self.assertIn("=== Sheet: Distributions ===", result["text"])
+        self.assertIn("12000", result["text"])
+
+    def test_extract_xlsx_truncates_at_row_cap(self):
+        from documents import extract
+        rows = [["row", i] for i in range(extract.MAX_XLSX_ROWS_PER_SHEET + 50)]
+        data = _build_xlsx_bytes({"Big": rows})
+        result = extract._extract_by_mime(data, extract.XLSX_MIME)
+        self.assertIn("truncated after", result["text"])
+
+
+class ExtractPlaintextTests(TestCase):
+    def test_extract_plaintext(self):
+        from documents import extract
+        result = extract._extract_by_mime(
+            b"line one\nline two\n", "text/plain",
+        )
+        self.assertNotIn("error", result)
+        self.assertIn("line one", result["text"])
+
+    def test_extract_csv(self):
+        from documents import extract
+        result = extract._extract_by_mime(
+            b"name,amount\nTom,4250\n", "text/csv",
+        )
+        self.assertNotIn("error", result)
+        self.assertIn("Tom", result["text"])
+
+    def test_extract_unknown_mime_returns_error(self):
+        from documents import extract
+        result = extract._extract_by_mime(
+            b"\x00\x01\x02", "application/octet-stream",
+        )
+        self.assertIn("error", result)
+        self.assertIn("Unsupported mime type", result["error"])
+
+
+class ExtractTruncationTests(TestCase):
+    def test_long_text_is_truncated_to_max_chars(self):
+        from documents import extract
+        big = ("hello " * 20_000).encode()  # 120k chars
+        result = extract._extract_by_mime(big, "text/plain")
+        self.assertTrue(result["truncated"])
+        self.assertLessEqual(len(result["text"]), extract.MAX_CHARS + 100)
+        self.assertIn("[truncated", result["text"])
+
+    def test_short_text_not_truncated(self):
+        from documents import extract
+        result = extract._extract_by_mime(b"hello", "text/plain")
+        self.assertFalse(result["truncated"])
+        self.assertNotIn("[truncated", result["text"])
+
+
+class ExtractDriveDispatchTests(TestCase):
+    """Verify extract_text_from_drive routes Google-native vs binary correctly."""
+
+    def test_google_doc_routes_to_export(self):
+        from documents import extract
+        with patch("documents.gdrive.export_file_bytes", return_value=b"hello world") as mock_export, \
+             patch("documents.gdrive.download_file_bytes") as mock_download:
+            result = extract.extract_text_from_drive(
+                "fake_id", "application/vnd.google-apps.document",
+            )
+            mock_export.assert_called_once_with("fake_id", "text/plain")
+            mock_download.assert_not_called()
+            self.assertIn("hello world", result["text"])
+
+    def test_google_sheet_exports_as_csv(self):
+        from documents import extract
+        with patch("documents.gdrive.export_file_bytes", return_value=b"a,b\n1,2\n") as mock_export:
+            extract.extract_text_from_drive(
+                "fake_id", "application/vnd.google-apps.spreadsheet",
+            )
+            mock_export.assert_called_once_with("fake_id", "text/csv")
+
+    def test_pdf_routes_to_download(self):
+        from documents import extract
+        pdf_bytes = _build_pdf_bytes(["readable pdf body"])
+        with patch("documents.gdrive.download_file_bytes", return_value=pdf_bytes) as mock_download:
+            result = extract.extract_text_from_drive(
+                "fake_id", "application/pdf",
+            )
+            mock_download.assert_called_once_with("fake_id")
+            self.assertIn("readable pdf body", result["text"])
+
+    def test_export_failure_returns_error(self):
+        from documents import extract
+        with patch("documents.gdrive.export_file_bytes", return_value=None):
+            result = extract.extract_text_from_drive(
+                "fake_id", "application/vnd.google-apps.document",
+            )
+            self.assertIn("error", result)
+
+    def test_download_failure_returns_error(self):
+        from documents import extract
+        with patch("documents.gdrive.download_file_bytes", return_value=None):
+            result = extract.extract_text_from_drive(
+                "fake_id", "application/pdf",
+            )
+            self.assertIn("error", result)
+
+    def test_missing_mime_type_returns_error(self):
+        from documents import extract
+        result = extract.extract_text_from_drive("fake_id", "")
+        self.assertIn("error", result)
+
+
+class ExtractLocalFileTests(TestCase):
+    def test_local_pdf(self):
+        import os
+        import tempfile
+        from documents import extract
+        pdf_bytes = _build_pdf_bytes(["local file body"])
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+            f.write(pdf_bytes)
+            path = f.name
+        try:
+            result = extract.extract_text_from_local(path)
+            self.assertNotIn("error", result)
+            self.assertIn("local file body", result["text"])
+        finally:
+            os.unlink(path)
+
+    def test_local_missing_file(self):
+        from documents import extract
+        result = extract.extract_text_from_local("/nonexistent/path.pdf")
+        self.assertIn("error", result)
+
+    def test_local_unsupported_extension(self):
+        import tempfile
+        from documents import extract
+        with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as f:
+            f.write(b"old word format")
+            path = f.name
+        try:
+            result = extract.extract_text_from_local(path)
+            self.assertIn("error", result)
+            self.assertIn("Unsupported file extension", result["error"])
+        finally:
+            import os
+            os.unlink(path)

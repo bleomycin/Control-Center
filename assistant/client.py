@@ -185,6 +185,11 @@ When you call get_record on an entity, the response includes an `email_links` fi
 When answering a query and the record data alone doesn't have the answer, fetch email content: `read_email(id=EMAILLINK_ID)`. When in doubt about whether an email is relevant, read it — missing buried information is worse than reading an extra email.
 This is especially important when the user asks general questions — the answer may be buried in a linked email even if the user doesn't mention emails.
 
+## Linked documents
+Entities may have attached Documents (PDFs, DOCX, XLSX, Google Docs/Sheets/Slides, etc.) — closing statements, appraisals, leases, insurance policies, capital call schedules, and so on. The `Document` record stores metadata (title, filename, category, mime type, Drive link or local file) — NOT the file contents.
+When you call get_record on an entity, the response includes a `documents` field listing linked documents as `{id, str}` pairs (where `str` is the document title). To read the actual content, call `read_document(id=DOC_ID)`. Supported formats: PDF, DOCX, XLSX, Google Docs/Sheets/Slides, plain text/CSV/markdown. Other formats and scanned PDFs return an explicit error or warning — when that happens, tell the user directly rather than guessing at the content.
+When the user's question can't be fully answered from record metadata alone and a relevant-looking document is linked, read it. When in doubt, read it — missing buried information is worse than reading an extra document. Batch multiple `read_document` calls in a single iteration when several documents may be relevant (e.g., comparing terms across three insurance policies). Always cite the document by title in your answer so the user knows where the information came from.
+
 ## Page context hints
 When the user sends a message from the quick assistant drawer, the message may begin with a context hint like `[Context: viewing Stakeholder #482 "Thomas Wright"]`. This tells you what page the user is currently looking at. Use this context to understand what entity they're referring to (e.g., "what tasks does this person have?" means the stakeholder in the context). Do NOT repeat the context hint back to the user — just use it to inform your response.
 
@@ -431,6 +436,8 @@ def _tool_summary(name, tool_input):
         return f'{tool_input.get("model", "")} #{tool_input.get("id", "")}'
     elif name == "read_email":
         return f'EmailLink #{tool_input.get("id", "")}'
+    elif name == "read_document":
+        return f'Document #{tool_input.get("id", "")}'
     return ""
 
 

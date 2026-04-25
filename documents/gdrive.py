@@ -272,6 +272,40 @@ def list_folder_contents(folder_id, page_size=100):
         return None
 
 
+def download_file_bytes(file_id):
+    """
+    Download the raw bytes of a Drive file via files().get_media().
+    Use for binary formats (PDF, DOCX, XLSX, etc.) — not Google-native types.
+    Returns bytes on success, None on failure.
+    """
+    service = get_service()
+    if not service:
+        return None
+    try:
+        return service.files().get_media(fileId=file_id).execute()
+    except Exception:
+        logger.exception("Failed to download Drive file bytes for %s", file_id)
+        return None
+
+
+def export_file_bytes(file_id, export_mime):
+    """
+    Export a Google-native file (Doc, Sheet, Slides) to the given mime type.
+    Returns bytes on success, None on failure. The export mime must be one
+    Google supports for the source type — text/plain, text/csv, application/pdf, etc.
+    """
+    service = get_service()
+    if not service:
+        return None
+    try:
+        return service.files().export(fileId=file_id, mimeType=export_mime).execute()
+    except Exception:
+        logger.exception(
+            "Failed to export Drive file %s as %s", file_id, export_mime,
+        )
+        return None
+
+
 def get_picker_access_token():
     """
     Return a fresh access token string for use with the Google Picker widget.
