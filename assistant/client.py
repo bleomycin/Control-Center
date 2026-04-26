@@ -47,6 +47,49 @@ MODE_CONFIGS = {
     },
 }
 
+# Tools that are conditionally registered — only included in the active tools
+# array when their trigger marker is present in the most recent user message.
+# This keeps the toolset byte-identical to pre-feature behavior for messages
+# without the relevant attachment.
+_GATED_TOOL_NAMES = {"bulk_link_drive_files"}
+
+
+def _get_active_tools(messages):
+    """Return TOOL_DEFINITIONS, with marker-gated tools included only when
+    their trigger marker is present in the most recent USER message.
+
+    Currently gated:
+      - bulk_link_drive_files: included only when [AttachedDriveFiles] is
+        present in the most recent user message. Keeps the toolset
+        byte-identical to pre-feature behavior for messages without Drive
+        attachments.
+    """
+    last_user_text = ""
+    for m in reversed(messages or []):
+        if m.get("role") == "user":
+            content = m.get("content", "")
+            if isinstance(content, str):
+                last_user_text = content
+            elif isinstance(content, list):
+                # Anthropic content blocks: extract concatenated text. Skip
+                # tool_result blocks (they're system-generated, not user input).
+                last_user_text = "".join(
+                    blk.get("text", "")
+                    for blk in content
+                    if isinstance(blk, dict) and blk.get("type") == "text"
+                )
+            break
+
+    drive_marker_present = "[AttachedDriveFiles]" in last_user_text
+
+    active = []
+    for tool in TOOL_DEFINITIONS:
+        if tool["name"] in _GATED_TOOL_NAMES and not drive_marker_present:
+            continue
+        active.append(tool)
+    return active
+
+
 SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a personal management system. You help the user manage their stakeholders, legal matters, assets, tasks, notes, cash flow, healthcare records, documents, and checklists.
 
 ## Your capabilities
@@ -594,7 +637,7 @@ def send_message(session, user_text, mode="fast", effort=""):
                 model=model_name,
                 max_tokens=max_tokens,
                 system=system_prompt,
-                tools=TOOL_DEFINITIONS,
+                tools=_get_active_tools(api_messages),
                 messages=api_messages,
             )
             if "thinking" in mode_config:
@@ -786,7 +829,7 @@ def stream_message(session, user_text, mode="fast", effort=""):
                     model=model_name,
                     max_tokens=max_tokens,
                     system=system_prompt,
-                    tools=TOOL_DEFINITIONS,
+                    tools=_get_active_tools(api_messages),
                     messages=api_messages,
                 )
                 if "thinking" in mode_config:
