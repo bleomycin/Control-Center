@@ -1812,7 +1812,7 @@ class ConditionalToolRegistrationTest(TestCase):
 
     def test_marker_in_assistant_message_does_not_include_bulk_link(self):
         """Even if the assistant quotes the marker, it should NOT trigger
-        registration — only the most recent user message counts."""
+        registration — only user-authored messages are inspected."""
         from assistant.client import _get_active_tools
         msgs = [
             {"role": "user", "content": "tell me about email markers"},
@@ -1832,17 +1832,19 @@ class ConditionalToolRegistrationTest(TestCase):
         names = [t["name"] for t in _get_active_tools(msgs)]
         self.assertIn("bulk_link_drive_files", names)
 
-    def test_only_most_recent_user_message_is_inspected(self):
-        """An older user message containing the marker shouldn't trigger
-        registration — only the most recent user message counts."""
+    def test_marker_in_earlier_user_message_keeps_tool_active(self):
+        """The dry_run-first workflow needs the gated tool to remain active
+        across the user's confirmation turn (which has no marker). The helper
+        scans the full user-message history so bulk_link_drive_files stays
+        reachable for the dry_run=False execute call."""
         from assistant.client import _get_active_tools
         msgs = [
-            {"role": "user", "content": "[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nold"},
-            {"role": "assistant", "content": "ok"},
-            {"role": "user", "content": "different question"},
+            {"role": "user", "content": "[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nattach these to the Smith property"},
+            {"role": "assistant", "content": "preview: 2 files would be linked"},
+            {"role": "user", "content": "yes confirm"},
         ]
         names = [t["name"] for t in _get_active_tools(msgs)]
-        self.assertNotIn("bulk_link_drive_files", names)
+        self.assertIn("bulk_link_drive_files", names)
 
     def test_no_marker_tools_array_byte_identical_to_pre_feature(self):
         """Snapshot test: the tools array sent to Anthropic for messages without

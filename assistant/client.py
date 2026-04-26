@@ -47,40 +47,48 @@ MODE_CONFIGS = {
     },
 }
 
-# Tools that are conditionally registered — only included in the active tools
-# array when their trigger marker is present in the most recent user message.
-# This keeps the toolset byte-identical to pre-feature behavior for messages
-# without the relevant attachment.
+# Tools that are conditionally registered — included in the active tools
+# array when their trigger marker is present anywhere in the conversation's
+# user-authored free text. Keeps the toolset byte-identical to pre-feature
+# behavior for sessions that never reference the relevant attachment.
 _GATED_TOOL_NAMES = {"bulk_link_drive_files"}
 
 
 def _get_active_tools(messages):
-    """Return TOOL_DEFINITIONS, with marker-gated tools included only when
-    their trigger marker is present in the most recent USER message.
+    """Return TOOL_DEFINITIONS, with marker-gated tools included when their
+    trigger marker appears anywhere in the conversation's user-authored text.
+
+    Walking the full user-message history (not just the most recent one) is
+    required so the gated tool stays reachable on follow-up turns — e.g. after
+    the user types "yes confirm" in a separate turn, the dry_run=False execute
+    step must still see bulk_link_drive_files in the active tool set.
+
+    User messages whose content is purely tool_result blocks (Anthropic's
+    tool-use protocol writes those as role=user) contribute no text and are
+    skipped naturally by the text-block extraction.
 
     Currently gated:
-      - bulk_link_drive_files: included only when [AttachedDriveFiles] is
-        present in the most recent user message. Keeps the toolset
-        byte-identical to pre-feature behavior for messages without Drive
-        attachments.
+      - bulk_link_drive_files: included while [AttachedDriveFiles] appears in
+        any prior user message of the active conversation.
     """
-    last_user_text = ""
-    for m in reversed(messages or []):
-        if m.get("role") == "user":
-            content = m.get("content", "")
-            if isinstance(content, str):
-                last_user_text = content
-            elif isinstance(content, list):
-                # Anthropic content blocks: extract concatenated text. Skip
-                # tool_result blocks (they're system-generated, not user input).
-                last_user_text = "".join(
-                    blk.get("text", "")
-                    for blk in content
-                    if isinstance(blk, dict) and blk.get("type") == "text"
-                )
+    drive_marker_present = False
+    for m in messages or []:
+        if m.get("role") != "user":
+            continue
+        content = m.get("content", "")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = "".join(
+                blk.get("text", "")
+                for blk in content
+                if isinstance(blk, dict) and blk.get("type") == "text"
+            )
+        else:
+            text = ""
+        if "[AttachedDriveFiles]" in text:
+            drive_marker_present = True
             break
-
-    drive_marker_present = "[AttachedDriveFiles]" in last_user_text
 
     active = []
     for tool in TOOL_DEFINITIONS:
