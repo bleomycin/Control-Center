@@ -425,13 +425,20 @@ def bulk_create_and_link(request, entity_type, pk):
     POST body (JSON): {"files": [{"id": "...", "name": "...", "mimeType": "...", "url": "..."}, ...]}
     Returns the rendered _document_list_section.html partial (HTMX swap target).
     Dedupes against existing Documents already linked to this entity by gdrive_file_id.
+
+    Thin wrapper around `documents.services.bulk_link_drive_files` — all the
+    Document creation + linking logic lives in the service so the assistant
+    tool can call it directly without an HTTP round-trip.
     """
     import json
     from django.apps import apps
 
+    from .services import bulk_link_drive_files as service_bulk_link
+
     if entity_type not in ENTITY_CONFIG:
         return JsonResponse({"error": "Unknown entity_type"}, status=400)
 
+    # Resolve the entity here so we can render the HTMX partial below.
     app_model, fk_field = ENTITY_CONFIG[entity_type]
     Model = apps.get_model(app_model)
     entity = get_object_or_404(Model, pk=pk)
@@ -445,35 +452,18 @@ def bulk_create_and_link(request, entity_type, pk):
     if not isinstance(files, list):
         return JsonResponse({"error": "files must be a list"}, status=400)
 
-    existing_ids = set(
-        Document.objects
-        .filter(**{fk_field: entity})
-        .exclude(gdrive_file_id="")
-        .values_list("gdrive_file_id", flat=True)
-    )
-
-    created = 0
-    for f in files:
-        if not isinstance(f, dict):
-            continue
-        file_id = (f.get("id") or "").strip()
-        if not file_id or file_id in existing_ids:
-            continue
-        name = (f.get("name") or "").strip()
-        title = name.rsplit(".", 1)[0] if "." in name else name
-        url = (f.get("url") or "").strip()
-        if not url and file_id:
-            url = f"https://drive.google.com/file/d/{file_id}/view"
-        Document.objects.create(
-            title=title or "Untitled",
-            gdrive_file_id=file_id,
-            gdrive_url=url,
-            gdrive_file_name=name,
-            gdrive_mime_type=(f.get("mimeType") or "").strip(),
-            **{fk_field: entity},
+    # Empty list is a valid request that creates nothing — preserve the
+    # existing endpoint's quietly-do-nothing behavior so HTMX still renders
+    # the (unchanged) list partial.
+    if files:
+        result = service_bulk_link(
+            entity_type=entity_type,
+            entity_id=pk,
+            files=files,
+            dry_run=False,
         )
-        existing_ids.add(file_id)
-        created += 1
+        if "error" in result:
+            return JsonResponse({"error": result["error"]}, status=400)
 
     unlink_url_name = f"documents:{entity_type}_document_unlink"
     return render(
