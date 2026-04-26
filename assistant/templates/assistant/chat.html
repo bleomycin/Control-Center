@@ -209,11 +209,31 @@
             </div>
             {% endif %}
             <form id="chat-form" class="flex gap-2">
-                {% if gmail_available %}
-                <button type="button" onclick="toggleEmailPicker()" id="attach-email-btn" title="Attach email"
-                        class="text-gray-400 hover:text-green-400 shrink-0 self-end p-2 -ml-1 transition-colors">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                </button>
+                {% if gmail_available or drive_connected %}
+                <div class="relative shrink-0 self-end" id="attach-menu-wrap">
+                    <button type="button" onclick="toggleAttachMenu()" id="attach-menu-btn" title="Attach"
+                            class="text-gray-400 hover:text-gray-200 p-2 -ml-1 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                    </button>
+                    <div id="attach-menu-popover" class="hidden absolute bottom-full mb-1 left-0 z-50 bg-gray-800 border border-gray-600 rounded-md shadow-lg py-1 min-w-[10rem]">
+                        {% if gmail_available %}
+                        <button type="button" onclick="openEmailFromMenu()"
+                                class="w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                            Email
+                        </button>
+                        {% endif %}
+                        {% if drive_connected %}
+                        <button type="button" onclick="openDriveFromMenu()"
+                                class="w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700 flex items-center gap-2">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                            Drive files
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
                 {% endif %}
                 <textarea id="chat-input" name="message"
                           rows="1"
@@ -231,6 +251,25 @@
         </div>
     </div>
 </div>
+
+{% if drive_connected %}
+{# Hidden trigger button — gdrive-browser.js auto-wires .gdrive-bulk-picker-btn on DOMContentLoaded.
+   We open() it programmatically from openDriveFromMenu(). The data-callback hook routes the picked
+   files to our JS instead of the standard POST/swap flow used by entity-attach buttons. #}
+<button type="button"
+        id="chat-drive-trigger"
+        class="gdrive-bulk-picker-btn hidden"
+        data-bookmarks-url="{% url 'documents:gdrive_bookmarks_list' %}"
+        data-bookmark-create="{% url 'documents:gdrive_bookmark_create' %}"
+        data-folder-url="{% url 'documents:gdrive_folder_contents' %}"
+        data-search-url="{% url 'documents:gdrive_search' %}"
+        data-path-url="{% url 'documents:gdrive_resolve_folder_path' %}"
+        data-callback="_onDriveFilesPicked"
+        aria-hidden="true"
+        tabindex="-1"></button>
+{% include "documents/partials/_drive_browser_modal.html" %}
+<script src="{% static 'js/gdrive-browser.js' %}?v=2"></script>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -238,6 +277,37 @@
 var SESSION_PK = {{ session.pk }};
 var CSRF_TOKEN = CSRF_TOKEN_GLOBAL;
 var messageList = document.getElementById('message-list');
+
+// --- Attach menu (+ icon left of the textarea) ---
+function toggleAttachMenu() {
+    var pop = document.getElementById('attach-menu-popover');
+    if (!pop) return;
+    pop.classList.toggle('hidden');
+}
+function closeAttachMenu() {
+    var pop = document.getElementById('attach-menu-popover');
+    if (pop) pop.classList.add('hidden');
+}
+function openEmailFromMenu() {
+    closeAttachMenu();
+    if (typeof toggleEmailPicker === 'function') toggleEmailPicker();
+}
+function openDriveFromMenu() {
+    closeAttachMenu();
+    // gdrive-browser.js wires `.gdrive-bulk-picker-btn` clicks at DOMContentLoaded.
+    // Synthesizing a click on the hidden trigger opens the modal with our data-* config,
+    // including data-callback="_onDriveFilesPicked" so the Link button hands files to our state.
+    var trigger = document.getElementById('chat-drive-trigger');
+    if (trigger) {
+        trigger.click();
+    } else {
+        console.error('Drive trigger not found — drive_connected may be false.');
+    }
+}
+// Close popover on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#attach-menu-wrap')) closeAttachMenu();
+});
 
 // Mode toggle for smart modes
 var MODE_STYLES = {
@@ -386,8 +456,8 @@ function attachGmailThread(threadId, subject, fromName, fromEmail, date, message
             };
             subjectEl.textContent = subject || '(no subject)';
             countEl.textContent = messageCount > 1 ? '(' + messageCount + ' msgs)' : '';
-            // Highlight attach button
-            var btn = document.getElementById('attach-email-btn');
+            // Highlight attach menu button to indicate an email is attached
+            var btn = document.getElementById('attach-menu-btn');
             if (btn) btn.classList.add('text-green-400');
         })
         .catch(function() {
@@ -400,7 +470,7 @@ function removeAttachedEmail() {
     _attachedEmail = null;
     var badge = document.getElementById('attached-email-badge');
     if (badge) badge.classList.add('hidden');
-    var btn = document.getElementById('attach-email-btn');
+    var btn = document.getElementById('attach-menu-btn');
     if (btn) {
         btn.classList.remove('text-green-400');
         btn.classList.add('text-gray-400');

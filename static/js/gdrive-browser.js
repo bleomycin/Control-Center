@@ -520,6 +520,24 @@
         if (!files.length) return;
         var btn = $('#gdb-link');
         var originalLabel = btn.textContent;
+
+        // Optional in-page callback path:
+        //   data-callback="window-function-name"
+        // When present, hand the picked files to the callback and close the
+        // modal instead of POSTing. The POST/swap path stays the default for
+        // entity-attach buttons (data-post-url + data-target) — see _gdrive_bulk_button.html.
+        var callbackName = triggerBtn.dataset.callback;
+        if (callbackName) {
+            var cb = window[callbackName];
+            if (typeof cb === 'function') {
+                try { cb(files); } catch (err) { showError('Callback failed: ' + err.message); return; }
+                close();
+                return;
+            }
+            showError('Callback "' + callbackName + '" is not a function on window.');
+            return;
+        }
+
         btn.disabled = true;
         btn.textContent = 'Linking…';
 
