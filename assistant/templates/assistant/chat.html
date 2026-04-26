@@ -272,9 +272,12 @@
 </div>
 
 {% if drive_connected %}
-{# Hidden trigger button — gdrive-browser.js auto-wires .gdrive-bulk-picker-btn on DOMContentLoaded.
-   We open() it programmatically from openDriveFromMenu(). The data-callback hook routes the picked
-   files to our JS instead of the standard POST/swap flow used by entity-attach buttons. #}
+{% comment %}
+Hidden trigger button — gdrive-browser.js auto-wires .gdrive-bulk-picker-btn
+on DOMContentLoaded. We open() it programmatically from openDriveFromMenu().
+The data-callback hook routes the picked files to our JS instead of the
+standard POST/swap flow used by entity-attach buttons.
+{% endcomment %}
 <button type="button"
         id="chat-drive-trigger"
         class="gdrive-bulk-picker-btn hidden"
