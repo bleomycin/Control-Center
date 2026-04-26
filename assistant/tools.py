@@ -8,6 +8,8 @@ TOOL_DEFINITIONS contains the JSON schemas for tool registration.
 from django.db.models import Q
 from django.utils import timezone
 
+from documents.services import bulk_link_drive_files as _service_bulk_link_drive_files
+
 from . import registry
 
 
@@ -534,6 +536,20 @@ def update_record(model, id, data, dry_run=True):
     }
 
 
+def bulk_link_drive_files(entity_type, entity_id, files, dry_run=True):
+    """Create Document records and link them to a target entity in a single batch.
+
+    Wraps documents.services.bulk_link_drive_files. Defaults dry_run=True so the
+    assistant always previews first (matches the system prompt rule #1).
+    """
+    return _service_bulk_link_drive_files(
+        entity_type=entity_type,
+        entity_id=entity_id,
+        files=files,
+        dry_run=dry_run,
+    )
+
+
 def delete_record(model, id, dry_run=True):
     """Delete a record. dry_run=True returns a preview of what would be deleted."""
     model_cls = registry.get_model(model)
@@ -886,6 +902,57 @@ TOOL_DEFINITIONS = [
         },
     },
     {
+        "name": "bulk_link_drive_files",
+        "description": (
+            "Create Document records for one or more Google Drive files and link "
+            "them to a single target entity in a single batch. Use this when the user "
+            "has attached Drive files (you'll see an [AttachedDriveFiles] block in "
+            "the user's message) and wants them linked to a property, stakeholder, "
+            "investment, loan, lease, policy, vehicle, aircraft, or legal matter. "
+            "IMPORTANT: Always call with dry_run=true first to preview, show the "
+            "user the target entity and file list, and get their confirmation before "
+            "calling again with dry_run=false. NEVER skip the preview step."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entity_type": {
+                    "type": "string",
+                    "enum": [
+                        "realestate", "investment", "loan", "lease", "policy",
+                        "vehicle", "aircraft", "stakeholder", "legalmatter",
+                    ],
+                    "description": "The target entity type to link the files to.",
+                },
+                "entity_id": {
+                    "type": "integer",
+                    "description": "Primary key of the target entity. If you just created the entity, use the new pk returned by create_record.",
+                },
+                "files": {
+                    "type": "array",
+                    "description": "Drive files to link. Each item: {id, name, mimeType, url}. Pass the file list verbatim from the [AttachedDriveFiles] block in the user's message.",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "id":       {"type": "string", "description": "Google Drive file ID"},
+                            "name":     {"type": "string", "description": "Filename (with extension)"},
+                            "mimeType": {"type": "string", "description": "Drive MIME type"},
+                            "url":      {"type": "string", "description": "Drive shareable URL"},
+                        },
+                        "required": ["id", "name", "mimeType", "url"],
+                    },
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "If true, preview only (no database changes). Always preview first.",
+                    "default": True,
+                },
+            },
+            "required": ["entity_type", "entity_id", "files"],
+        },
+    },
+    {
         "name": "list_models",
         "strict": True,
         "description": "List all available data models with their fields, types, and relationships. Use this to discover the data schema when you need to understand what models and fields are available for querying.",
@@ -972,6 +1039,7 @@ TOOL_HANDLERS = {
     "create_record": create_record,
     "update_record": update_record,
     "delete_record": delete_record,
+    "bulk_link_drive_files": bulk_link_drive_files,
     "list_models": list_models,
     "summarize": summarize,
     "read_email": read_email,
