@@ -1678,3 +1678,99 @@ class DriveBrowserModalRenderTest(TestCase):
         self.assertContains(resp, "gdb-pills")
         # Static URL may be hashed in production manifest mode — match the prefix
         self.assertContains(resp, "gdrive-browser.")
+
+
+class BulkLinkDriveFilesServiceTest(TestCase):
+    """Tests for documents.services.bulk_link_drive_files (Plan 01-01)."""
+
+    def setUp(self):
+        from assets.models import RealEstate
+        self.entity = RealEstate.objects.create(name="Test Property")
+        self.files = [
+            {
+                "id": "abc123",
+                "name": "TermSheet.pdf",
+                "mimeType": "application/pdf",
+                "url": "https://drive.google.com/file/d/abc123/view",
+            },
+            {
+                "id": "def456",
+                "name": "NDA.pdf",
+                "mimeType": "application/pdf",
+                "url": "https://drive.google.com/file/d/def456/view",
+            },
+        ]
+
+    def test_dry_run_returns_preview_no_db_writes(self):
+        from documents.services import bulk_link_drive_files
+        before = Document.objects.count()
+        result = bulk_link_drive_files("realestate", self.entity.pk, self.files, dry_run=True)
+        self.assertEqual(Document.objects.count(), before)
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["target"]["entity_type"], "realestate")
+        self.assertEqual(result["target"]["entity_id"], self.entity.pk)
+        self.assertEqual(len(result["would_create"]), 2)
+
+    def test_execute_creates_and_links_documents(self):
+        from documents.services import bulk_link_drive_files
+        before = Document.objects.count()
+        result = bulk_link_drive_files("realestate", self.entity.pk, self.files, dry_run=False)
+        self.assertFalse(result["dry_run"])
+        self.assertEqual(Document.objects.count(), before + 2)
+        self.assertEqual(len(result["linked"]), 2)
+        # Both Documents are linked to the test property via related_property FK
+        linked_docs = Document.objects.filter(related_property=self.entity)
+        self.assertEqual(linked_docs.count(), 2)
+
+    def test_dedupe_on_gdrive_file_id(self):
+        from documents.services import bulk_link_drive_files
+        # First call creates 2 docs
+        bulk_link_drive_files("realestate", self.entity.pk, self.files, dry_run=False)
+        # Second call with same files reuses both (dedupe on gdrive_file_id)
+        result = bulk_link_drive_files("realestate", self.entity.pk, self.files, dry_run=False)
+        self.assertEqual(
+            Document.objects.filter(gdrive_file_id__in=["abc123", "def456"]).count(), 2,
+        )
+        # Result indicates reuse
+        self.assertEqual(len(result["linked"]), 2)
+        # All entries marked as not newly created (reused)
+        self.assertTrue(all(not item["created"] for item in result["linked"]))
+
+    def test_dry_run_marks_existing_as_reuse(self):
+        from documents.services import bulk_link_drive_files
+        # Pre-create one Document to simulate prior linking
+        Document.objects.create(
+            title="TermSheet", gdrive_file_id="abc123", related_property=self.entity,
+        )
+        result = bulk_link_drive_files("realestate", self.entity.pk, self.files, dry_run=True)
+        actions = {item["id"]: item["action"] for item in result["would_create"]}
+        self.assertEqual(actions["abc123"], "reuse")
+        self.assertEqual(actions["def456"], "create")
+
+    def test_invalid_entity_type_returns_error(self):
+        from documents.services import bulk_link_drive_files
+        result = bulk_link_drive_files("nonexistent", 1, self.files, dry_run=True)
+        self.assertIn("error", result)
+
+    def test_missing_entity_returns_error(self):
+        from documents.services import bulk_link_drive_files
+        result = bulk_link_drive_files("realestate", 99999, self.files, dry_run=True)
+        self.assertIn("error", result)
+
+    def test_empty_files_list_returns_error(self):
+        from documents.services import bulk_link_drive_files
+        result = bulk_link_drive_files("realestate", self.entity.pk, [], dry_run=True)
+        self.assertIn("error", result)
+
+    def test_files_must_be_list(self):
+        from documents.services import bulk_link_drive_files
+        result = bulk_link_drive_files("realestate", self.entity.pk, "not a list", dry_run=True)
+        self.assertIn("error", result)
+
+    def test_legacy_property_alias_still_works(self):
+        """The existing /documents/api/bulk-link/property/ URL passes 'property'
+        as entity_type — confirm the service still accepts that legacy form."""
+        from documents.services import bulk_link_drive_files
+        result = bulk_link_drive_files("property", self.entity.pk, self.files, dry_run=False)
+        self.assertFalse(result["dry_run"])
+        self.assertEqual(len(result["linked"]), 2)

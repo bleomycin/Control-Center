@@ -1737,3 +1737,218 @@ class ReadDocumentToolSummaryTests(TestCase):
         self.assertIn("truncated", prompt_text)
         self.assertIn("next_offset", prompt_text)
         self.assertIn("NEVER cite", prompt_text)
+
+
+# ---------------------------------------------------------------------------
+# Plan 01-01: Drive-attach backend tests
+# ---------------------------------------------------------------------------
+
+class BulkLinkDriveFilesToolTest(TestCase):
+    """Tests for the assistant tool wrapper around the service."""
+
+    def test_tool_registered_in_definitions_and_handlers(self):
+        from assistant.tools import TOOL_DEFINITIONS, TOOL_HANDLERS
+        names = [t["name"] for t in TOOL_DEFINITIONS]
+        self.assertIn("bulk_link_drive_files", names)
+        self.assertIn("bulk_link_drive_files", TOOL_HANDLERS)
+
+    def test_tool_definition_has_dry_run_default_true(self):
+        from assistant.tools import TOOL_DEFINITIONS
+        tool = next(t for t in TOOL_DEFINITIONS if t["name"] == "bulk_link_drive_files")
+        self.assertEqual(tool["input_schema"]["properties"]["dry_run"]["default"], True)
+        self.assertIn("NEVER skip the preview step", tool["description"])
+
+    def test_tool_definition_lists_all_nine_entity_types(self):
+        from assistant.tools import TOOL_DEFINITIONS
+        tool = next(t for t in TOOL_DEFINITIONS if t["name"] == "bulk_link_drive_files")
+        enum_values = tool["input_schema"]["properties"]["entity_type"]["enum"]
+        self.assertEqual(set(enum_values), {
+            "realestate", "investment", "loan", "lease", "policy",
+            "vehicle", "aircraft", "stakeholder", "legalmatter",
+        })
+
+    def test_tool_handler_proxies_to_service(self):
+        from assets.models import RealEstate
+        from assistant.tools import bulk_link_drive_files
+        entity = RealEstate.objects.create(name="Tool Proxy Property")
+        result = bulk_link_drive_files(
+            entity_type="realestate",
+            entity_id=entity.pk,
+            files=[{
+                "id": "tp1",
+                "name": "a.pdf",
+                "mimeType": "application/pdf",
+                "url": "u",
+            }],
+            dry_run=True,
+        )
+        self.assertTrue(result["dry_run"])
+        self.assertEqual(result["target"]["entity_id"], entity.pk)
+
+
+class ConditionalToolRegistrationTest(TestCase):
+    """Tests for assistant.client._get_active_tools — gated tool surface area.
+
+    NOTE: The plan documented a baseline of 11 tools, but the actual baseline
+    pre-feature is 10 tools (search, query, get_record, create_record,
+    update_record, delete_record, list_models, summarize, read_email,
+    read_document). After Plan 01-01, the gated tool brings the maximum to 11.
+    Tests assert against the actual counts.
+    """
+
+    def test_no_marker_excludes_bulk_link(self):
+        from assistant.client import _get_active_tools
+        msgs = [{"role": "user", "content": "what tasks are overdue?"}]
+        names = [t["name"] for t in _get_active_tools(msgs)]
+        self.assertNotIn("bulk_link_drive_files", names)
+        self.assertEqual(len(names), 10)  # baseline tool count (was 10 pre-feature)
+
+    def test_marker_in_user_message_includes_bulk_link(self):
+        from assistant.client import _get_active_tools
+        msgs = [{"role": "user", "content": "[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nattach"}]
+        names = [t["name"] for t in _get_active_tools(msgs)]
+        self.assertIn("bulk_link_drive_files", names)
+        self.assertEqual(len(names), 11)
+
+    def test_marker_in_assistant_message_does_not_include_bulk_link(self):
+        """Even if the assistant quotes the marker, it should NOT trigger
+        registration — only the most recent user message counts."""
+        from assistant.client import _get_active_tools
+        msgs = [
+            {"role": "user", "content": "tell me about email markers"},
+            {"role": "assistant", "content": "[AttachedDriveFiles] is a marker..."},
+        ]
+        names = [t["name"] for t in _get_active_tools(msgs)]
+        self.assertNotIn("bulk_link_drive_files", names)
+
+    def test_handles_anthropic_content_block_format(self):
+        """When the message uses the list-of-blocks format (e.g., during a
+        tool-use round-trip), the helper should still extract the user text
+        and detect the marker."""
+        from assistant.client import _get_active_tools
+        msgs = [{"role": "user", "content": [
+            {"type": "text", "text": "[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nhi"},
+        ]}]
+        names = [t["name"] for t in _get_active_tools(msgs)]
+        self.assertIn("bulk_link_drive_files", names)
+
+    def test_only_most_recent_user_message_is_inspected(self):
+        """An older user message containing the marker shouldn't trigger
+        registration — only the most recent user message counts."""
+        from assistant.client import _get_active_tools
+        msgs = [
+            {"role": "user", "content": "[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nold"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "different question"},
+        ]
+        names = [t["name"] for t in _get_active_tools(msgs)]
+        self.assertNotIn("bulk_link_drive_files", names)
+
+    def test_no_marker_tools_array_byte_identical_to_pre_feature(self):
+        """Snapshot test: the tools array sent to Anthropic for messages without
+        the marker is byte-identical to TOOL_DEFINITIONS minus the gated tool —
+        i.e., zero surface area change for non-attachment messages."""
+        import json
+        from assistant.client import _get_active_tools
+        from assistant.tools import TOOL_DEFINITIONS
+        expected = [t for t in TOOL_DEFINITIONS if t["name"] != "bulk_link_drive_files"]
+        actual = _get_active_tools([{"role": "user", "content": "no marker here"}])
+        self.assertEqual(
+            json.dumps(expected, sort_keys=True),
+            json.dumps(actual, sort_keys=True),
+        )
+
+    def test_empty_messages_returns_baseline_tools(self):
+        from assistant.client import _get_active_tools
+        names = [t["name"] for t in _get_active_tools([])]
+        self.assertNotIn("bulk_link_drive_files", names)
+
+
+class ChatMessageMarkerStrippingTest(TestCase):
+    """Tests for ChatMessage.display_content + parser properties."""
+
+    def setUp(self):
+        from assistant.models import ChatSession
+        self.session = ChatSession.objects.create(title="t")
+
+    def _msg(self, content):
+        from assistant.models import ChatMessage
+        return ChatMessage(session=self.session, role="user", content=content)
+
+    def test_strips_drive_marker(self):
+        m = self._msg(
+            '[AttachedDriveFiles]\n'
+            '[{"id":"a","name":"x.pdf","mimeType":"application/pdf","url":"u"}]\n'
+            '[/AttachedDriveFiles]\nattach this'
+        )
+        self.assertEqual(m.display_content, "attach this")
+
+    def test_strips_combined_email_and_drive_markers(self):
+        m = self._msg(
+            '[AttachedEmail:{"subject":"s","message_count":1}]\nbody\n[/AttachedEmail]\n'
+            '[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\n'
+            'do the thing'
+        )
+        self.assertEqual(m.display_content, "do the thing")
+
+    def test_strips_email_drive_and_context(self):
+        """The full prefix chain: email + drive + context + user text."""
+        m = self._msg(
+            '[AttachedEmail:{"subject":"s","message_count":1}]\nbody\n[/AttachedEmail]\n'
+            '[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\n'
+            '[Context: viewing Stakeholder #1]\n'
+            'final question'
+        )
+        self.assertEqual(m.display_content, "final question")
+
+    def test_attached_drive_files_parses_list(self):
+        m = self._msg(
+            '[AttachedDriveFiles]\n'
+            '[{"id":"a","name":"x.pdf","mimeType":"application/pdf","url":"u"}]\n'
+            '[/AttachedDriveFiles]\nx'
+        )
+        files = m.attached_drive_files
+        self.assertEqual(len(files), 1)
+        self.assertEqual(files[0]["name"], "x.pdf")
+
+    def test_attached_drive_files_returns_empty_when_no_marker(self):
+        self.assertEqual(self._msg("hello").attached_drive_files, [])
+
+    def test_attached_drive_files_returns_empty_on_malformed_json(self):
+        self.assertEqual(
+            self._msg(
+                "[AttachedDriveFiles]\nnot json\n[/AttachedDriveFiles]\nx"
+            ).attached_drive_files,
+            [],
+        )
+
+    def test_attached_drive_files_returns_empty_on_missing_close_marker(self):
+        self.assertEqual(
+            self._msg("[AttachedDriveFiles]\n[]\nx").attached_drive_files, [],
+        )
+
+    def test_attached_drive_files_returns_empty_when_json_is_not_a_list(self):
+        self.assertEqual(
+            self._msg(
+                '[AttachedDriveFiles]\n{"not":"a list"}\n[/AttachedDriveFiles]\nx'
+            ).attached_drive_files,
+            [],
+        )
+
+    def test_attached_email_summary_parses(self):
+        m = self._msg(
+            '[AttachedEmail:{"subject":"hi","message_count":3}]\nbody\n[/AttachedEmail]\nx'
+        )
+        s = m.attached_email_summary
+        self.assertEqual(s["subject"], "hi")
+        self.assertEqual(s["message_count"], 3)
+
+    def test_attached_email_summary_returns_none_when_absent(self):
+        self.assertIsNone(self._msg("hello").attached_email_summary)
+
+    def test_attached_email_summary_returns_none_on_malformed_json(self):
+        self.assertIsNone(
+            self._msg(
+                "[AttachedEmail:not json]\nbody\n[/AttachedEmail]\nx"
+            ).attached_email_summary,
+        )
