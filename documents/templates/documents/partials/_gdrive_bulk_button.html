@@ -1,0 +1,23 @@
+{% load static %}
+{% if drive_connected %}
+<button type="button"
+        class="gdrive-bulk-picker-btn text-xs text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1"
+        data-entity-type="{{ entity_type }}"
+        data-entity-pk="{{ entity_pk }}"
+        data-bookmarks-url="{% url 'documents:gdrive_bookmarks_list' %}"
+        data-bookmark-create="{% url 'documents:gdrive_bookmark_create' %}"
+        data-folder-url="{% url 'documents:gdrive_folder_contents' %}"
+        data-search-url="{% url 'documents:gdrive_search' %}"
+        data-path-url="{% url 'documents:gdrive_resolve_folder_path' %}"
+        data-post-url="{% url 'documents:bulk_create_and_link' entity_type=entity_type pk=entity_pk %}"
+        data-target="#document-list"
+        title="Pick multiple files from Google Drive"
+        onclick="event.stopPropagation()">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3-3m0 0l3 3m-3-3v6"/>
+    </svg>
+    + Pick from Drive
+</button>
+{% include "documents/partials/_drive_browser_modal.html" %}
+<script src="{% static 'js/gdrive-browser.js' %}?v=1"></script>
+{% endif %}

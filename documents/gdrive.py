@@ -206,7 +206,7 @@ def search_files(query="", page_size=20):
     """
     Search Google Drive files by name.  If query is empty, returns recent files.
     Returns a list of dicts with keys: id, name, mimeType, webViewLink, iconLink,
-    modifiedTime.  Returns None on failure.
+    modifiedTime, owners, parents.  Returns None on failure.
     """
     service = get_service()
     if not service:
@@ -214,7 +214,7 @@ def search_files(query="", page_size=20):
     try:
         params = {
             "pageSize": page_size,
-            "fields": "files(id,name,mimeType,webViewLink,iconLink,modifiedTime)",
+            "fields": "files(id,name,mimeType,webViewLink,iconLink,modifiedTime,owners(displayName,emailAddress),parents)",
             "orderBy": "modifiedByMeTime desc,viewedByMeTime desc",
         }
         if query.strip():
@@ -252,8 +252,8 @@ def verify_connection():
 def list_folder_contents(folder_id, page_size=100):
     """
     List files inside a Google Drive folder.
-    Returns a list of dicts with keys: id, name, mimeType, webViewLink.
-    Returns None on failure.
+    Returns a list of dicts with keys: id, name, mimeType, webViewLink, iconLink,
+    modifiedTime, owners, parents.  Returns None on failure.
     """
     service = get_service()
     if not service:
@@ -263,13 +263,70 @@ def list_folder_contents(folder_id, page_size=100):
         result = service.files().list(
             q=f"'{safe_id}' in parents and trashed = false",
             pageSize=page_size,
-            fields="files(id,name,mimeType,webViewLink)",
-            orderBy="name",
+            fields="files(id,name,mimeType,webViewLink,iconLink,modifiedTime,owners(displayName,emailAddress),parents)",
+            orderBy="folder,name",
         ).execute()
         return result.get("files", [])
     except Exception:
         logger.exception("Failed to list folder contents for %s", folder_id)
         return None
+
+
+def get_folder_metadata(folder_id):
+    """
+    Fetch metadata for a single Drive folder.  Returns a dict with id, name, parents.
+    Returns None on failure (including missing/deleted folder).
+    """
+    service = get_service()
+    if not service:
+        return None
+    try:
+        return service.files().get(
+            fileId=folder_id,
+            fields="id,name,parents,mimeType",
+        ).execute()
+    except Exception:
+        logger.exception("Failed to fetch folder metadata for %s", folder_id)
+        return None
+
+
+def resolve_folder_path(folder_id):
+    """
+    Walk a folder's parents up to My Drive root.
+    Returns a list of {id, name} dicts ordered root -> target.
+    Returns None on failure (e.g. folder no longer exists).
+    """
+    if not folder_id or folder_id == "root":
+        return [{"id": "root", "name": "My Drive"}]
+    service = get_service()
+    if not service:
+        return None
+
+    chain = []
+    seen = set()
+    current_id = folder_id
+    # Cap depth so a malformed parent cycle can't loop forever.
+    for _ in range(40):
+        if current_id in seen:
+            break
+        seen.add(current_id)
+        try:
+            meta = service.files().get(
+                fileId=current_id,
+                fields="id,name,parents",
+            ).execute()
+        except Exception:
+            logger.exception("Failed to resolve folder path at %s", current_id)
+            return None
+        chain.append({"id": meta.get("id"), "name": meta.get("name") or "(unnamed)"})
+        parents = meta.get("parents") or []
+        if not parents:
+            break
+        current_id = parents[0]
+
+    chain.reverse()
+    chain.insert(0, {"id": "root", "name": "My Drive"})
+    return chain
 
 
 def download_file_bytes(file_id):

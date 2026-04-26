@@ -433,6 +433,228 @@ class EntityDetailDocumentSectionTest(TestCase):
         self.assertContains(resp, "Visible Doc")
 
 
+class BulkCreateAndLinkTest(TestCase):
+    """Tests for the multi-select Drive picker bulk-create endpoint."""
+
+    def _post(self, entity_type, pk, files, content_type="application/json"):
+        import json
+        url = reverse("documents:bulk_create_and_link", args=[entity_type, pk])
+        return self.client.post(url, data=json.dumps({"files": files}), content_type=content_type)
+
+    def _make_property(self):
+        from assets.models import RealEstate
+        return RealEstate.objects.create(name="Bulk Property")
+
+    def test_creates_one_document_per_file_linked_to_entity(self):
+        prop = self._make_property()
+        files = [
+            {"id": "abc1", "name": "Closing.pdf", "mimeType": "application/pdf", "url": "https://drive.google.com/file/d/abc1/view"},
+            {"id": "abc2", "name": "Title Insurance.docx", "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "url": "https://drive.google.com/file/d/abc2/view"},
+            {"id": "abc3", "name": "Survey", "mimeType": "application/pdf", "url": "https://drive.google.com/file/d/abc3/view"},
+        ]
+        resp = self._post("property", prop.pk, files)
+        self.assertEqual(resp.status_code, 200)
+
+        docs = Document.objects.filter(related_property=prop).order_by("gdrive_file_id")
+        self.assertEqual(docs.count(), 3)
+
+        d1 = docs.get(gdrive_file_id="abc1")
+        self.assertEqual(d1.title, "Closing")
+        self.assertEqual(d1.gdrive_file_name, "Closing.pdf")
+        self.assertEqual(d1.gdrive_mime_type, "application/pdf")
+        self.assertEqual(d1.gdrive_url, "https://drive.google.com/file/d/abc1/view")
+
+        d3 = docs.get(gdrive_file_id="abc3")
+        self.assertEqual(d3.title, "Survey")  # no extension to strip
+
+    def test_dedupes_against_existing_link_by_gdrive_file_id(self):
+        prop = self._make_property()
+        Document.objects.create(
+            title="Existing", gdrive_file_id="dup1", related_property=prop,
+        )
+        files = [
+            {"id": "dup1", "name": "Duplicate.pdf", "mimeType": "application/pdf"},
+            {"id": "new1", "name": "Fresh.pdf", "mimeType": "application/pdf"},
+        ]
+        self._post("property", prop.pk, files)
+        # 1 existing + 1 fresh = 2 total; "dup1" not duplicated
+        linked = Document.objects.filter(related_property=prop)
+        self.assertEqual(linked.count(), 2)
+        self.assertEqual(linked.filter(gdrive_file_id="dup1").count(), 1)
+
+    def test_dedupes_within_same_request(self):
+        prop = self._make_property()
+        files = [
+            {"id": "same1", "name": "A.pdf"},
+            {"id": "same1", "name": "B.pdf"},  # duplicate id within payload
+        ]
+        self._post("property", prop.pk, files)
+        self.assertEqual(Document.objects.filter(related_property=prop).count(), 1)
+
+    def test_returns_document_list_partial_html(self):
+        prop = self._make_property()
+        files = [{"id": "z1", "name": "Listed.pdf", "mimeType": "application/pdf"}]
+        resp = self._post("property", prop.pk, files)
+        self.assertContains(resp, "Listed")
+        # Unlink button present in the partial — confirms _document_list_section.html rendered
+        self.assertContains(resp, "&times;")
+
+    def test_invalid_entity_type_returns_400(self):
+        from assets.models import RealEstate
+        prop = RealEstate.objects.create(name="P")
+        # Use the URL pattern with a junk entity_type — must hit the view, then 400
+        import json
+        from django.urls import reverse
+        url = reverse("documents:bulk_create_and_link", args=["bogus", prop.pk])
+        resp = self.client.post(url, data=json.dumps({"files": []}), content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_unknown_entity_pk_returns_404(self):
+        resp = self._post("property", 999999, [{"id": "a", "name": "x.pdf"}])
+        self.assertEqual(resp.status_code, 404)
+
+    def test_invalid_json_returns_400(self):
+        prop = self._make_property()
+        url = reverse("documents:bulk_create_and_link", args=["property", prop.pk])
+        resp = self.client.post(url, data="not-json", content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_files_not_a_list_returns_400(self):
+        prop = self._make_property()
+        url = reverse("documents:bulk_create_and_link", args=["property", prop.pk])
+        import json
+        resp = self.client.post(url, data=json.dumps({"files": "nope"}), content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+
+    def test_empty_files_array_renders_empty_partial(self):
+        prop = self._make_property()
+        resp = self._post("property", prop.pk, [])
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Document.objects.filter(related_property=prop).count(), 0)
+
+    def test_skips_files_missing_id(self):
+        prop = self._make_property()
+        files = [
+            {"name": "no-id.pdf"},  # missing id
+            {"id": "", "name": "empty-id.pdf"},  # empty id
+            {"id": "ok1", "name": "valid.pdf"},
+        ]
+        self._post("property", prop.pk, files)
+        self.assertEqual(Document.objects.filter(related_property=prop).count(), 1)
+
+    def test_get_method_not_allowed(self):
+        prop = self._make_property()
+        url = reverse("documents:bulk_create_and_link", args=["property", prop.pk])
+        resp = self.client.get(url)
+        self.assertEqual(resp.status_code, 405)
+
+    def test_works_for_all_entity_types(self):
+        """Each ENTITY_CONFIG entry must accept the bulk endpoint."""
+        from assets.models import RealEstate, Investment, Loan, Lease, InsurancePolicy, Vehicle, Aircraft
+        from stakeholders.models import Stakeholder
+        from legal.models import LegalMatter
+
+        prop = RealEstate.objects.create(name="P")
+        cases = [
+            ("property", prop),
+            ("investment", Investment.objects.create(name="I")),
+            ("loan", Loan.objects.create(name="L")),
+            ("lease", Lease.objects.create(name="Le", related_property=prop)),
+            ("policy", InsurancePolicy.objects.create(name="Po")),
+            ("vehicle", Vehicle.objects.create(name="V")),
+            ("aircraft", Aircraft.objects.create(name="A")),
+            ("stakeholder", Stakeholder.objects.create(name="S")),
+            ("legal_matter", LegalMatter.objects.create(title="LM")),
+        ]
+        for entity_type, entity in cases:
+            files = [{"id": f"{entity_type}-x", "name": "doc.pdf"}]
+            resp = self._post(entity_type, entity.pk, files)
+            self.assertEqual(resp.status_code, 200, msg=f"{entity_type} failed")
+            fk_field = f"related_{entity_type}"
+            self.assertEqual(
+                Document.objects.filter(**{fk_field: entity}).count(), 1,
+                msg=f"{entity_type} did not create+link doc",
+            )
+
+    def test_url_fallback_synthesizes_link_when_url_missing(self):
+        """If Picker payload lacks a url field, synthesize from file_id so the saved Document has a working link."""
+        prop = self._make_property()
+        files = [{"id": "fallback123", "name": "Lease.pdf", "mimeType": "application/pdf"}]  # no "url" key
+        self._post("property", prop.pk, files)
+        doc = Document.objects.get(related_property=prop, gdrive_file_id="fallback123")
+        self.assertEqual(doc.gdrive_url, "https://drive.google.com/file/d/fallback123/view")
+
+    def test_empty_filename_falls_back_to_untitled(self):
+        """If a Drive file has no name, the Document title must default to 'Untitled' — never empty (Title is required)."""
+        prop = self._make_property()
+        files = [
+            {"id": "noname1", "name": "", "mimeType": "application/pdf"},
+            {"id": "noname2", "mimeType": "application/pdf"},  # name key missing entirely
+        ]
+        self._post("property", prop.pk, files)
+        docs = Document.objects.filter(related_property=prop).order_by("gdrive_file_id")
+        self.assertEqual(docs.count(), 2)
+        for d in docs:
+            self.assertEqual(d.title, "Untitled")
+
+    def test_csrf_rejected_without_token(self):
+        """POST without a CSRF token must be rejected (403). Confirms @require_POST is paired with default CSRF protection."""
+        from django.test import Client
+        import json
+        prop = self._make_property()
+        url = reverse("documents:bulk_create_and_link", args=["property", prop.pk])
+        csrf_client = Client(enforce_csrf_checks=True)
+        resp = csrf_client.post(
+            url,
+            data=json.dumps({"files": [{"id": "x", "name": "y.pdf"}]}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+        # And no Document was created
+        self.assertEqual(Document.objects.filter(related_property=prop).count(), 0)
+
+
+class GdriveBulkButtonTagTest(TestCase):
+    """Tests for the {% gdrive_bulk_button %} inclusion templatetag."""
+
+    def test_button_hidden_when_drive_not_connected(self):
+        # Default GoogleDriveSettings: is_connected=False, no api_key
+        from assets.models import RealEstate
+        prop = RealEstate.objects.create(name="No-Drive Prop")
+        resp = self.client.get(reverse("assets:realestate_detail", args=[prop.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotContains(resp, "gdrive-bulk-picker-btn")
+
+    def test_button_visible_when_drive_connected(self):
+        s = GoogleDriveSettings.load()
+        s.is_connected = True
+        s.refresh_token = "fake-refresh"
+        s.save()
+
+        from assets.models import RealEstate
+        prop = RealEstate.objects.create(name="Drive-On Prop")
+        resp = self.client.get(reverse("assets:realestate_detail", args=[prop.pk]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "gdrive-bulk-picker-btn")
+        self.assertContains(resp, "Pick from Drive")
+        self.assertContains(resp, "data-entity-type=\"property\"")
+        self.assertContains(resp, "data-bookmarks-url")
+        self.assertContains(resp, "id=\"gdrive-browser-modal\"")
+
+    def test_button_visible_without_api_key(self):
+        """The custom modal queries Drive via the backend, so api_key is no longer required."""
+        s = GoogleDriveSettings.load()
+        s.is_connected = True
+        s.refresh_token = "fake-refresh"
+        s.api_key = ""
+        s.save()
+
+        from assets.models import RealEstate
+        prop = RealEstate.objects.create(name="No-Key Prop")
+        resp = self.client.get(reverse("assets:realestate_detail", args=[prop.pk]))
+        self.assertContains(resp, "gdrive-bulk-picker-btn")
+
+
 # ---- Google Drive Setup Form ----
 
 
@@ -1183,3 +1405,276 @@ class ExtractLocalFileTests(TestCase):
         finally:
             import os
             os.unlink(path)
+
+
+# ===========================================================================
+# Drive Folder Bookmarks (custom Drive Browser modal)
+# ===========================================================================
+
+
+class GoogleDriveFolderBookmarkModelTest(TestCase):
+    def test_str(self):
+        from .models import GoogleDriveFolderBookmark
+        bm = GoogleDriveFolderBookmark.objects.create(label="Tax 2026", folder_id="abc")
+        self.assertEqual(str(bm), "Tax 2026")
+
+    def test_auto_sort_order_increments(self):
+        """Each new bookmark gets sort_order = max+1 unless explicitly set."""
+        from .models import GoogleDriveFolderBookmark
+        a = GoogleDriveFolderBookmark.objects.create(label="A", folder_id="a")
+        b = GoogleDriveFolderBookmark.objects.create(label="B", folder_id="b")
+        c = GoogleDriveFolderBookmark.objects.create(label="C", folder_id="c")
+        self.assertEqual(a.sort_order, 1)
+        self.assertEqual(b.sort_order, 2)
+        self.assertEqual(c.sort_order, 3)
+
+    def test_explicit_sort_order_preserved(self):
+        from .models import GoogleDriveFolderBookmark
+        bm = GoogleDriveFolderBookmark.objects.create(label="X", folder_id="x", sort_order=42)
+        self.assertEqual(bm.sort_order, 42)
+
+    def test_ordering_by_sort_order_then_created(self):
+        from .models import GoogleDriveFolderBookmark
+        GoogleDriveFolderBookmark.objects.create(label="C", folder_id="c", sort_order=3)
+        GoogleDriveFolderBookmark.objects.create(label="A", folder_id="a", sort_order=1)
+        GoogleDriveFolderBookmark.objects.create(label="B", folder_id="b", sort_order=2)
+        labels = list(GoogleDriveFolderBookmark.objects.values_list("label", flat=True))
+        self.assertEqual(labels, ["A", "B", "C"])
+
+
+class GdriveBookmarkAPITest(TestCase):
+    def test_list_returns_empty_array(self):
+        resp = self.client.get(reverse("documents:gdrive_bookmarks_list"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json(), {"bookmarks": []})
+
+    def test_list_returns_bookmarks_in_order(self):
+        from .models import GoogleDriveFolderBookmark
+        GoogleDriveFolderBookmark.objects.create(label="Z", folder_id="z", sort_order=10)
+        GoogleDriveFolderBookmark.objects.create(label="A", folder_id="a", sort_order=1)
+        resp = self.client.get(reverse("documents:gdrive_bookmarks_list"))
+        labels = [b["label"] for b in resp.json()["bookmarks"]]
+        self.assertEqual(labels, ["A", "Z"])
+
+    def test_create_bookmark(self):
+        from .models import GoogleDriveFolderBookmark
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_create"),
+            {"label": "Tax 2026", "folder_id": "folder-xyz"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        body = resp.json()["bookmark"]
+        self.assertEqual(body["label"], "Tax 2026")
+        self.assertEqual(body["folder_id"], "folder-xyz")
+        self.assertEqual(GoogleDriveFolderBookmark.objects.count(), 1)
+
+    def test_create_rejects_empty_label(self):
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_create"),
+            {"label": "  ", "folder_id": "x"},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_create_rejects_missing_folder_id(self):
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_create"),
+            {"label": "X", "folder_id": ""},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_create_truncates_long_label(self):
+        from .models import GoogleDriveFolderBookmark
+        long_label = "A" * 200
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_create"),
+            {"label": long_label, "folder_id": "x"},
+        )
+        self.assertEqual(resp.status_code, 201)
+        bm = GoogleDriveFolderBookmark.objects.first()
+        self.assertEqual(len(bm.label), 100)
+
+    def test_rename_bookmark(self):
+        from .models import GoogleDriveFolderBookmark
+        bm = GoogleDriveFolderBookmark.objects.create(label="Old", folder_id="x")
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_rename", args=[bm.pk]),
+            {"label": "New"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        bm.refresh_from_db()
+        self.assertEqual(bm.label, "New")
+
+    def test_rename_rejects_empty(self):
+        from .models import GoogleDriveFolderBookmark
+        bm = GoogleDriveFolderBookmark.objects.create(label="Old", folder_id="x")
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_rename", args=[bm.pk]),
+            {"label": ""},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_rename_404_for_missing(self):
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_rename", args=[9999]),
+            {"label": "x"},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_delete_bookmark(self):
+        from .models import GoogleDriveFolderBookmark
+        bm = GoogleDriveFolderBookmark.objects.create(label="Gone", folder_id="x")
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_delete", args=[bm.pk]),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(GoogleDriveFolderBookmark.objects.count(), 0)
+
+    def test_delete_404_for_missing(self):
+        resp = self.client.post(
+            reverse("documents:gdrive_bookmark_delete", args=[9999]),
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_create_requires_post(self):
+        resp = self.client.get(reverse("documents:gdrive_bookmark_create"))
+        self.assertEqual(resp.status_code, 405)
+
+    def test_csrf_rejected_on_create_without_token(self):
+        from django.test import Client
+        csrf_client = Client(enforce_csrf_checks=True)
+        resp = csrf_client.post(
+            reverse("documents:gdrive_bookmark_create"),
+            {"label": "X", "folder_id": "x"},
+        )
+        self.assertEqual(resp.status_code, 403)
+
+
+class GdriveResolveFolderPathTest(TestCase):
+    def test_not_connected_returns_403(self):
+        resp = self.client.get(reverse("documents:gdrive_resolve_folder_path"))
+        self.assertEqual(resp.status_code, 403)
+
+    @patch("documents.gdrive.is_connected", return_value=True)
+    def test_missing_folder_id_returns_400(self, _ic):
+        resp = self.client.get(reverse("documents:gdrive_resolve_folder_path"))
+        self.assertEqual(resp.status_code, 400)
+
+    @patch("documents.gdrive.is_connected", return_value=True)
+    @patch("documents.gdrive.resolve_folder_path")
+    def test_resolves_path(self, mock_resolve, _ic):
+        mock_resolve.return_value = [
+            {"id": "root", "name": "My Drive"},
+            {"id": "biz", "name": "Business"},
+            {"id": "tax", "name": "Tax 2026"},
+        ]
+        resp = self.client.get(
+            reverse("documents:gdrive_resolve_folder_path") + "?folder_id=tax",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            [c["name"] for c in resp.json()["path"]],
+            ["My Drive", "Business", "Tax 2026"],
+        )
+
+    @patch("documents.gdrive.is_connected", return_value=True)
+    @patch("documents.gdrive.resolve_folder_path", return_value=None)
+    def test_missing_folder_returns_404(self, _resolve, _ic):
+        resp = self.client.get(
+            reverse("documents:gdrive_resolve_folder_path") + "?folder_id=gone",
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+class GdriveResolveFolderPathInternalsTest(TestCase):
+    """Test the gdrive.resolve_folder_path() helper directly with a mocked service."""
+
+    def test_root_returns_just_my_drive(self):
+        from documents import gdrive
+        result = gdrive.resolve_folder_path("root")
+        self.assertEqual(result, [{"id": "root", "name": "My Drive"}])
+
+    def test_empty_returns_just_my_drive(self):
+        from documents import gdrive
+        self.assertEqual(gdrive.resolve_folder_path(""), [{"id": "root", "name": "My Drive"}])
+
+    @patch("documents.gdrive.get_service")
+    def test_walks_parents_to_root(self, mock_svc):
+        from documents import gdrive
+        # Drive returns: tax → biz → (no parents)
+        chain = {
+            "tax": {"id": "tax", "name": "Tax 2026", "parents": ["biz"]},
+            "biz": {"id": "biz", "name": "Business", "parents": []},
+        }
+        svc = MagicMock()
+        def fake_get(fileId, **kw):
+            inner = MagicMock()
+            inner.execute.return_value = chain[fileId]
+            return inner
+        svc.files.return_value.get.side_effect = fake_get
+        mock_svc.return_value = svc
+
+        result = gdrive.resolve_folder_path("tax")
+        self.assertEqual(
+            [c["name"] for c in result],
+            ["My Drive", "Business", "Tax 2026"],
+        )
+
+    @patch("documents.gdrive.get_service")
+    def test_returns_none_on_lookup_failure(self, mock_svc):
+        from documents import gdrive
+        svc = MagicMock()
+        svc.files.return_value.get.return_value.execute.side_effect = Exception("not found")
+        mock_svc.return_value = svc
+        self.assertIsNone(gdrive.resolve_folder_path("missing"))
+
+
+class GdriveFolderContentsExtendedTest(TestCase):
+    """The folder contents endpoint now also returns the folder's own metadata."""
+
+    @patch("documents.gdrive.is_connected", return_value=True)
+    @patch("documents.gdrive.list_folder_contents", return_value=[])
+    def test_root_response_includes_my_drive_meta(self, _list, _ic):
+        resp = self.client.get(
+            reverse("documents:gdrive_folder_contents") + "?folder_id=root",
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["folder"]["id"], "root")
+        self.assertEqual(body["folder"]["name"], "My Drive")
+
+    @patch("documents.gdrive.is_connected", return_value=True)
+    @patch("documents.gdrive.list_folder_contents", return_value=[])
+    @patch("documents.gdrive.get_folder_metadata")
+    def test_subfolder_response_includes_meta(self, mock_meta, _list, _ic):
+        mock_meta.return_value = {"id": "biz", "name": "Business", "parents": ["root"]}
+        resp = self.client.get(
+            reverse("documents:gdrive_folder_contents") + "?folder_id=biz",
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["folder"]["name"], "Business")
+        self.assertEqual(body["folder"]["parents"], ["root"])
+
+
+class DriveBrowserModalRenderTest(TestCase):
+    """The modal partial is included with the trigger button when Drive is connected."""
+
+    def test_modal_absent_when_not_connected(self):
+        from assets.models import RealEstate
+        prop = RealEstate.objects.create(name="No-Drive")
+        resp = self.client.get(reverse("assets:realestate_detail", args=[prop.pk]))
+        self.assertNotContains(resp, "gdrive-browser-modal")
+
+    def test_modal_present_when_connected(self):
+        s = GoogleDriveSettings.load()
+        s.is_connected = True
+        s.refresh_token = "tok"
+        s.save()
+        from assets.models import RealEstate
+        prop = RealEstate.objects.create(name="Drive-On")
+        resp = self.client.get(reverse("assets:realestate_detail", args=[prop.pk]))
+        self.assertContains(resp, "id=\"gdrive-browser-modal\"")
+        self.assertContains(resp, "gdb-search")
+        self.assertContains(resp, "gdb-pills")
+        # Static URL may be hashed in production manifest mode — match the prefix
+        self.assertContains(resp, "gdrive-browser.")

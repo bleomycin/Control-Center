@@ -161,3 +161,27 @@ class GoogleDriveSettings(models.Model):
         """Return the singleton instance, creating it if needed."""
         obj, _created = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class GoogleDriveFolderBookmark(models.Model):
+    """User-pinned shortcut to a Drive folder, surfaced as a pill in the picker modal."""
+
+    label = models.CharField(max_length=100)
+    folder_id = models.CharField(max_length=255)
+    sort_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["sort_order", "created_at"]
+
+    def __str__(self):
+        return self.label
+
+    def save(self, *args, **kwargs):
+        if not self.pk and not self.sort_order:
+            current_max = (
+                GoogleDriveFolderBookmark.objects
+                .aggregate(models.Max("sort_order"))["sort_order__max"] or 0
+            )
+            self.sort_order = current_max + 1
+        super().save(*args, **kwargs)

@@ -1,0 +1,150 @@
+<div id="gdrive-browser-modal"
+     class="fixed inset-0 z-[60] hidden"
+     role="dialog"
+     aria-modal="true"
+     aria-labelledby="gdrive-browser-title">
+
+    {# Scrim #}
+    <div class="fixed inset-0 bg-black/65 backdrop-blur-sm" data-gdb-close></div>
+
+    <div class="fixed inset-0 flex items-center justify-center p-4 sm:p-8 pointer-events-none">
+        <div class="relative pointer-events-auto w-full max-w-3xl max-h-[86vh] flex flex-col bg-gray-800 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+
+            {# Header #}
+            <div class="flex items-center justify-between px-5 py-3 border-b border-gray-700">
+                <div id="gdrive-browser-title" class="flex items-center gap-2 text-sm font-semibold text-white">
+                    <svg class="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M7.5 2 12 10l4.5-8H7.5zM2 19l4.5-8L11 19H2zm11 0L17.5 11 22 19h-9z"/>
+                    </svg>
+                    Pick from Google Drive
+                </div>
+                <button type="button"
+                        data-gdb-close
+                        class="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-colors"
+                        aria-label="Close">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            {# Body — flex column with file list as the scrolling area #}
+            <div class="flex-1 flex flex-col overflow-hidden">
+
+                {# Search hero #}
+                <div class="px-5 py-4 border-b border-gray-700">
+                    <div class="relative">
+                        <svg class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle cx="11" cy="11" r="8" stroke-width="2"/>
+                            <path d="m21 21-4.3-4.3" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <input type="text"
+                               id="gdb-search"
+                               placeholder="Search all of Drive…"
+                               autocomplete="off"
+                               class="w-full bg-gray-900/60 border border-gray-700 rounded-md py-2.5 pl-10 pr-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-colors">
+                    </div>
+                </div>
+
+                {# Pills row (bookmarks) #}
+                <div class="px-5 py-2.5 bg-gray-900/40 border-b border-gray-700/60 flex items-center gap-1.5 flex-wrap">
+                    <div id="gdb-pills" class="flex items-center gap-1.5 flex-wrap min-w-0">
+                        {# Pills rendered by JS. The "My Drive" pill is always first. #}
+                    </div>
+                    <span class="ml-auto text-[10px] text-gray-500 whitespace-nowrap pl-2 hidden sm:inline" id="gdb-pill-hint">
+                        Right-click a pill to rename or remove
+                    </span>
+                </div>
+
+                {# Breadcrumb + star #}
+                <div class="px-5 py-2.5 flex items-center justify-between gap-3 border-b border-gray-700/60">
+                    <div id="gdb-breadcrumb" class="flex items-center gap-1.5 text-sm text-gray-400 flex-wrap min-w-0">
+                        {# JS renders crumbs #}
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <span id="gdb-results-badge"
+                              class="hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[11px] rounded-full bg-blue-500/10 text-blue-300 border border-blue-500/30">
+                            Search results
+                        </span>
+                        <button type="button"
+                                id="gdb-star"
+                                title="Bookmark this folder"
+                                class="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-amber-400 hover:bg-gray-700 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                {# Inline label-input row (hidden until star is clicked) #}
+                <div id="gdb-label-row"
+                     class="hidden mx-5 my-2 px-3 py-2 flex items-center gap-2 bg-gray-900/60 border border-blue-400 rounded-md shadow-[0_0_0_3px_rgba(96,165,250,0.15)]">
+                    <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+                    </svg>
+                    <input type="text"
+                           id="gdb-label-input"
+                           placeholder="Bookmark label"
+                           class="flex-1 bg-transparent border-0 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-0">
+                    <button type="button"
+                            id="gdb-label-save"
+                            class="px-2.5 py-1 text-xs font-medium bg-blue-500 text-gray-900 rounded-md hover:bg-blue-400 transition-colors">
+                        Save
+                    </button>
+                    <button type="button"
+                            id="gdb-label-cancel"
+                            class="px-2.5 py-1 text-xs text-gray-400 border border-gray-700 rounded-md hover:bg-gray-700 hover:text-gray-200 transition-colors">
+                        Cancel
+                    </button>
+                </div>
+
+                {# File list #}
+                <div id="gdb-file-list" class="flex-1 overflow-y-auto" role="listbox" aria-multiselectable="true">
+                    {# Rendered by JS. Empty / loading / error states injected here. #}
+                </div>
+
+                {# Inline error region (hidden by default) #}
+                <div id="gdb-error" class="hidden px-5 py-2 text-xs text-red-400 bg-red-900/20 border-t border-red-900/40" role="alert" aria-live="polite"></div>
+            </div>
+
+            {# Footer #}
+            <div class="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-700 bg-gray-800">
+                <span class="text-sm text-gray-400">
+                    <strong id="gdb-count" class="text-white">0 files</strong> selected
+                </span>
+                <div class="flex gap-2">
+                    <button type="button"
+                            data-gdb-close
+                            class="px-4 py-2 text-sm text-gray-300 border border-gray-700 rounded-md hover:bg-gray-700 hover:text-white transition-colors">
+                        Cancel
+                    </button>
+                    <button type="button"
+                            id="gdb-link"
+                            disabled
+                            class="px-4 py-2 text-sm font-medium bg-blue-500 text-gray-900 rounded-md hover:bg-blue-400 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors">
+                        Link 0 files
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Right-click pill menu (positioned by JS) #}
+    <div id="gdb-pill-menu"
+         class="hidden fixed z-[70] min-w-[140px] bg-gray-800 border border-gray-700 rounded-md shadow-2xl py-1"
+         role="menu">
+        <button type="button"
+                id="gdb-pill-rename"
+                class="w-full text-left px-3 py-1.5 text-sm text-gray-200 hover:bg-gray-700"
+                role="menuitem">
+            Rename
+        </button>
+        <button type="button"
+                id="gdb-pill-remove"
+                class="w-full text-left px-3 py-1.5 text-sm text-red-400 hover:bg-red-900/30"
+                role="menuitem">
+            Remove
+        </button>
+    </div>
+</div>

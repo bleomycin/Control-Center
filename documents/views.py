@@ -12,7 +12,7 @@ from django.http import JsonResponse
 
 from dashboard.choices import get_choices, get_choice_label
 from .forms import DocumentForm, DocumentLinkForm, GoogleDriveSetupForm
-from .models import Document, GoogleDriveSettings
+from .models import Document, GoogleDriveFolderBookmark, GoogleDriveSettings
 
 
 class GDriveContextMixin:
@@ -416,6 +416,73 @@ def legal_matter_document_unlink(request, pk, doc_pk):
     return _document_unlink(request, "legal_matter", pk, doc_pk)
 
 
+# ---- Bulk create + link from Google Drive Picker (multi-select) ----
+
+@require_POST
+def bulk_create_and_link(request, entity_type, pk):
+    """Create one Document per picked Drive file and link all to the entity.
+
+    POST body (JSON): {"files": [{"id": "...", "name": "...", "mimeType": "...", "url": "..."}, ...]}
+    Returns the rendered _document_list_section.html partial (HTMX swap target).
+    Dedupes against existing Documents already linked to this entity by gdrive_file_id.
+    """
+    import json
+    from django.apps import apps
+
+    if entity_type not in ENTITY_CONFIG:
+        return JsonResponse({"error": "Unknown entity_type"}, status=400)
+
+    app_model, fk_field = ENTITY_CONFIG[entity_type]
+    Model = apps.get_model(app_model)
+    entity = get_object_or_404(Model, pk=pk)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    files = payload.get("files") or []
+    if not isinstance(files, list):
+        return JsonResponse({"error": "files must be a list"}, status=400)
+
+    existing_ids = set(
+        Document.objects
+        .filter(**{fk_field: entity})
+        .exclude(gdrive_file_id="")
+        .values_list("gdrive_file_id", flat=True)
+    )
+
+    created = 0
+    for f in files:
+        if not isinstance(f, dict):
+            continue
+        file_id = (f.get("id") or "").strip()
+        if not file_id or file_id in existing_ids:
+            continue
+        name = (f.get("name") or "").strip()
+        title = name.rsplit(".", 1)[0] if "." in name else name
+        url = (f.get("url") or "").strip()
+        if not url and file_id:
+            url = f"https://drive.google.com/file/d/{file_id}/view"
+        Document.objects.create(
+            title=title or "Untitled",
+            gdrive_file_id=file_id,
+            gdrive_url=url,
+            gdrive_file_name=name,
+            gdrive_mime_type=(f.get("mimeType") or "").strip(),
+            **{fk_field: entity},
+        )
+        existing_ids.add(file_id)
+        created += 1
+
+    unlink_url_name = f"documents:{entity_type}_document_unlink"
+    return render(
+        request,
+        "documents/partials/_document_list_section.html",
+        _doc_list_ctx(entity, fk_field, unlink_url_name, pk),
+    )
+
+
 # ---- Google Drive settings & OAuth2 ----
 
 def gdrive_settings(request):
@@ -566,4 +633,83 @@ def gdrive_folder_contents(request):
     files = gdrive.list_folder_contents(folder_id)
     if files is None:
         return JsonResponse({"error": "Failed to list folder"}, status=500)
-    return JsonResponse({"files": files})
+
+    folder_meta = None
+    if folder_id == "root":
+        folder_meta = {"id": "root", "name": "My Drive", "parents": []}
+    else:
+        meta = gdrive.get_folder_metadata(folder_id)
+        if meta:
+            folder_meta = {
+                "id": meta.get("id"),
+                "name": meta.get("name") or "(unnamed)",
+                "parents": meta.get("parents") or [],
+            }
+    return JsonResponse({"files": files, "folder": folder_meta})
+
+
+def gdrive_resolve_folder_path(request):
+    """Return the breadcrumb path for a folder as JSON: [{id, name}, …] root → target."""
+    from . import gdrive
+    if not gdrive.is_connected():
+        return JsonResponse({"error": "Not connected"}, status=403)
+    folder_id = request.GET.get("folder_id", "")
+    if not folder_id:
+        return JsonResponse({"error": "Missing folder_id"}, status=400)
+    chain = gdrive.resolve_folder_path(folder_id)
+    if chain is None:
+        return JsonResponse({"error": "Folder not found"}, status=404)
+    return JsonResponse({"path": chain})
+
+
+# ---- Folder Bookmarks ----
+
+def _bookmark_to_dict(bm):
+    return {
+        "id": bm.pk,
+        "label": bm.label,
+        "folder_id": bm.folder_id,
+        "sort_order": bm.sort_order,
+    }
+
+
+def gdrive_bookmarks_list(request):
+    """List all folder bookmarks as JSON, ordered by sort_order then created_at."""
+    qs = GoogleDriveFolderBookmark.objects.all()
+    return JsonResponse({"bookmarks": [_bookmark_to_dict(b) for b in qs]})
+
+
+@require_POST
+def gdrive_bookmark_create(request):
+    """Create a folder bookmark from POST {label, folder_id}."""
+    label = (request.POST.get("label") or "").strip()
+    folder_id = (request.POST.get("folder_id") or "").strip()
+    if not label:
+        return JsonResponse({"error": "Label is required"}, status=400)
+    if not folder_id:
+        return JsonResponse({"error": "folder_id is required"}, status=400)
+    bm = GoogleDriveFolderBookmark.objects.create(
+        label=label[:100],
+        folder_id=folder_id[:255],
+    )
+    return JsonResponse({"bookmark": _bookmark_to_dict(bm)}, status=201)
+
+
+@require_POST
+def gdrive_bookmark_rename(request, pk):
+    """Rename a folder bookmark from POST {label}."""
+    bm = get_object_or_404(GoogleDriveFolderBookmark, pk=pk)
+    label = (request.POST.get("label") or "").strip()
+    if not label:
+        return JsonResponse({"error": "Label is required"}, status=400)
+    bm.label = label[:100]
+    bm.save()
+    return JsonResponse({"bookmark": _bookmark_to_dict(bm)})
+
+
+@require_POST
+def gdrive_bookmark_delete(request, pk):
+    """Delete a folder bookmark."""
+    bm = get_object_or_404(GoogleDriveFolderBookmark, pk=pk)
+    bm.delete()
+    return JsonResponse({"ok": True})

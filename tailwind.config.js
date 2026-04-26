@@ -13,6 +13,9 @@ module.exports = {
     './healthcare/templates/**/*.html',
     './email_links/templates/**/*.html',
     './assistant/templates/**/*.html',
+    './documents/templates/**/*.html',
+    './documents/templatetags/**/*.py',
+    './static/js/**/*.js',
     './config/forms.py',
   ],
   theme: {

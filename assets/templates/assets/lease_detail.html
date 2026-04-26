@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize choice_labels %}
+{% load humanize choice_labels gdrive_tags %}
 {% block page_context %}viewing Lease #{{ lease.pk }} {{ lease.name }}{% endblock %}
 {% block title %}{{ lease.name }} - Control Center{% endblock %}
 {% block content %}
@@ -139,6 +139,7 @@
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <p class="text-xs text-gray-400 uppercase tracking-wide">Documents{% if entity_documents.count %} <span class="text-gray-400 text-xs font-normal">({{ entity_documents.count }})</span>{% endif %}</p>
         <div class="flex items-center gap-3">
+            {% gdrive_bulk_button "lease" lease.pk %}
             <button hx-get="{% url 'documents:lease_document_link' lease.pk %}"
                     hx-target="#document-form-container"
                     hx-swap="innerHTML"

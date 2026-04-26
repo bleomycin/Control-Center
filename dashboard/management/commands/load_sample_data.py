@@ -2158,6 +2158,17 @@ class Command(BaseCommand):
             )
             doc_pks.append(local_doc.pk)
 
+        from documents.models import GoogleDriveFolderBookmark
+        GoogleDriveFolderBookmark.objects.all().delete()
+        for i, (label, folder_id) in enumerate([
+            ("Tax 2026", "sample_folder_tax2026"),
+            ("Estate Documents", "sample_folder_estate"),
+            ("Charlinda Mission Viejo", "sample_folder_charlinda"),
+        ]):
+            GoogleDriveFolderBookmark.objects.create(
+                label=label, folder_id=folder_id, sort_order=i + 1,
+            )
+
         return {
             "documents.document": doc_pks,
         }

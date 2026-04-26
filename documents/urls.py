@@ -41,4 +41,10 @@ urlpatterns = [
     path("api/picker-token/", views.picker_token, name="picker_token"),
     path("api/gdrive-search/", views.gdrive_search, name="gdrive_search"),
     path("api/gdrive-folder/", views.gdrive_folder_contents, name="gdrive_folder_contents"),
+    path("api/gdrive-folder-path/", views.gdrive_resolve_folder_path, name="gdrive_resolve_folder_path"),
+    path("api/gdrive-bookmarks/", views.gdrive_bookmarks_list, name="gdrive_bookmarks_list"),
+    path("api/gdrive-bookmarks/create/", views.gdrive_bookmark_create, name="gdrive_bookmark_create"),
+    path("api/gdrive-bookmarks/<int:pk>/rename/", views.gdrive_bookmark_rename, name="gdrive_bookmark_rename"),
+    path("api/gdrive-bookmarks/<int:pk>/delete/", views.gdrive_bookmark_delete, name="gdrive_bookmark_delete"),
+    path("api/bulk-link/<str:entity_type>/<int:pk>/", views.bulk_create_and_link, name="bulk_create_and_link"),
 ]

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize gdrive_tags %}
 {% block page_context %}viewing Property #{{ property.pk }} {{ property.name }}{% endblock %}
 {% block title %}{{ property.name }} - Control Center{% endblock %}
 {% block content %}
@@ -229,6 +229,7 @@
         <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Documents{% if entity_documents.count %} <span class="text-gray-400 text-xs font-normal">({{ entity_documents.count }})</span>{% endif %}</h2>
             <div class="flex items-center gap-3">
+                {% gdrive_bulk_button "property" property.pk %}
                 <button hx-get="{% url 'documents:property_document_link' property.pk %}"
                         hx-target="#document-form-container"
                         hx-swap="innerHTML"

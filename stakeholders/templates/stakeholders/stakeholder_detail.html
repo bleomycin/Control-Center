@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize choice_labels static %}
+{% load humanize choice_labels static gdrive_tags %}
 {% block page_context %}viewing Stakeholder #{{ stakeholder.pk }} {{ stakeholder.name }}{% endblock %}
 {% block title %}{{ stakeholder.name }} - Control Center{% endblock %}
 {% block content %}
@@ -497,6 +497,7 @@
     <div class="px-4 py-3 border-b border-gray-700 flex items-center justify-between">
         <h2 class="text-sm font-semibold text-gray-200 uppercase tracking-wide">Documents{% if entity_documents.count %} <span class="text-gray-400 text-xs font-normal">({{ entity_documents.count }})</span>{% endif %}</h2>
         <div class="flex items-center gap-3">
+            {% gdrive_bulk_button "stakeholder" stakeholder.pk %}
             <button hx-get="{% url 'documents:stakeholder_document_link' stakeholder.pk %}"
                     hx-target="#document-form-container"
                     hx-swap="innerHTML"
