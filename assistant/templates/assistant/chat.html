@@ -641,7 +641,20 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     var text = input.value.trim();
     if (!text) return;
 
-    // Prepend attached email if present
+    // Prepend marker blocks. Final order in the message must be:
+    //   [AttachedEmail:...]\n...\n[/AttachedEmail]\n
+    //   [AttachedDriveFiles]\n...\n[/AttachedDriveFiles]\n
+    //   <user text>
+    // (CONTEXT D-10; ChatMessage.display_content also strips email first,
+    // then drive — so email MUST be the first marker in the string.)
+    //
+    // Each prepend is "text = block + text", so the LAST prepend ends up at
+    // the very front. We therefore prepend Drive first, then Email last so
+    // Email lands on top.
+    if (typeof _attachedDriveFiles !== 'undefined' && _attachedDriveFiles.length > 0) {
+        text = _buildAttachedDriveFilesBlock() + text;
+        _clearDriveFiles();
+    }
     if (_attachedEmail) {
         text = _buildAttachedEmailBlock(_attachedEmail) + text;
         removeAttachedEmail();
