@@ -28,7 +28,7 @@ from email_links.models import EmailLink
 # Canonical section order and labels
 SECTION_ORDER = [
     "stakeholders", "assets", "legal", "tasks", "cashflow", "notes", "healthcare",
-    "documents", "email_links", "checklists",
+    "documents", "email_links", "checklists", "assistant",
 ]
 SECTION_LABELS = {
     "stakeholders": "Stakeholders",
@@ -41,6 +41,7 @@ SECTION_LABELS = {
     "documents": "Documents",
     "email_links": "Email Links",
     "checklists": "Checklists",
+    "assistant": "Assistant",
 }
 
 # Which sections depend on which others (for loading)
@@ -55,6 +56,7 @@ SECTION_DEPS = {
     "documents": ["stakeholders", "assets", "legal"],
     "email_links": ["stakeholders", "assets", "legal", "tasks"],
     "checklists": ["stakeholders", "assets", "legal", "tasks"],
+    "assistant": ["stakeholders", "assets"],
 }
 
 # Deletion order per section (children before parents within each section)
@@ -82,6 +84,7 @@ SECTION_DELETION_ORDER = {
     "documents": ["documents.document"],
     "email_links": ["email_links.emaillink"],
     "checklists": ["checklists.checklistitem", "checklists.checklist"],
+    "assistant": ["assistant.chatmessage", "assistant.chatsession"],
 }
 
 # ---------------------------------------------------------------------------
@@ -205,6 +208,9 @@ SAMPLE_NAMES = {
         "sample_email_004", "sample_email_005", "sample_email_006",
         "sample_email_007", "sample_email_008", "sample_email_009",
         "sample_email_010",
+    },
+    "chat_sessions": {
+        "Smith Property docs",
     },
 }
 
@@ -2401,4 +2407,115 @@ class Command(BaseCommand):
         return {
             "checklists.checklist": cl_pks,
             "checklists.checklistitem": ci_pks,
+        }
+
+    # -----------------------------------------------------------------------
+    # ASSISTANT (sample chat session demonstrating Drive-attach feature)
+    # -----------------------------------------------------------------------
+    def _load_assistant(self, today, now):
+        """Seed an assistant ChatSession demonstrating the Drive-attach feature.
+
+        Creates 'Smith Property docs' session with two messages:
+          - user message containing the [AttachedDriveFiles] marker
+            (3 fake-but-realistic Drive PDFs)
+          - assistant reply confirming the link
+
+        On first load this seeds the session deterministically so the new
+        chat-history footer is visible in the dev environment without manually
+        picking files. Idempotent via SAMPLE_NAMES["chat_sessions"] uniqueness
+        check.
+        """
+        import json as _json
+
+        from assistant.models import ChatSession, ChatMessage
+
+        properties = _get_sample_properties()
+
+        self.stdout.write("Creating assistant chat session (Drive-attach demo)...")
+
+        session_pks = []
+        message_pks = []
+
+        # Find the target property — prefer Smith name; fall back to first
+        # available so this loader runs cleanly on partial seeds.
+        smith_property = (
+            properties.get("1200 Oak Avenue")  # canonical "Smith" stand-in
+            or (next(iter(properties.values())) if properties else None)
+        )
+
+        # Idempotent: skip when an existing session matches the canonical title.
+        existing = ChatSession.objects.filter(title="Smith Property docs").first()
+        if existing:
+            session_pks.append(existing.pk)
+            message_pks.extend(
+                list(existing.messages.values_list("pk", flat=True))
+            )
+            return {
+                "assistant.chatsession": session_pks,
+                "assistant.chatmessage": message_pks,
+            }
+
+        session = ChatSession.objects.create(title="Smith Property docs")
+        session_pks.append(session.pk)
+
+        drive_files = [
+            {
+                "id": "demo-term-sheet-001",
+                "name": "Smith-Term-Sheet.pdf",
+                "mimeType": "application/pdf",
+                "url": "https://drive.google.com/file/d/demo-term-sheet-001/view",
+            },
+            {
+                "id": "demo-nda-002",
+                "name": "NDA-Smith-2026.pdf",
+                "mimeType": "application/pdf",
+                "url": "https://drive.google.com/file/d/demo-nda-002/view",
+            },
+            {
+                "id": "demo-closing-003",
+                "name": "Closing-Statement.xlsx",
+                "mimeType": (
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                ),
+                "url": "https://drive.google.com/file/d/demo-closing-003/view",
+            },
+        ]
+
+        # The user-facing text deliberately reads "the Smith Property" —
+        # this seeded message represents what the user TYPED, and stays
+        # stable regardless of which sample properties happen to exist.
+        # The assistant reply (below) names the actual linked property.
+        user_content = (
+            "[AttachedDriveFiles]\n"
+            + _json.dumps(drive_files)
+            + "\n[/AttachedDriveFiles]\n"
+            + "attach these to the Smith Property"
+        )
+        user_msg = ChatMessage.objects.create(
+            session=session, role="user", content=user_content,
+        )
+        message_pks.append(user_msg.pk)
+
+        if smith_property:
+            assistant_content = (
+                f"Linked {len(drive_files)} documents to "
+                f"**{smith_property.name}** (RealEstate · #{smith_property.pk}). "
+                f"All three Documents now appear under the property's Documents "
+                f"section."
+            )
+        else:
+            assistant_content = (
+                f"Linked {len(drive_files)} documents to the Smith Property. "
+                f"All three Documents now appear under the property's Documents "
+                f"section."
+            )
+        assistant_msg = ChatMessage.objects.create(
+            session=session, role="assistant", content=assistant_content,
+        )
+        message_pks.append(assistant_msg.pk)
+
+        return {
+            "assistant.chatsession": session_pks,
+            "assistant.chatmessage": message_pks,
         }

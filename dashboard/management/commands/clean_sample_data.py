@@ -32,6 +32,7 @@ class Command(BaseCommand):
         total_deleted = 0
 
         # Delete in reverse dependency order (children before parents)
+        total_deleted += self._clean_assistant(dry_run)
         total_deleted += self._clean_documents(dry_run)
         total_deleted += self._clean_healthcare(dry_run)
         total_deleted += self._clean_notes(dry_run)
@@ -163,6 +164,21 @@ class Command(BaseCommand):
         total += self._delete(
             Document.objects.filter(title__in=SAMPLE_NAMES["documents"]),
             "documents", dry_run)
+        return total
+
+    def _clean_assistant(self, dry_run):
+        from assistant.models import ChatSession, ChatMessage
+        self.stdout.write("Assistant:")
+        total = 0
+        sample = ChatSession.objects.filter(
+            title__in=SAMPLE_NAMES["chat_sessions"]
+        )
+        # Cascade on ChatSession would remove messages, but we count them
+        # explicitly so the dry-run report is accurate.
+        total += self._delete(
+            ChatMessage.objects.filter(session__in=sample),
+            "chat messages", dry_run)
+        total += self._delete(sample, "chat sessions", dry_run)
         return total
 
     def _clean_healthcare(self, dry_run):
