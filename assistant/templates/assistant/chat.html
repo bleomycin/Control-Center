@@ -169,6 +169,25 @@
                     </button>
                 </div>
             </div>
+            {% endif %}
+            {% if drive_connected %}
+            <!-- Attached Drive files summary (hidden until files picked) -->
+            <div id="attached-drive-summary" class="hidden mb-2">
+                <button type="button" id="drive-summary-bar" onclick="toggleDriveSummary()"
+                        class="w-full flex items-center gap-2 bg-blue-900/25 border border-blue-700/50 rounded-lg px-3 py-1.5 text-left hover:bg-blue-900/35 transition-colors">
+                    <svg class="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    <span id="drive-summary-text" class="text-sm text-gray-200 truncate flex-1"></span>
+                    <svg id="drive-summary-caret" class="w-3 h-3 text-gray-400 shrink-0 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    <span onclick="event.stopPropagation(); _clearDriveFiles()"
+                          class="text-gray-400 hover:text-red-400 ml-1 shrink-0 cursor-pointer p-0.5"
+                          title="Clear all">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </span>
+                </button>
+                <div id="drive-summary-list" class="hidden mt-1 ml-2 pl-2 border-l border-blue-700/30 space-y-0.5"></div>
+            </div>
+            {% endif %}
+            {% if gmail_available %}
             <!-- Email picker panel (hidden until attach button clicked) -->
             <div id="email-attach-panel" class="hidden mb-2 bg-gray-800 border border-gray-600 rounded-lg p-3">
                 <div class="flex items-center justify-between mb-2">
@@ -308,6 +327,91 @@ function openDriveFromMenu() {
 document.addEventListener('click', function(e) {
     if (!e.target.closest('#attach-menu-wrap')) closeAttachMenu();
 });
+
+// --- Drive files attach state ---
+var _attachedDriveFiles = [];        // [{id, name, mimeType, url}]
+var _driveSummaryExpanded = false;   // module-level — preserved across re-renders (D-07)
+
+function _onDriveFilesPicked(files) {
+    if (!Array.isArray(files)) return;
+    files.forEach(function(f) {
+        // Dedupe by id so the same file picked twice from the modal isn't double-added
+        if (!_attachedDriveFiles.some(function(x) { return x.id === f.id; })) {
+            _attachedDriveFiles.push({
+                id: f.id,
+                name: f.name || '',
+                mimeType: f.mimeType || '',
+                url: f.url || ('https://drive.google.com/file/d/' + f.id + '/view'),
+            });
+        }
+    });
+    _renderDriveSummary();
+}
+
+function _renderDriveSummary() {
+    var wrap = document.getElementById('attached-drive-summary');
+    var text = document.getElementById('drive-summary-text');
+    var list = document.getElementById('drive-summary-list');
+    var caret = document.getElementById('drive-summary-caret');
+    if (!wrap || !text || !list) return;
+
+    if (_attachedDriveFiles.length === 0) {
+        wrap.classList.add('hidden');
+        list.classList.add('hidden');
+        _driveSummaryExpanded = false;
+        if (caret) caret.style.transform = '';
+        return;
+    }
+
+    wrap.classList.remove('hidden');
+    var n = _attachedDriveFiles.length;
+    var label = '\u{1F4C1} ' + n + ' file' + (n === 1 ? '' : 's') + ' attached';
+    if (n === 1) label += ' · ' + _attachedDriveFiles[0].name;
+    text.textContent = label;
+
+    // Rebuild the file list (cheap; small N)
+    list.innerHTML = '';
+    _attachedDriveFiles.forEach(function(f, idx) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center gap-2 text-xs text-gray-300 py-0.5';
+        row.innerHTML =
+            '<svg class="w-3 h-3 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>' +
+            '<span class="truncate flex-1"></span>' +
+            '<button type="button" class="text-gray-500 hover:text-red-400 shrink-0 p-0.5" title="Remove">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button>';
+        row.querySelector('span').textContent = f.name;
+        row.querySelector('button').addEventListener('click', function() {
+            _attachedDriveFiles.splice(idx, 1);
+            _renderDriveSummary();
+        });
+        list.appendChild(row);
+    });
+
+    if (_driveSummaryExpanded) {
+        list.classList.remove('hidden');
+        if (caret) caret.style.transform = 'rotate(180deg)';
+    } else {
+        list.classList.add('hidden');
+        if (caret) caret.style.transform = '';
+    }
+}
+
+function toggleDriveSummary() {
+    _driveSummaryExpanded = !_driveSummaryExpanded;
+    _renderDriveSummary();
+}
+
+function _clearDriveFiles() {
+    _attachedDriveFiles = [];
+    _driveSummaryExpanded = false;
+    _renderDriveSummary();
+}
+
+function _buildAttachedDriveFilesBlock() {
+    if (_attachedDriveFiles.length === 0) return '';
+    return '[AttachedDriveFiles]\n' + JSON.stringify(_attachedDriveFiles) + '\n[/AttachedDriveFiles]\n';
+}
 
 // Mode toggle for smart modes
 var MODE_STYLES = {
