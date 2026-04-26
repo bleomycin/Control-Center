@@ -35,9 +35,11 @@ def chat_page(request, session_id=None):
     pinned = ChatSession.objects.filter(is_pinned=True).order_by("sort_order", "-updated_at")
     unpinned = ChatSession.objects.filter(is_pinned=False).order_by("sort_order", "-updated_at")
 
+    from documents.models import GoogleDriveSettings
     from email_links import gmail
     gmail_available = gmail.is_available()
     labels = gmail.get_labels() if gmail_available else []
+    drive_connected = GoogleDriveSettings.load().is_connected
 
     return render(request, "assistant/chat.html", {
         "session": session,
@@ -48,6 +50,7 @@ def chat_page(request, session_id=None):
         "form": form,
         "gmail_available": gmail_available,
         "labels": labels,
+        "drive_connected": drive_connected,
     })
 
 
