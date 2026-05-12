@@ -1285,10 +1285,23 @@ def calendar_feed(request):
     include_tasks = types.get("tasks", True)
     include_meetings = types.get("meetings", True)
     if include_tasks or include_meetings:
-        tasks = Task.objects.exclude(status="complete").filter(
-            due_date__isnull=False, due_date__gte=window_start, due_date__lte=window_end,
+        # Non-recurring: include when first occurrence falls in the window.
+        # Recurring masters: include when DTSTART is at or before window_end,
+        # regardless of how far in the past \u2014 the consumer materializes future
+        # occurrences from the RRULE.
+        tasks = Task.objects.exclude(status="complete").filter(due_date__isnull=False).filter(
+            Q(due_date__gte=window_start, due_date__lte=window_end)
+            | Q(is_recurring=True, recurrence_rule__gt="", due_date__lte=window_end),
         )
         direction_prefixes = {"outbound": "\u2197 ", "inbound": "\u2199 "}
+        rrule_map = {
+            "daily": {"freq": "DAILY"},
+            "weekly": {"freq": "WEEKLY"},
+            "biweekly": {"freq": "WEEKLY", "interval": 2},
+            "monthly": {"freq": "MONTHLY"},
+            "quarterly": {"freq": "MONTHLY", "interval": 3},
+            "yearly": {"freq": "YEARLY"},
+        }
         for task in tasks:
             if task.is_meeting and not include_meetings:
                 continue
@@ -1307,6 +1320,8 @@ def calendar_feed(request):
             else:
                 ev.add("dtstart", task.due_date)
                 _add_alarms(ev, event_type)
+            if task.is_recurring and task.recurrence_rule in rrule_map:
+                ev.add("rrule", rrule_map[task.recurrence_rule])
             # Add VALARM for task-level reminder_date if set
             if task.reminder_date:
                 from icalendar import Alarm

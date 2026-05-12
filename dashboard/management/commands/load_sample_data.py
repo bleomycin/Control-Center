@@ -1522,6 +1522,27 @@ class Command(BaseCommand):
             meeting_task.location = "Zoom"
             meeting_task.save(update_fields=["due_time", "duration_minutes", "meeting_url", "location"])
 
+        # Recurring weekly meeting — exercises RRULE serialization in the calendar feed.
+        recurring_meeting = Task.objects.create(
+            title="Weekly portfolio sync",
+            description="Standing weekly review with Derek Vasquez to track positions and rebalancing.",
+            due_date=today + timedelta(days=2),
+            due_time=t_time(10, 0),
+            duration_minutes=45,
+            status="not_started",
+            priority="medium",
+            task_type="meeting",
+            direction="personal",
+            is_recurring=True,
+            recurrence_rule="weekly",
+            meeting_url="https://zoom.us/j/11122233344?pwd=portfolio",
+            location="Zoom",
+        )
+        derek = stakeholders.get("Derek Vasquez")
+        if derek:
+            recurring_meeting.related_stakeholders.add(derek)
+        tasks["Weekly portfolio sync"] = recurring_meeting
+
         self.stdout.write("Creating follow-ups...")
         followup_data = [
             ("Follow up with Marcus on Holston hearing date", "Marcus Reed", -2, "call", True, 3, False, None,

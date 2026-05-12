@@ -1289,47 +1289,7 @@ class RecurringTaskTests(TestCase):
     def setUpTestData(cls):
         cls.stakeholder = Stakeholder.objects.create(name="Recurring Person")
 
-    def test_compute_next_due_date_weekly(self):
-        from datetime import date
-        t = Task(due_date=date(2026, 3, 1), recurrence_rule="weekly")
-        self.assertEqual(t.compute_next_due_date(), date(2026, 3, 8))
-
-    def test_compute_next_due_date_monthly(self):
-        from datetime import date
-        t = Task(due_date=date(2026, 1, 31), recurrence_rule="monthly")
-        # Jan 31 → Feb 28 (end-of-month clamping)
-        self.assertEqual(t.compute_next_due_date(), date(2026, 2, 28))
-
-    def test_compute_next_due_date_yearly_leap(self):
-        from datetime import date
-        t = Task(due_date=date(2024, 2, 29), recurrence_rule="yearly")
-        self.assertEqual(t.compute_next_due_date(), date(2025, 2, 28))
-
-    def test_compute_next_due_date_quarterly(self):
-        from datetime import date
-        t = Task(due_date=date(2026, 11, 15), recurrence_rule="quarterly")
-        self.assertEqual(t.compute_next_due_date(), date(2027, 2, 15))
-
-    def test_create_next_recurrence(self):
-        from datetime import date
-        t = Task.objects.create(
-            title="Weekly Report",
-            due_date=date(2026, 3, 1),
-            priority="high",
-            direction="outbound",
-            is_recurring=True,
-            recurrence_rule="weekly",
-        )
-        t.related_stakeholders.add(self.stakeholder)
-        new_task = t.create_next_recurrence()
-        self.assertIsNotNone(new_task)
-        self.assertEqual(new_task.title, "Weekly Report")
-        self.assertEqual(new_task.due_date, date(2026, 3, 8))
-        self.assertEqual(new_task.status, "not_started")
-        self.assertTrue(new_task.is_recurring)
-        self.assertEqual(new_task.related_stakeholders.count(), 1)
-
-    def test_toggle_complete_creates_recurrence(self):
+    def test_toggle_complete_does_not_clone(self):
         from datetime import date
         t = Task.objects.create(
             title="Recurring Toggle",
@@ -1339,11 +1299,13 @@ class RecurringTaskTests(TestCase):
         )
         initial_count = Task.objects.count()
         self.client.post(reverse("tasks:toggle_complete", args=[t.pk]))
-        self.assertEqual(Task.objects.count(), initial_count + 1)
-        new_task = Task.objects.filter(title="Recurring Toggle", status="not_started").last()
-        self.assertEqual(new_task.due_date, date(2026, 3, 2))
+        # Completion ends the series; the calendar feed's RRULE is the
+        # source of truth for occurrences, so no clone is spawned.
+        self.assertEqual(Task.objects.count(), initial_count)
+        t.refresh_from_db()
+        self.assertEqual(t.status, "complete")
 
-    def test_kanban_update_creates_recurrence(self):
+    def test_kanban_complete_does_not_clone(self):
         from datetime import date
         t = Task.objects.create(
             title="Kanban Recur",
@@ -1356,9 +1318,9 @@ class RecurringTaskTests(TestCase):
             reverse("tasks:kanban_update", args=[t.pk]),
             {"status": "complete"},
         )
-        self.assertEqual(Task.objects.count(), initial_count + 1)
+        self.assertEqual(Task.objects.count(), initial_count)
 
-    def test_inline_update_creates_recurrence(self):
+    def test_inline_update_does_not_clone(self):
         from datetime import date
         t = Task.objects.create(
             title="Inline Recur",
@@ -1371,9 +1333,9 @@ class RecurringTaskTests(TestCase):
             reverse("tasks:inline_update", args=[t.pk]),
             {"field": "status", "value": "complete"},
         )
-        self.assertEqual(Task.objects.count(), initial_count + 1)
+        self.assertEqual(Task.objects.count(), initial_count)
 
-    def test_bulk_complete_creates_recurrence(self):
+    def test_bulk_complete_does_not_clone(self):
         from datetime import date
         t = Task.objects.create(
             title="Bulk Recur",
@@ -1383,9 +1345,9 @@ class RecurringTaskTests(TestCase):
         )
         initial_count = Task.objects.count()
         self.client.post(reverse("tasks:bulk_complete"), {"selected": [t.pk]})
-        self.assertEqual(Task.objects.count(), initial_count + 1)
+        self.assertEqual(Task.objects.count(), initial_count)
 
-    def test_non_recurring_no_recurrence_on_complete(self):
+    def test_non_recurring_no_clone_on_complete(self):
         t = Task.objects.create(title="One Time Task")
         initial_count = Task.objects.count()
         self.client.post(reverse("tasks:toggle_complete", args=[t.pk]))

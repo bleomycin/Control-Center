@@ -1364,3 +1364,164 @@ class BackupConfigViewTests(TestCase):
         })
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "correct the errors")
+
+
+class CalendarFeedRecurrenceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        from dashboard.models import CalendarFeedSettings
+        s = CalendarFeedSettings.load()
+        s.enabled = True
+        s.token = "test-feed-token"
+        s.save()
+
+    def _feed(self):
+        url = reverse("dashboard:calendar_feed") + "?token=test-feed-token"
+        return self.client.get(url).content.decode("utf-8")
+
+    def _vevent_for(self, body, uid):
+        """Return the VEVENT block whose UID matches, as a string."""
+        events = body.split("BEGIN:VEVENT")
+        for block in events[1:]:
+            block = block.split("END:VEVENT")[0]
+            if f"UID:{uid}" in block:
+                return block
+        return None
+
+    def test_weekly_recurring_task_emits_rrule(self):
+        from datetime import time as t_time
+        t = Task.objects.create(
+            title="Weekly Standup",
+            due_date=timezone.localdate(),
+            due_time=t_time(9, 0),
+            duration_minutes=30,
+            task_type="meeting",
+            is_recurring=True,
+            recurrence_rule="weekly",
+        )
+        body = self._feed()
+        block = self._vevent_for(body, f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("RRULE:FREQ=WEEKLY", block)
+        # Plain weekly should NOT have INTERVAL
+        self.assertNotIn("INTERVAL=", block)
+
+    def test_biweekly_recurring_task_emits_interval_2(self):
+        t = Task.objects.create(
+            title="Biweekly Check-in",
+            due_date=timezone.localdate(),
+            task_type="meeting",
+            is_recurring=True,
+            recurrence_rule="biweekly",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("FREQ=WEEKLY", block)
+        self.assertIn("INTERVAL=2", block)
+
+    def test_monthly_recurring_task_emits_freq_monthly(self):
+        t = Task.objects.create(
+            title="Monthly Review",
+            due_date=timezone.localdate(),
+            task_type="meeting",
+            is_recurring=True,
+            recurrence_rule="monthly",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("FREQ=MONTHLY", block)
+        self.assertNotIn("INTERVAL=", block)
+
+    def test_quarterly_recurring_task_emits_interval_3(self):
+        t = Task.objects.create(
+            title="Quarterly Review",
+            due_date=timezone.localdate(),
+            task_type="meeting",
+            is_recurring=True,
+            recurrence_rule="quarterly",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("FREQ=MONTHLY", block)
+        self.assertIn("INTERVAL=3", block)
+
+    def test_yearly_recurring_task_emits_freq_yearly(self):
+        t = Task.objects.create(
+            title="Annual Review",
+            due_date=timezone.localdate(),
+            task_type="meeting",
+            is_recurring=True,
+            recurrence_rule="yearly",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("FREQ=YEARLY", block)
+
+    def test_daily_recurring_task_emits_freq_daily(self):
+        t = Task.objects.create(
+            title="Daily Standup",
+            due_date=timezone.localdate(),
+            is_recurring=True,
+            recurrence_rule="daily",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("FREQ=DAILY", block)
+
+    def test_non_recurring_task_has_no_rrule(self):
+        t = Task.objects.create(
+            title="One Time Task",
+            due_date=timezone.localdate(),
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertNotIn("RRULE", block)
+
+    def test_recurring_flag_without_rule_emits_no_rrule(self):
+        # Defensive: form validation should prevent this state, but be safe.
+        t = Task.objects.create(
+            title="Misconfigured",
+            due_date=timezone.localdate(),
+            is_recurring=True,
+            recurrence_rule="",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertNotIn("RRULE", block)
+
+    def test_recurring_task_with_past_dtstart_still_included(self):
+        # Window is today-30 to today+90. A weekly series starting 120 days ago
+        # would be excluded by the old query — verify it's now emitted with RRULE.
+        from datetime import timedelta as td
+        t = Task.objects.create(
+            title="Old Weekly Series",
+            due_date=timezone.localdate() - td(days=120),
+            task_type="meeting",
+            is_recurring=True,
+            recurrence_rule="weekly",
+        )
+        block = self._vevent_for(self._feed(), f"task-{t.pk}@controlcenter")
+        self.assertIsNotNone(block)
+        self.assertIn("FREQ=WEEKLY", block)
+
+    def test_completed_recurring_task_excluded(self):
+        t = Task.objects.create(
+            title="Completed Series",
+            due_date=timezone.localdate(),
+            is_recurring=True,
+            recurrence_rule="weekly",
+            status="complete",
+        )
+        body = self._feed()
+        self.assertIsNone(self._vevent_for(body, f"task-{t.pk}@controlcenter"))
+
+    def test_non_recurring_outside_window_excluded(self):
+        # The widened filter must not accidentally include non-recurring
+        # tasks with past due_date.
+        from datetime import timedelta as td
+        t = Task.objects.create(
+            title="Old One Shot",
+            due_date=timezone.localdate() - td(days=120),
+        )
+        body = self._feed()
+        self.assertIsNone(self._vevent_for(body, f"task-{t.pk}@controlcenter"))

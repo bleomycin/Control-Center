@@ -424,13 +424,6 @@ def export_pdf_detail(request, pk):
                       f"{t.get_status_display()} — {t.get_priority_display()} Priority", sections)
 
 
-def _handle_recurring_completion(task):
-    """Create the next recurrence when a recurring task is completed."""
-    if task.is_recurring and task.status == "complete":
-        return task.create_next_recurrence()
-    return None
-
-
 @require_POST
 def toggle_complete(request, pk):
     task = get_object_or_404(Task.objects.prefetch_related("related_stakeholders"), pk=pk)
@@ -441,7 +434,6 @@ def toggle_complete(request, pk):
         task.status = "complete"
         task.completed_at = timezone.now()
     task.save()
-    _handle_recurring_completion(task)
     # Return full row for table context, badge for detail context
     context = request.POST.get("context", "")
     if context == "detail":
@@ -462,7 +454,6 @@ def kanban_update(request, pk):
     else:
         task.completed_at = None
     task.save()
-    _handle_recurring_completion(task)
     return HttpResponse(status=204)
 
 
@@ -491,8 +482,6 @@ def inline_update(request, pk):
     else:
         return HttpResponse(status=400)
     task.save()
-    if field == "status":
-        _handle_recurring_completion(task)
     return render(request, "tasks/partials/_task_row.html", {"task": task})
 
 
@@ -676,7 +665,6 @@ def bulk_complete(request):
             task.status = "complete"
             task.completed_at = timezone.now()
             task.save()
-            _handle_recurring_completion(task)
             count += 1
         messages.success(request, f"{count} task(s) marked complete.")
     return redirect("tasks:list")
@@ -734,7 +722,6 @@ def inline_edit_metadata(request, pk):
         else:
             task.assigned_to = None
         task.save()
-        _handle_recurring_completion(task)
         return render(request, "tasks/partials/_detail_metadata_display.html", {"task": task})
     if request.GET.get("display"):
         return render(request, "tasks/partials/_detail_metadata_display.html", {"task": task})

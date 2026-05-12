@@ -1,4 +1,3 @@
-import calendar
 from datetime import timedelta
 
 from django.db import models
@@ -72,59 +71,6 @@ class Task(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-
-    def compute_next_due_date(self):
-        if not self.due_date:
-            return None
-        d = self.due_date
-        rule = self.recurrence_rule
-        if rule == "daily":
-            return d + timedelta(days=1)
-        if rule == "weekly":
-            return d + timedelta(weeks=1)
-        if rule == "biweekly":
-            return d + timedelta(weeks=2)
-        if rule in ("monthly", "quarterly"):
-            months = 1 if rule == "monthly" else 3
-            month = d.month - 1 + months
-            year = d.year + month // 12
-            month = month % 12 + 1
-            day = min(d.day, calendar.monthrange(year, month)[1])
-            return d.replace(year=year, month=month, day=day)
-        if rule == "yearly":
-            next_year = d.year + 1
-            # If current date is last day of Feb, use last day of Feb in target year
-            # so Feb 29 tasks recover to Feb 29 in future leap years
-            if d.month == 2 and d.day == calendar.monthrange(d.year, 2)[1]:
-                last_feb = calendar.monthrange(next_year, 2)[1]
-                return d.replace(year=next_year, day=last_feb)
-            try:
-                return d.replace(year=next_year)
-            except ValueError:
-                return d.replace(year=next_year, month=2, day=28)
-        return None
-
-    def create_next_recurrence(self):
-        if not self.is_recurring or not self.recurrence_rule:
-            return None
-        next_date = self.compute_next_due_date()
-        new_task = Task.objects.create(
-            title=self.title,
-            description=self.description,
-            due_date=next_date,
-            due_time=self.due_time,
-            duration_minutes=self.duration_minutes,
-            priority=self.priority,
-            task_type=self.task_type,
-            direction=self.direction,
-            related_legal_matter=self.related_legal_matter,
-            related_property=self.related_property,
-            assigned_to=self.assigned_to,
-            is_recurring=True,
-            recurrence_rule=self.recurrence_rule,
-        )
-        new_task.related_stakeholders.set(self.related_stakeholders.all())
-        return new_task
 
     @property
     def is_meeting(self):
