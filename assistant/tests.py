@@ -1,3 +1,5 @@
+import json
+
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
@@ -1903,6 +1905,36 @@ class ChatMessageMarkerStrippingTest(TestCase):
         )
         self.assertEqual(m.display_content, "final question")
 
+    def test_strips_plural_emails_drive_and_context(self):
+        """The plural email marker supports email batches before Drive/context."""
+        emails = [
+            {
+                "thread_id": "t1",
+                "subject": "First email",
+                "from_name": "Alice",
+                "from_email": "alice@example.com",
+                "message_count": 1,
+                "thread_text": "Subject: First email\nBody one",
+            },
+            {
+                "thread_id": "t2",
+                "subject": "Second email",
+                "from_name": "Bob",
+                "from_email": "bob@example.com",
+                "message_count": 2,
+                "thread_text": "Subject: Second email\nBody two",
+            },
+        ]
+        m = self._msg(
+            "[AttachedEmails]\n"
+            + json.dumps(emails)
+            + "\n[/AttachedEmails]\n"
+            "[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\n"
+            "[Context: viewing Stakeholder #1]\n"
+            "compare these"
+        )
+        self.assertEqual(m.display_content, "compare these")
+
     def test_attached_drive_files_parses_list(self):
         m = self._msg(
             '[AttachedDriveFiles]\n'
@@ -1944,6 +1976,59 @@ class ChatMessageMarkerStrippingTest(TestCase):
         s = m.attached_email_summary
         self.assertEqual(s["subject"], "hi")
         self.assertEqual(s["message_count"], 3)
+
+    def test_attached_email_summaries_parses_plural_marker(self):
+        emails = [
+            {
+                "thread_id": "t1",
+                "subject": "First email",
+                "from_name": "Alice",
+                "from_email": "alice@example.com",
+                "message_count": 1,
+                "thread_text": "Subject: First email\nBody one",
+            },
+            {
+                "thread_id": "t2",
+                "subject": "Second email",
+                "from_name": "Bob",
+                "from_email": "bob@example.com",
+                "message_count": 2,
+                "thread_text": "Subject: Second email\nBody two",
+            },
+        ]
+        m = self._msg(
+            "[AttachedEmails]\n"
+            + json.dumps(emails)
+            + "\n[/AttachedEmails]\nquestion"
+        )
+        summaries = m.attached_email_summaries
+        self.assertEqual(len(summaries), 2)
+        self.assertEqual(summaries[0]["subject"], "First email")
+        self.assertEqual(summaries[1]["message_count"], 2)
+
+    def test_attached_email_summaries_wraps_legacy_single_marker(self):
+        m = self._msg(
+            '[AttachedEmail:{"subject":"legacy","message_count":1}]\nbody\n[/AttachedEmail]\nx'
+        )
+        self.assertEqual(m.attached_email_summaries, [
+            {"subject": "legacy", "message_count": 1},
+        ])
+
+    def test_attached_email_summaries_returns_empty_on_malformed_json(self):
+        self.assertEqual(
+            self._msg(
+                "[AttachedEmails]\nnot json\n[/AttachedEmails]\nx"
+            ).attached_email_summaries,
+            [],
+        )
+
+    def test_attached_email_summaries_returns_empty_when_json_is_not_a_list(self):
+        self.assertEqual(
+            self._msg(
+                '[AttachedEmails]\n{"not":"a list"}\n[/AttachedEmails]\nx'
+            ).attached_email_summaries,
+            [],
+        )
 
     def test_attached_email_summary_returns_none_when_absent(self):
         self.assertIsNone(self._msg("hello").attached_email_summary)

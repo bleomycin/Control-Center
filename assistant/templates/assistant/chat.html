@@ -158,16 +158,20 @@
                 </div>
             </div>
             {% if gmail_available %}
-            <!-- Attached email badge (hidden until selected) -->
-            <div id="attached-email-badge" class="hidden mb-2">
-                <div class="bg-green-900/30 border border-green-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2">
+            <!-- Attached email summary (hidden until selected) -->
+            <div id="attached-email-summary" class="hidden mb-2">
+                <button type="button" id="email-summary-bar" onclick="toggleEmailSummary()"
+                        class="w-full bg-green-900/30 border border-green-700/50 rounded-lg px-3 py-1.5 flex items-center gap-2 text-left hover:bg-green-900/40 transition-colors">
                     <svg class="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                    <span id="attached-email-subject" class="text-sm text-gray-200 truncate flex-1"></span>
-                    <span id="attached-email-count" class="text-xs text-gray-500 shrink-0"></span>
-                    <button type="button" onclick="removeAttachedEmail()" class="text-gray-400 hover:text-red-400 shrink-0" title="Remove">
+                    <span id="email-summary-text" class="text-sm text-gray-200 truncate flex-1"></span>
+                    <svg id="email-summary-caret" class="w-3 h-3 text-gray-400 shrink-0 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                    <span onclick="event.stopPropagation(); _clearAttachedEmails()"
+                          class="text-gray-400 hover:text-red-400 ml-1 shrink-0 cursor-pointer p-0.5"
+                          title="Clear all">
                         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                </div>
+                    </span>
+                </button>
+                <div id="email-summary-list" class="hidden mt-1 ml-2 pl-2 border-l border-green-700/30 space-y-0.5"></div>
             </div>
             {% endif %}
             {% if drive_connected %}
@@ -511,7 +515,8 @@ document.addEventListener('click', function(e) {
 });
 
 // --- Email attach picker ---
-var _attachedEmail = null;  // {threadId, subject, fromName, fromEmail, date, messageCount, threadText}
+var _attachedEmails = [];          // [{threadId, subject, fromName, fromEmail, date, messageCount, threadText}]
+var _emailSummaryExpanded = false;
 var _emailPickerLoaded = false;
 
 function toggleEmailPicker() {
@@ -535,64 +540,147 @@ function closeEmailPicker() {
 }
 
 function attachGmailThread(threadId, subject, fromName, fromEmail, date, messageCount) {
-    // Show loading state on badge
-    var badge = document.getElementById('attached-email-badge');
-    var subjectEl = document.getElementById('attached-email-subject');
-    var countEl = document.getElementById('attached-email-count');
-    badge.classList.remove('hidden');
-    subjectEl.textContent = 'Loading thread...';
-    countEl.textContent = '';
-    closeEmailPicker();
+    var existing = _attachedEmails.find(function(x) { return x.threadId === threadId; });
+    if (existing) {
+        _emailSummaryExpanded = true;
+        _renderEmailSummary();
+        return;
+    }
+
+    _attachedEmails.push({
+        threadId: threadId,
+        subject: subject || '(no subject)',
+        fromName: fromName,
+        fromEmail: fromEmail,
+        date: date,
+        messageCount: messageCount || 1,
+        threadText: '',
+        loading: true,
+        error: '',
+    });
+    _emailSummaryExpanded = true;
+    _renderEmailSummary();
 
     fetch('{% url "assistant:gmail_thread_fetch" %}?thread_id=' + encodeURIComponent(threadId) + '&subject=' + encodeURIComponent(subject))
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            var item = _attachedEmails.find(function(x) { return x.threadId === threadId; });
+            if (!item) return;
             if (data.error) {
-                subjectEl.textContent = 'Error: ' + data.error;
-                setTimeout(function() { removeAttachedEmail(); }, 3000);
+                item.loading = false;
+                item.error = data.error;
+                _renderEmailSummary();
                 return;
             }
-            _attachedEmail = {
-                threadId: threadId,
-                subject: subject,
-                fromName: fromName,
-                fromEmail: fromEmail,
-                date: date,
-                messageCount: messageCount,
-                threadText: data.formatted_text,
-            };
-            subjectEl.textContent = subject || '(no subject)';
-            countEl.textContent = messageCount > 1 ? '(' + messageCount + ' msgs)' : '';
-            // Highlight attach menu button to indicate an email is attached
-            var btn = document.getElementById('attach-menu-btn');
-            if (btn) btn.classList.add('text-green-400');
+            item.loading = false;
+            item.error = '';
+            item.threadText = data.formatted_text;
+            item.subject = data.subject || item.subject;
+            _renderEmailSummary();
         })
         .catch(function() {
-            subjectEl.textContent = 'Failed to load thread';
-            setTimeout(function() { removeAttachedEmail(); }, 3000);
+            var item = _attachedEmails.find(function(x) { return x.threadId === threadId; });
+            if (!item) return;
+            item.loading = false;
+            item.error = 'Failed to load thread';
+            _renderEmailSummary();
         });
 }
 
-function removeAttachedEmail() {
-    _attachedEmail = null;
-    var badge = document.getElementById('attached-email-badge');
-    if (badge) badge.classList.add('hidden');
+function _readyAttachedEmails() {
+    return _attachedEmails.filter(function(email) {
+        return email.threadText && !email.loading && !email.error;
+    });
+}
+
+function _renderEmailSummary() {
+    var wrap = document.getElementById('attached-email-summary');
+    var text = document.getElementById('email-summary-text');
+    var list = document.getElementById('email-summary-list');
+    var caret = document.getElementById('email-summary-caret');
     var btn = document.getElementById('attach-menu-btn');
+    if (!wrap || !text || !list) return;
+
+    if (_attachedEmails.length === 0) {
+        wrap.classList.add('hidden');
+        list.classList.add('hidden');
+        _emailSummaryExpanded = false;
+        if (caret) caret.style.transform = '';
+        if (btn) {
+            btn.classList.remove('text-green-400');
+            btn.classList.add('text-gray-400');
+        }
+        return;
+    }
+
+    wrap.classList.remove('hidden');
     if (btn) {
-        btn.classList.remove('text-green-400');
-        btn.classList.add('text-gray-400');
+        btn.classList.remove('text-gray-400');
+        btn.classList.add('text-green-400');
+    }
+
+    var n = _attachedEmails.length;
+    var label = '\u2709 ' + n + ' email' + (n === 1 ? '' : 's') + ' attached';
+    if (n === 1) label += ' · ' + _attachedEmails[0].subject;
+    text.textContent = label;
+
+    list.innerHTML = '';
+    _attachedEmails.forEach(function(email, idx) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center gap-2 text-xs text-gray-300 py-0.5';
+        row.innerHTML =
+            '<svg class="w-3 h-3 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>' +
+            '<span class="truncate flex-1"></span>' +
+            '<span class="text-gray-500 shrink-0"></span>' +
+            '<button type="button" class="text-gray-500 hover:text-red-400 shrink-0 p-0.5" title="Remove">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button>';
+        row.querySelector('span').textContent = email.subject || '(no subject)';
+        var status = row.querySelectorAll('span')[1];
+        if (email.loading) status.textContent = 'Loading';
+        else if (email.error) status.textContent = 'Error';
+        else if (email.messageCount > 1) status.textContent = email.messageCount + ' msgs';
+        row.querySelector('button').addEventListener('click', function() {
+            _attachedEmails.splice(idx, 1);
+            _renderEmailSummary();
+        });
+        list.appendChild(row);
+    });
+
+    if (_emailSummaryExpanded) {
+        list.classList.remove('hidden');
+        if (caret) caret.style.transform = 'rotate(180deg)';
+    } else {
+        list.classList.add('hidden');
+        if (caret) caret.style.transform = '';
     }
 }
 
-function _buildAttachedEmailBlock(email) {
-    var meta = JSON.stringify({
-        thread_id: email.threadId,
-        subject: email.subject,
-        from_name: email.fromName,
-        from_email: email.fromEmail,
-        message_count: email.messageCount,
+function toggleEmailSummary() {
+    _emailSummaryExpanded = !_emailSummaryExpanded;
+    _renderEmailSummary();
+}
+
+function _clearAttachedEmails() {
+    _attachedEmails = [];
+    _emailSummaryExpanded = false;
+    _renderEmailSummary();
+}
+
+function _buildAttachedEmailsBlock() {
+    var ready = _readyAttachedEmails();
+    if (ready.length === 0) return '';
+    var payload = ready.map(function(email) {
+        return {
+            thread_id: email.threadId,
+            subject: email.subject,
+            from_name: email.fromName,
+            from_email: email.fromEmail,
+            message_count: email.messageCount,
+            thread_text: email.threadText,
+        };
     });
-    return '[AttachedEmail:' + meta + ']\n' + email.threadText + '\n[/AttachedEmail]\n';
+    return '[AttachedEmails]\n' + JSON.stringify(payload) + '\n[/AttachedEmails]\n';
 }
 
 // Create chat engine for the full page
@@ -645,7 +733,7 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     if (!text) return;
 
     // Prepend marker blocks. Final order in the message must be:
-    //   [AttachedEmail:...]\n...\n[/AttachedEmail]\n
+    //   [AttachedEmails]\n...\n[/AttachedEmails]\n
     //   [AttachedDriveFiles]\n...\n[/AttachedDriveFiles]\n
     //   <user text>
     // (CONTEXT D-10; ChatMessage.display_content also strips email first,
@@ -658,9 +746,9 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
         text = _buildAttachedDriveFilesBlock() + text;
         _clearDriveFiles();
     }
-    if (_attachedEmail) {
-        text = _buildAttachedEmailBlock(_attachedEmail) + text;
-        removeAttachedEmail();
+    if (_readyAttachedEmails().length > 0) {
+        text = _buildAttachedEmailsBlock() + text;
+        _clearAttachedEmails();
     }
 
     var sendBtn = document.getElementById('send-btn');

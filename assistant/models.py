@@ -95,6 +95,11 @@ class ChatMessage(models.Model):
         precedes any [Context:] hint, which precedes the user's typed text.
         """
         text = self.content or ""
+        if text.startswith("[AttachedEmails]"):
+            end_marker = "[/AttachedEmails]"
+            idx = text.find(end_marker)
+            if idx > -1:
+                text = text[idx + len(end_marker):].strip()
         if text.startswith("[AttachedEmail:"):
             end_marker = "[/AttachedEmail]"
             idx = text.find(end_marker)
@@ -159,6 +164,46 @@ class ChatMessage(models.Model):
             "subject": meta.get("subject", "(no subject)"),
             "message_count": meta.get("message_count", 1),
         }
+
+    @property
+    def attached_email_summaries(self):
+        """Parse plural email attachments and return display summaries.
+
+        New messages use:
+        [AttachedEmails]
+        [{...}, {...}]
+        [/AttachedEmails]
+
+        Existing history may still use the legacy single-email marker, so
+        this property wraps that legacy summary in a one-item list.
+        """
+        text = self.content or ""
+        open_marker = "[AttachedEmails]"
+        close_marker = "[/AttachedEmails]"
+        i = text.find(open_marker)
+        if i >= 0:
+            j = text.find(close_marker, i)
+            if j < 0:
+                return []
+            json_text = text[i + len(open_marker):j].strip()
+            try:
+                parsed = json.loads(json_text)
+            except (ValueError, TypeError):
+                return []
+            if not isinstance(parsed, list):
+                return []
+            summaries = []
+            for item in parsed:
+                if not isinstance(item, dict):
+                    continue
+                summaries.append({
+                    "subject": item.get("subject", "(no subject)"),
+                    "message_count": item.get("message_count", 1),
+                })
+            return summaries
+
+        legacy_summary = self.attached_email_summary
+        return [legacy_summary] if legacy_summary else []
 
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"

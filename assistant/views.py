@@ -348,7 +348,7 @@ def gmail_thread_search(request):
         })
     mode = request.GET.get("mode", "")
     callback = "attachGmailThread" if mode == "attach" else ""
-    callback_label = "Attach" if mode == "attach" else ""
+    callback_label = "Add" if mode == "attach" else ""
     return render(request, "assistant/partials/_gmail_thread_results.html", {
         "results": data.get("threads"),
         "next_page_token": data.get("next_page_token"),

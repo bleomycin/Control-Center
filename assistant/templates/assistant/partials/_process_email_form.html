@@ -56,14 +56,14 @@
             </div>
         </div>
 
-        <!-- Selected thread preview (hidden until a thread is selected) -->
+        <!-- Selected thread list (hidden until a thread is selected) -->
         <div id="gmail-selected" class="hidden">
-            <div class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2 flex items-center justify-between">
-                <div class="min-w-0 flex-1">
-                    <p class="text-xs text-gray-400">Selected email</p>
-                    <p id="gmail-selected-subject" class="text-sm text-gray-200 truncate"></p>
+            <div class="bg-gray-700/50 border border-gray-600 rounded-lg px-3 py-2">
+                <div class="flex items-center justify-between gap-3 mb-1.5">
+                    <p class="text-xs text-gray-400">Selected emails <span id="gmail-selected-count"></span></p>
+                    <button type="button" onclick="clearGmailSelection()" class="text-xs text-blue-400 hover:text-blue-300 flex-shrink-0">Clear all</button>
                 </div>
-                <button type="button" onclick="clearGmailSelection()" class="text-xs text-blue-400 hover:text-blue-300 ml-2 flex-shrink-0">Change</button>
+                <div id="gmail-selected-list" class="space-y-1"></div>
             </div>
         </div>
 
@@ -161,41 +161,99 @@ function switchEmailTab(tab) {
 }
 
 // --- Gmail thread selection ---
-var _selectedThreadText = '';
+var _selectedThreads = [];
 
 function selectGmailThread(threadId, subject) {
-    var searchSection = document.getElementById('gmail-search-section');
-    var selectedSection = document.getElementById('gmail-selected');
-    var subjectEl = document.getElementById('gmail-selected-subject');
-    var processBtn = document.getElementById('gmail-process-btn');
+    var existing = _selectedThreads.find(function(x) { return x.threadId === threadId; });
+    if (existing) {
+        renderGmailSelection();
+        return;
+    }
 
-    // Show loading state
-    searchSection.classList.add('hidden');
-    selectedSection.classList.remove('hidden');
-    subjectEl.textContent = 'Loading thread...';
-    processBtn.disabled = true;
+    _selectedThreads.push({
+        threadId: threadId,
+        subject: subject || '(no subject)',
+        threadText: '',
+        loading: true,
+        error: '',
+    });
+    renderGmailSelection();
 
     fetch('{% url "assistant:gmail_thread_fetch" %}?thread_id=' + encodeURIComponent(threadId) + '&subject=' + encodeURIComponent(subject))
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            var item = _selectedThreads.find(function(x) { return x.threadId === threadId; });
+            if (!item) return;
             if (data.error) {
-                subjectEl.textContent = 'Error: ' + data.error;
+                item.loading = false;
+                item.error = data.error;
+                renderGmailSelection();
                 return;
             }
-            _selectedThreadText = data.formatted_text;
-            subjectEl.textContent = data.subject;
-            processBtn.disabled = false;
+            item.loading = false;
+            item.error = '';
+            item.subject = data.subject || item.subject;
+            item.threadText = data.formatted_text;
+            renderGmailSelection();
         })
         .catch(function(err) {
-            subjectEl.textContent = 'Failed to load thread';
+            var item = _selectedThreads.find(function(x) { return x.threadId === threadId; });
+            if (!item) return;
+            item.loading = false;
+            item.error = 'Failed to load thread';
+            renderGmailSelection();
         });
 }
 
+function readyGmailSelections() {
+    return _selectedThreads.filter(function(item) {
+        return item.threadText && !item.loading && !item.error;
+    });
+}
+
+function renderGmailSelection() {
+    var selectedSection = document.getElementById('gmail-selected');
+    var selectedList = document.getElementById('gmail-selected-list');
+    var selectedCount = document.getElementById('gmail-selected-count');
+    var processBtn = document.getElementById('gmail-process-btn');
+    if (!selectedSection || !selectedList || !processBtn) return;
+
+    if (_selectedThreads.length === 0) {
+        selectedSection.classList.add('hidden');
+        selectedList.innerHTML = '';
+        processBtn.disabled = true;
+        return;
+    }
+
+    selectedSection.classList.remove('hidden');
+    selectedCount.textContent = '(' + _selectedThreads.length + ')';
+    selectedList.innerHTML = '';
+    _selectedThreads.forEach(function(item, idx) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center gap-2 text-xs text-gray-300';
+        row.innerHTML =
+            '<svg class="w-3 h-3 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>' +
+            '<span class="truncate flex-1"></span>' +
+            '<span class="text-gray-500 shrink-0"></span>' +
+            '<button type="button" class="text-gray-500 hover:text-red-400 shrink-0 p-0.5" title="Remove">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+            '</button>';
+        row.querySelector('span').textContent = item.subject || '(no subject)';
+        var status = row.querySelectorAll('span')[1];
+        if (item.loading) status.textContent = 'Loading';
+        else if (item.error) status.textContent = 'Error';
+        row.querySelector('button').addEventListener('click', function() {
+            _selectedThreads.splice(idx, 1);
+            renderGmailSelection();
+        });
+        selectedList.appendChild(row);
+    });
+    processBtn.disabled = readyGmailSelections().length === 0;
+}
+
 function clearGmailSelection() {
-    _selectedThreadText = '';
-    document.getElementById('gmail-search-section').classList.remove('hidden');
-    document.getElementById('gmail-selected').classList.add('hidden');
-    document.getElementById('gmail-process-btn').disabled = true;
+    _selectedThreads = [];
+    renderGmailSelection();
 }
 
 // --- Instruction presets ---
@@ -235,9 +293,13 @@ function _getInstruction(prefix) {
 }
 
 function submitGmailEmail() {
-    if (!_selectedThreadText) return;
+    var selected = readyGmailSelections();
+    if (selected.length === 0) return;
     var instruction = _getInstruction('gmail');
-    var emailBlock = '\n\n---\n\n' + _selectedThreadText + '\n\n---';
+    var threadText = selected.map(function(item, idx) {
+        return '=== Attached Email ' + (idx + 1) + ': ' + item.subject + ' ===\n' + item.threadText;
+    }).join('\n\n');
+    var emailBlock = '\n\n---\n\n' + threadText + '\n\n---';
     emailBlock += _buildDriveFilesBlock();
     closeModal();
     if (instruction === null) {

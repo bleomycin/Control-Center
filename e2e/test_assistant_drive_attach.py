@@ -124,6 +124,56 @@ class AssistantDriveAttachFooterTest(PlaywrightTestCase):
         self.assertNotIn("[AttachedDriveFiles]", message_list_html)
         self.assertNotIn("[/AttachedEmail]", message_list_html)
 
+    def test_user_bubble_with_multiple_emails_and_drive_shows_counts(self):
+        """User bubble with [AttachedEmails] and Drive markers shows plural
+        email and file counts while stripping both marker blocks."""
+        session = ChatSession.objects.create(title="E2E Multi Email Attach Test")
+        emails = [
+            {
+                "thread_id": "thread-a",
+                "subject": "Oak Ave lease",
+                "from_name": "Alice",
+                "from_email": "alice@example.com",
+                "message_count": 1,
+                "thread_text": "Subject: Oak Ave lease\nBody A",
+            },
+            {
+                "thread_id": "thread-b",
+                "subject": "Elm St operating statement",
+                "from_name": "Bob",
+                "from_email": "bob@example.com",
+                "message_count": 2,
+                "thread_text": "Subject: Elm St operating statement\nBody B",
+            },
+        ]
+        files = [
+            {
+                "id": "e2e-m-1",
+                "name": "Statement.pdf",
+                "mimeType": "application/pdf",
+                "url": "https://drive.google.com/file/d/e2e-m-1/view",
+            },
+        ]
+        content = (
+            f"[AttachedEmails]\n{json.dumps(emails)}\n[/AttachedEmails]\n"
+            f"[AttachedDriveFiles]\n{json.dumps(files)}\n[/AttachedDriveFiles]\n"
+            f"process this batch"
+        )
+        ChatMessage.objects.create(session=session, role="user", content=content)
+
+        self.page.goto(self.url(f"/assistant/{session.pk}/"))
+        self.page.wait_for_selector("#message-list")
+        message_list_html = self.page.locator("#message-list").inner_html()
+
+        self.assertIn("2 emails", message_list_html)
+        self.assertIn("1 file", message_list_html)
+        self.assertIn("Oak Ave lease", message_list_html)
+        self.assertIn("Elm St operating statement", message_list_html)
+        self.assertIn("Statement.pdf", message_list_html)
+        self.assertIn("process this batch", message_list_html)
+        self.assertNotIn("[AttachedEmails]", message_list_html)
+        self.assertNotIn("[AttachedDriveFiles]", message_list_html)
+
     def test_user_bubble_without_attachments_renders_no_footer(self):
         """User bubble without any markers renders without the dashed
         attachment footer."""
