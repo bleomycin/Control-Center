@@ -67,6 +67,9 @@ function createChatEngine(config) {
     var currentStreamTools = null;
     var inactivityTimer = null;
     var endedWithError = false;
+    var endedWithTimeout = false;  // watchdog fired (vs. a server-sent error)
+    var finished = false;          // guard: finish() may be reached >1 way
+    var abortController = null;     // tears down the fetch when we give up
 
     function autoScroll() {
         config.scrollEl.scrollTop = config.scrollEl.scrollHeight;
@@ -77,9 +80,15 @@ function createChatEngine(config) {
         inactivityTimer = setTimeout(function() {
             console.error('Stream inactivity timeout (90s)');
             endedWithError = true;
+            endedWithTimeout = true;
+            // Stop consuming the stream so the server request doesn't keep
+            // running (and writing) for a client that has given up.
+            if (abortController) abortController.abort();
             if (currentStreamContent) {
-                currentStreamContent.innerHTML = '<span class="text-red-400">Connection lost — no response for 90 seconds. <a href="" class="underline text-blue-400">Reload to see results</a> (your data was saved).</span>';
+                currentStreamContent.innerHTML = '<span class="text-gray-400">Connection lost — loading saved results…</span>';
             }
+            // finish() reloads on timeout so anything the server already saved
+            // becomes visible without a manual page refresh.
             finish();
         }, 90000);
     }
@@ -190,6 +199,10 @@ function createChatEngine(config) {
     }
 
     function finish() {
+        // May be reached from the watchdog, the read() loop's done branch, its
+        // catch, or the fetch catch — run the teardown only once per stream.
+        if (finished) return;
+        finished = true;
         if (inactivityTimer) clearTimeout(inactivityTimer);
         streaming = false;
         config.sendBtnEl.disabled = false;
@@ -201,14 +214,18 @@ function createChatEngine(config) {
         currentStreamContent = null;
         currentStreamTools = null;
         // Delay onFinish slightly so the server saves the message before we refresh.
-        // Skip reload on error/timeout — preserve the error message in the bubble.
-        if (config.onFinish && !endedWithError) {
+        // Reload on normal completion AND on watchdog timeout (to surface any
+        // results the server already persisted). Skip only for a server-sent
+        // error event, where the error message is preserved in the bubble.
+        if (config.onFinish && (!endedWithError || endedWithTimeout)) {
             setTimeout(function() { config.onFinish(); }, 300);
         }
     }
 
     function doSend(text) {
         endedWithError = false;
+        endedWithTimeout = false;
+        finished = false;
         // Prepend page context if available
         var context = config.getPageContext ? config.getPageContext() : null;
         var fullText = text;
@@ -269,10 +286,12 @@ function createChatEngine(config) {
         if (eff) body.append('effort', eff);
         resetWatchdog();
 
+        abortController = new AbortController();
         fetch(config.streamUrl, {
             method: 'POST',
             headers: {'X-CSRFToken': config.csrfToken},
             body: body,
+            signal: abortController.signal,
         }).then(function(resp) {
             var reader = resp.body.getReader();
             var decoder = new TextDecoder();
@@ -302,6 +321,9 @@ function createChatEngine(config) {
                     }
                     read();
                 }).catch(function(err) {
+                    // AbortError = we intentionally tore down the stream (e.g.
+                    // watchdog timeout); finish() already ran. Stay quiet.
+                    if (err && err.name === 'AbortError') return;
                     console.error('Stream error:', err);
                     finish();
                 });
@@ -309,6 +331,8 @@ function createChatEngine(config) {
 
             read();
         }).catch(function(err) {
+            // AbortError = intentional teardown; the watchdog already handled UI.
+            if (err && err.name === 'AbortError') { finish(); return; }
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">Connection error: ' + escapeHtml(err.message) + '</span>';
             }

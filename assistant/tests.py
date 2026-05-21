@@ -1,12 +1,19 @@
 import json
+import time
 
 from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 from django.urls import reverse
 
-from .client import _result_summary, _tool_summary
-from .models import ChatMessage, ChatSession
+from .client import (
+    MAX_TOOL_ITERATIONS,
+    _result_summary,
+    _stream_message_impl,
+    _tool_summary,
+    _with_heartbeat,
+)
+from .models import AssistantSettings, ChatMessage, ChatSession
 from .registry import build_registry, get_field_info, get_model, serialize_instance
 from .tools import delete_record, get_record, list_models, query, search, summarize
 
@@ -2038,4 +2045,112 @@ class ChatMessageMarkerStrippingTest(TestCase):
             self._msg(
                 "[AttachedEmail:not json]\nbody\n[/AttachedEmail]\nx"
             ).attached_email_summary,
+        )
+
+
+class HeartbeatWrapperTests(TestCase):
+    """_with_heartbeat keeps the SSE stream alive during silent windows and
+    always reaches a defined terminal state (Defects 1 & the crash path)."""
+
+    def test_passes_frames_through_in_order(self):
+        def gen():
+            yield "event: a\ndata: {}\n\n"
+            yield "event: b\ndata: {}\n\n"
+
+        out = list(_with_heartbeat(gen(), interval=5))
+        self.assertEqual(
+            out,
+            ["event: a\ndata: {}\n\n", "event: b\ndata: {}\n\n"],
+        )
+
+    def test_no_keepalive_when_inner_is_fast(self):
+        def gen():
+            yield "event: done\ndata: {}\n\n"
+
+        out = list(_with_heartbeat(gen(), interval=5))
+        self.assertNotIn(": keepalive\n\n", out)
+
+    def test_emits_keepalive_during_silent_window(self):
+        def slow():
+            time.sleep(0.25)
+            yield "event: done\ndata: {}\n\n"
+
+        out = list(_with_heartbeat(slow(), interval=0.05))
+        # The blocking window before the first frame must be bridged...
+        self.assertIn(": keepalive\n\n", out)
+        # ...and the real frame still arrives, last.
+        self.assertEqual(out[-1], "event: done\ndata: {}\n\n")
+
+    def test_inner_exception_yields_terminal_error_frame(self):
+        def boom():
+            yield "event: token\ndata: {}\n\n"
+            raise ValueError("kaboom")
+
+        with self.assertLogs("assistant.client", level="ERROR"):
+            out = list(_with_heartbeat(boom(), interval=5))
+        self.assertEqual(out[0], "event: token\ndata: {}\n\n")
+        self.assertTrue(out[-1].startswith("event: error\ndata: "))
+
+
+class _FakeStream:
+    """Minimal stand-in for anthropic's MessageStream context manager that
+    always returns a tool_use response (so the loop runs to max iterations)."""
+
+    request_id = "req_test"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def __iter__(self):
+        return iter([])  # no content_block_delta events
+
+    def get_final_message(self):
+        block = MagicMock()
+        block.type = "tool_use"
+        block.id = "tool_1"
+        block.name = "search"
+        block.input = {"query": "x"}
+        resp = MagicMock()
+        resp.model = "claude-opus-4-6"
+        resp.content = [block]
+        return resp
+
+
+class MaxIterationsTerminalEventTests(TestCase):
+    """Reaching MAX_TOOL_ITERATIONS must deliver a terminal SSE event so the
+    client never stops silently (Defect 3)."""
+
+    def setUp(self):
+        self.session = ChatSession.objects.create()
+        settings_obj = AssistantSettings.load()
+        settings_obj.api_key = "sk-test-key"
+        settings_obj.save()
+
+    @patch("assistant.client._execute_tool", return_value='{"ok": true}')
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_max_iterations_emits_terminal_done(self, mock_anthropic, _mock_exec):
+        mock_anthropic.return_value.messages.stream.return_value = _FakeStream()
+
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast"))
+
+        # The loop ran exactly MAX_TOOL_ITERATIONS times before giving up.
+        self.assertEqual(
+            mock_anthropic.return_value.messages.stream.call_count,
+            MAX_TOOL_ITERATIONS,
+        )
+        # A terminal "done" frame closes the stream...
+        self.assertTrue(
+            frames[-1].startswith("event: done\ndata: "),
+            f"expected terminal done, got: {frames[-1]!r}",
+        )
+        # ...and the guidance message was persisted for the client to reload.
+        self.assertTrue(
+            ChatMessage.objects.filter(
+                session=self.session,
+                role="assistant",
+                content__icontains="maximum number of tool calls",
+            ).exists()
         )

@@ -7,6 +7,8 @@ and the tool-use loop.
 
 import json
 import logging
+import queue
+import threading
 import time
 
 import anthropic
@@ -19,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 25
 MAX_MESSAGES_TO_SEND = 50
+# Bridge any silent window longer than this with a keepalive comment frame.
+# Must stay well under the client's 90s inactivity watchdog
+# (static/js/assistant-chat.js resetWatchdog) with margin for jitter.
+HEARTBEAT_INTERVAL_SECONDS = 15
 CACHE_BREAKPOINT_INTERVAL = 15  # Add cache breakpoint every N messages
 CACHE_CONTROL = {"type": "ephemeral"}
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -782,7 +788,96 @@ def send_message(session, user_text, mode="fast", effort=""):
     return new_messages
 
 
+def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS):
+    """Wrap an SSE generator so no silent window exceeds ``interval`` seconds.
+
+    The streaming tool loop blocks for long stretches with no client-visible
+    output: during time-to-first-token, while the model streams tool-call
+    argument JSON, during synchronous tool execution, and in the gap between
+    tool iterations. Any one of these can exceed the browser's 90s inactivity
+    watchdog on a large request, tearing down a perfectly healthy stream.
+
+    To bridge every phase uniformly, run the inner generator in a worker thread
+    and relay its frames through a bounded queue. While the worker is blocked
+    (producing nothing), this outer generator emits ``: keepalive`` comment
+    frames — valid SSE that the client's line parser ignores
+    (assistant-chat.js only acts on ``event:``/``data:`` lines) but which still
+    resets the byte-level watchdog. If the inner generator raises, a terminal
+    ``error`` frame is emitted so the client always reaches a defined end state.
+    """
+    from django.db import connection
+
+    frames = queue.Queue(maxsize=1)
+    sentinel = object()
+    stop = threading.Event()
+
+    def produce():
+        try:
+            for frame in inner_gen:
+                # Bounded put so an aborted client (consumer gone, see Defect 2)
+                # can't wedge this thread forever — recheck stop each timeout.
+                while not stop.is_set():
+                    try:
+                        frames.put(frame, timeout=1)
+                        break
+                    except queue.Full:
+                        continue
+                if stop.is_set():
+                    break
+        except Exception:
+            logger.exception("Assistant stream generator crashed")
+            try:
+                frames.put(
+                    f"event: error\ndata: "
+                    f"{json.dumps({'message': 'The assistant hit an unexpected error. Your data was saved — reload to see it.'})}\n\n",
+                    timeout=1,
+                )
+            except queue.Full:
+                pass
+        finally:
+            inner_gen.close()
+            # The worker opened its own thread-local DB connection; release it.
+            connection.close()
+            try:
+                frames.put(sentinel, timeout=1)
+            except queue.Full:
+                pass
+
+    worker = threading.Thread(target=produce, name="assistant-stream", daemon=True)
+    worker.start()
+
+    try:
+        while True:
+            try:
+                frame = frames.get(timeout=interval)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+            if frame is sentinel:
+                break
+            yield frame
+    finally:
+        # Client gone or stream complete: signal the worker and drain the queue
+        # so its bounded put() unblocks and the thread (and connection) can exit.
+        stop.set()
+        try:
+            while True:
+                frames.get_nowait()
+        except queue.Empty:
+            pass
+
+
 def stream_message(session, user_text, mode="fast", effort=""):
+    """Public entry point — the streaming tool loop wrapped with a heartbeat.
+
+    Returns a generator of SSE frames suitable for StreamingHttpResponse. See
+    ``_stream_message_impl`` for the event protocol and ``_with_heartbeat`` for
+    the keepalive behavior that keeps long, healthy requests alive.
+    """
+    return _with_heartbeat(_stream_message_impl(session, user_text, mode=mode, effort=effort))
+
+
+def _stream_message_impl(session, user_text, mode="fast", effort=""):
     """
     Generator that yields SSE events as the assistant processes a message.
 
@@ -1054,9 +1149,16 @@ def stream_message(session, user_text, mode="fast", effort=""):
         yield sse("done", {"message_id": assistant_msg.pk})
         return
 
-    # Max iterations reached (for-else)
-    _safe_create_message(
+    # Max iterations reached (for-else). Deliver a terminal SSE so the client
+    # reaches a defined end state instead of a silent stop. Treat it as a
+    # normal completion ("done") carrying the saved guidance message — the
+    # client reloads and renders it — and fall back to "error" only if the
+    # save itself failed (no message_id to show).
+    fallback_msg = _safe_create_message(
         session,
         "I reached the maximum number of tool calls for this message. Please try a more specific question.",
     )
-    yield sse("error", {"message": "Max tool iterations reached"})
+    if fallback_msg is not None:
+        yield sse("done", {"message_id": fallback_msg.pk})
+    else:
+        yield sse("error", {"message": "Max tool iterations reached"})

@@ -12,7 +12,10 @@ class DashboardConfig(AppConfig):
                 cursor = connection.cursor()
                 cursor.execute('PRAGMA journal_mode=WAL;')
                 cursor.execute('PRAGMA synchronous=NORMAL;')
-                cursor.execute('PRAGMA busy_timeout=5000;')
+                # Wait up to 15s for a write lock before raising "database is
+                # locked". The web app, the django-q2 qcluster, and the
+                # assistant stream worker all write to the same SQLite file.
+                cursor.execute('PRAGMA busy_timeout=15000;')
                 cursor.execute('PRAGMA cache_size=-20000;')
                 cursor.execute('PRAGMA foreign_keys=ON;')
 

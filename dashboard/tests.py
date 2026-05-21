@@ -660,7 +660,7 @@ class SQLitePragmaTests(TestCase):
         with connection.cursor() as cursor:
             cursor.execute('PRAGMA busy_timeout;')
             timeout = cursor.fetchone()[0]
-        self.assertEqual(timeout, 5000)
+        self.assertEqual(timeout, 15000)
 
     def test_foreign_keys_enabled(self):
         from django.db import connection
