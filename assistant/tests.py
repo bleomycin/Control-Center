@@ -2154,3 +2154,220 @@ class MaxIterationsTerminalEventTests(TestCase):
                 content__icontains="maximum number of tool calls",
             ).exists()
         )
+
+
+# A realistic forwarded-email body: a short cover note + signature, then the
+# forwarded message introduced by an Outlook "From: .../Sent: ..." header.
+# The forwarded substance below the cover note must reach the model intact.
+_FORWARDED_BODY = (
+    "Everyone:\r\n\r\n"
+    "See below. They clearly think they have a better case than they do.\r\n\r\n"
+    "Buchalter\r\nJosh H. Escovedo\r\nwww.buchalter.com\r\n\r\n\r\n"
+    "From: Brown, Jeffrey N. <JBrown@thompsoncoburn.com>\r\n"
+    "Sent: Wednesday, May 20, 2026 3:00 PM\r\n"
+    "To: Escovedo, Josh H.\r\n"
+    "Subject: Privileged Settlement Communication\r\n\r\n"
+    "Josh, our client will accept nothing less than full payment of the loan.\r\n"
+)
+
+# The verbatim forwarded message that the cover note in _FORWARDED_BODY quotes.
+# In a real reply chain this would be rendered as its own earlier message, so
+# the quoted copy is redundant and safe to drop.
+_QUOTED_ORIGINAL = (
+    "Josh, our client will accept nothing less than full payment of the loan.\r\n\r\n"
+    "Jeffrey N. Brown\r\nThompson Coburn LLP\r\n"
+)
+
+
+class EmailBodyCleaningTests(TestCase):
+    """Forwarded email content must survive thread-text assembly (regression)."""
+
+    def test_is_forward_subject(self):
+        from .views import _is_forward_subject
+        self.assertTrue(_is_forward_subject("FW: Privileged Settlement Communication"))
+        self.assertTrue(_is_forward_subject("Fwd: hello"))
+        self.assertTrue(_is_forward_subject("  fw:  spaced"))
+        self.assertFalse(_is_forward_subject("RE: hello"))
+        self.assertFalse(_is_forward_subject("Quarterly review"))
+        self.assertFalse(_is_forward_subject(""))
+        self.assertFalse(_is_forward_subject(None))
+
+    def test_forward_subject_preserves_quoted_content(self):
+        """A forwarded email keeps its forwarded body even at message 1."""
+        from .views import _clean_email_body
+        cleaned = _clean_email_body(
+            _FORWARDED_BODY, is_first=True, is_forward=True, earlier_bodies=[]
+        )
+        self.assertIn("our client will accept nothing less", cleaned)
+        self.assertIn("From: Brown, Jeffrey N.", cleaned)
+
+    def test_first_message_preserves_quoted_content(self):
+        """The first/only message in a thread is never stripped (no prior copy)."""
+        from .views import _clean_email_body
+        cleaned = _clean_email_body(
+            _FORWARDED_BODY, is_first=True, is_forward=False, earlier_bodies=[]
+        )
+        self.assertIn("our client will accept nothing less", cleaned)
+
+    def test_embedded_forward_in_reply_thread_is_preserved(self):
+        """A forward pasted into a RE: thread (msg 2+) is kept — the quoted text
+        does NOT match any earlier sibling, so it is unique content."""
+        from .views import _clean_email_body
+        unrelated_earlier = "Team, please review the closing statement before Friday."
+        cleaned = _clean_email_body(
+            _FORWARDED_BODY, is_first=False, is_forward=False,
+            earlier_bodies=[unrelated_earlier],
+        )
+        self.assertIn("our client will accept nothing less", cleaned)
+        self.assertIn("From: Brown, Jeffrey N.", cleaned)
+
+    def test_redundant_reply_quote_is_stripped_with_note(self):
+        """A quote that reproduces an earlier sibling message is dropped, and a
+        visible note replaces it so the removal is not silent. The short
+        attribution header is kept (it is novel to this message)."""
+        from .views import _clean_email_body, _OMITTED_QUOTE_NOTE
+        cleaned = _clean_email_body(
+            _FORWARDED_BODY, is_first=False, is_forward=False,
+            earlier_bodies=[_QUOTED_ORIGINAL],
+        )
+        self.assertIn("See below.", cleaned)            # cover note kept
+        self.assertNotIn("our client will accept nothing less", cleaned)  # quote dropped
+        self.assertIn(_OMITTED_QUOTE_NOTE, cleaned)     # removal is visible
+
+    def test_inline_replies_between_quotes_are_preserved(self):
+        """Interleaved (inline) replies survive: only the quoted question lines
+        are dropped, the user's answers between them are kept."""
+        from .views import _clean_email_body
+        original = (
+            "Will your client accept a structured payout over twelve months?\r\n\r\n"
+            "And will you release the lis pendens at closing?\r\n"
+        )
+        inline_reply = (
+            "Responses inline below, Jeff.\r\n\r\n"
+            "From: Brown, Jeffrey N. <JBrown@thompsoncoburn.com>\r\n"
+            "Sent: Wednesday, May 20, 2026 3:00 PM\r\n\r\n"
+            "Will your client accept a structured payout over twelve months?\r\n"
+            "We can consider a payout, but only over six months, not twelve.\r\n"
+            "And will you release the lis pendens at closing?\r\n"
+            "Yes, the lis pendens will be released at closing.\r\n"
+        )
+        cleaned = _clean_email_body(
+            inline_reply, is_first=False, is_forward=False,
+            earlier_bodies=[original],
+        )
+        # The user's interleaved answers are preserved...
+        self.assertIn("only over six months, not twelve", cleaned)
+        self.assertIn("lis pendens will be released at closing", cleaned)
+        # ...while the quoted questions (verbatim copies of msg 1) are dropped.
+        self.assertNotIn("Will your client accept a structured payout", cleaned)
+
+    def test_dedupe_is_marker_independent(self):
+        """A plain ">"-quoted block with no attribution line is still deduped —
+        the old marker-based stripper missed these entirely."""
+        from .views import _clean_email_body, _OMITTED_QUOTE_NOTE
+        original = "Please confirm the wire instructions and the closing date by end of day."
+        reply = (
+            "Confirmed on both counts.\r\n\r\n"
+            "> Please confirm the wire instructions and the closing date by end of day.\r\n"
+        )
+        cleaned = _clean_email_body(
+            reply, is_first=False, is_forward=False, earlier_bodies=[original],
+        )
+        self.assertIn("Confirmed on both counts.", cleaned)
+        self.assertNotIn("Please confirm the wire instructions", cleaned)
+        self.assertIn(_OMITTED_QUOTE_NOTE, cleaned)
+
+    def test_no_earlier_bodies_never_strips(self):
+        """Without sibling context there is nothing to dedupe against — keep all."""
+        from .views import _clean_email_body
+        cleaned = _clean_email_body(
+            _FORWARDED_BODY, is_first=False, is_forward=False, earlier_bodies=[]
+        )
+        self.assertIn("our client will accept nothing less", cleaned)
+
+    @patch("email_links.gmail.get_thread_messages")
+    def test_fetch_view_keeps_forwarded_content(self, mock_fetch):
+        """gmail_thread_fetch returns the full forwarded body for a FW: thread."""
+        mock_fetch.return_value = [{
+            "from_name": "Escovedo, Josh H.",
+            "from_email": "jescovedo@buchalter.com",
+            "date": "2026-05-20 15:14 PDT",
+            "body": _FORWARDED_BODY,
+        }]
+        resp = self.client.get(
+            reverse("assistant:gmail_thread_fetch"),
+            {"thread_id": "abc", "subject": "FW: Privileged Settlement Communication"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        text = resp.json()["formatted_text"]
+        self.assertIn("our client will accept nothing less", text)
+
+    @patch("email_links.gmail.get_thread_messages")
+    def test_fetch_view_dedupes_redundant_reply_chain(self, mock_fetch):
+        """A 2-message RE: reply chain drops the redundant quote but keeps the
+        unique earlier message (rendered separately) and the new reply text."""
+        mock_fetch.return_value = [
+            {"from_name": "Brown, Jeffrey N.", "from_email": "jbrown@thompsoncoburn.com",
+             "date": "2026-05-20 15:00 PDT", "body": _QUOTED_ORIGINAL},
+            {"from_name": "Escovedo, Josh H.", "from_email": "jescovedo@buchalter.com",
+             "date": "2026-05-20 15:14 PDT", "body": _FORWARDED_BODY},
+        ]
+        resp = self.client.get(
+            reverse("assistant:gmail_thread_fetch"),
+            {"thread_id": "abc", "subject": "RE: Privileged Settlement Communication"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        text = resp.json()["formatted_text"]
+        # The unique content still appears exactly once, via message 1.
+        self.assertEqual(text.count("our client will accept nothing less"), 1)
+        self.assertIn("See below.", text)              # message 2's new text kept
+        self.assertIn("[Earlier quoted messages", text)  # dedupe is visible
+
+    @patch("email_links.gmail.get_thread_messages")
+    def test_fetch_view_loses_no_unique_content(self, mock_fetch):
+        """Completeness invariant: across a deep reply chain, EVERY distinct
+        line of raw content survives in the assembled output (dedup only drops
+        copies that exist elsewhere). This is the no-data-loss guarantee."""
+        from .views import _normalize_line, _strip_boilerplate
+        # A 3-deep reply chain: each message adds new text and re-quotes the
+        # full prior message (so msg3 contains copies of msg2 and msg1).
+        msg1 = (
+            "Two questions before we proceed.\r\n\r\n"
+            "First, will your client accept a structured payout over twelve months?\r\n"
+            "Second, will you release the lis pendens on the property at closing?\r\n"
+        )
+        msg2 = (
+            "Responses inline, Jeff.\r\n\r\n"
+            "We can accept a payout, but only over six months rather than twelve.\r\n"
+            "The lis pendens will be released at closing as you request.\r\n\r\n"
+            "From: Brown, Jeffrey N. <JBrown@thompsoncoburn.com>\r\n"
+            "Sent: Monday, May 18, 2026 9:00 AM\r\n\r\n" + msg1
+        )
+        msg3 = (
+            "Six months works. Please send the revised agreement by Friday.\r\n\r\n"
+            "From: Escovedo, Josh H. <jescovedo@buchalter.com>\r\n"
+            "Sent: Monday, May 18, 2026 2:00 PM\r\n\r\n" + msg2
+        )
+        mock_fetch.return_value = [
+            {"from_name": "Brown", "from_email": "b@x.com", "date": "d1", "body": msg1},
+            {"from_name": "Escovedo", "from_email": "e@y.com", "date": "d2", "body": msg2},
+            {"from_name": "Brown", "from_email": "b@x.com", "date": "d3", "body": msg3},
+        ]
+        text = self.client.get(
+            reverse("assistant:gmail_thread_fetch"),
+            {"thread_id": "abc", "subject": "RE: Settlement"},
+        ).json()["formatted_text"]
+
+        def norm_set(s):
+            s = _strip_boilerplate(s.replace("\r\n", "\n").replace("\r", "\n"))
+            return {ln for ln in (_normalize_line(x) for x in s.split("\n")) if ln}
+
+        raw_set = norm_set(msg1) | norm_set(msg2) | norm_set(msg3)
+        out_set = norm_set(text)
+        # No raw line is missing from the output — nothing unique was dropped.
+        self.assertEqual(raw_set - out_set, set())
+        # ...and dedup actually happened: each quoted line appears only once.
+        self.assertEqual(text.count("structured payout over twelve months"), 1)
+        self.assertEqual(text.count("only over six months rather than twelve"), 1)
+        self.assertIn("Six months works.", text)
+        self.assertIn("[Earlier quoted messages", text)

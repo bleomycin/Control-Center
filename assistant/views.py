@@ -361,20 +361,8 @@ def gmail_thread_search(request):
     })
 
 
+import difflib
 import re
-
-# Patterns that mark the start of a trailing quoted reply block.
-# Everything from this line onward is a copy of previous messages.
-_REPLY_MARKERS = [
-    # Gmail: "On Fri, Mar 20, 2026 at 11:11 AM Name <email> wrote:"
-    # The "wrote:" may be on the next line due to line wrapping
-    re.compile(r"^On .+\d{4}.+wrote:\s*$", re.MULTILINE),
-    re.compile(r"^On .+\d{4}.+>\s*\nwrote:", re.MULTILINE),
-    # Outlook: "From: Name\nSent: Date" reply header block
-    re.compile(r"^From: .+\nSent: ", re.MULTILINE),
-    # Divider lines (5+ underscores or dashes) used by some clients
-    re.compile(r"^_{5,}$|^-{5,}$", re.MULTILINE),
-]
 
 # Known boilerplate blocks to strip entirely from email bodies.
 # These are specific recurring disclaimers that waste tokens and
@@ -398,27 +386,93 @@ def _strip_boilerplate(body):
     return body.rstrip()
 
 
-def _strip_quoted_reply(body):
-    """Remove the trailing quoted reply block from an email body.
+# Subject prefixes that indicate a forwarded email. For these we never dedupe:
+# the user attached the forward on purpose, so the whole thing is shown.
+_FORWARD_SUBJECT_RE = re.compile(r"^\s*(fw|fwd)\s*:", re.IGNORECASE)
 
-    Finds the first reply marker (e.g., "On ... wrote:" or "From: ...")
-    and truncates everything after it. Preserves inline content above
-    the marker, including inline replies.
+# Placeholder left in the body where a redundant quoted block is removed, so
+# the removal is never silent — the model and user can see content was cut and
+# that the originals are rendered as separate messages above.
+_OMITTED_QUOTE_NOTE = "[Earlier quoted messages in this thread omitted — see the messages above.]"
+
+# A contiguous run of lines that also appears verbatim in an earlier message
+# is treated as a quoted copy and dropped only if it carries at least this many
+# non-whitespace characters. Smaller incidental matches (greetings, blank
+# lines, a shared phrase) are kept so the text is never fragmented.
+_MIN_QUOTE_CHARS = 40
+
+
+def _is_forward_subject(subject):
+    """True if the subject indicates a forwarded email (FW:/Fwd:)."""
+    return bool(_FORWARD_SUBJECT_RE.match(subject or ""))
+
+
+def _normalize_line(line):
+    """Normalize one line for quote matching: drop leading ">"/"|" quote
+    markers (including nested "> >"), lowercase, and collapse internal
+    whitespace, so re-wrapped / re-quoted copies of a line compare equal."""
+    line = re.sub(r"^(\s*[>|]\s?)+", "", line)
+    return re.sub(r"\s+", " ", line).strip().lower()
+
+
+def _dedupe_against_earlier(body, earlier_bodies):
+    """Remove quoted copies of earlier thread messages from `body`.
+
+    This is the durable de-duplication core. Instead of guessing where a
+    "quote" begins from client-specific markers, it diffs `body` line-by-line
+    (difflib) against the concatenation of the earlier messages we already
+    render separately, and drops only the contiguous runs that match that
+    earlier content. Everything novel to this message is preserved — including
+    replies interleaved *between* quoted passages (top-posted, bottom-posted,
+    and inline replies all work). Unique forwarded content matches nothing and
+    is kept in full. Each removed run leaves a single visible note.
+
+    Returns the cleaned body (CRLF normalized to LF).
     """
-    if not body:
+    body = body.replace("\r\n", "\n").replace("\r", "\n")
+    orig_lines = body.split("\n")
+    norm_lines = [_normalize_line(ln) for ln in orig_lines]
+
+    ref = []
+    for earlier in earlier_bodies:
+        earlier = (earlier or "").replace("\r\n", "\n").replace("\r", "\n")
+        ref.extend(_normalize_line(ln) for ln in earlier.split("\n"))
+    if not any(ref):
         return body
-    # Find the earliest reply marker position
-    earliest = len(body)
-    for pattern in _REPLY_MARKERS:
-        match = pattern.search(body)
-        if match and match.start() < earliest:
-            earliest = match.start()
-    if earliest < len(body):
-        stripped = body[:earliest].rstrip()
-        # Don't return empty — if the entire body was a quote, keep it
-        if stripped:
-            return stripped
-    return body
+
+    matcher = difflib.SequenceMatcher(None, ref, norm_lines, autojunk=False)
+    out = []
+    for tag, _i1, _i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            quoted_chars = sum(len(norm_lines[j]) for j in range(j1, j2))
+            if quoted_chars >= _MIN_QUOTE_CHARS:
+                # A substantial verbatim copy of earlier content — drop it,
+                # but mark the gap so the removal is visible (and coalesce
+                # adjacent notes).
+                if not (out and out[-1] == _OMITTED_QUOTE_NOTE):
+                    out.append(_OMITTED_QUOTE_NOTE)
+                continue
+        out.extend(orig_lines[j1:j2])
+
+    cleaned = "\n".join(out)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)  # tidy gaps left by removals
+    return cleaned.strip()
+
+
+def _clean_email_body(body, *, is_first, is_forward, earlier_bodies):
+    """Clean a single thread message body for inclusion in the thread text.
+
+    Always removes known boilerplate disclaimers. De-duplicates quoted copies
+    of earlier thread messages via a line-level diff against those messages
+    (see _dedupe_against_earlier), so nothing unique is ever dropped: the first
+    message (`is_first`), forwarded subjects (`is_forward`), and any text that
+    doesn't match a sibling are all preserved. Removed runs leave a visible
+    note, so de-duplication is never silent.
+    """
+    body = (body or "").strip()
+    if not is_first and not is_forward and earlier_bodies:
+        body = _dedupe_against_earlier(body, earlier_bodies)
+    return _strip_boilerplate(body)
 
 
 def gmail_thread_fetch(request):
@@ -434,16 +488,23 @@ def gmail_thread_fetch(request):
         return JsonResponse({"error": str(e)}, status=500)
     if not thread_messages:
         return JsonResponse({"error": "No messages found in thread"}, status=404)
-    # Format messages into structured text, stripping trailing quoted blocks
+    # Format messages into structured text. Quoted reply blocks are stripped
+    # only when redundant (a reply chain whose quotes duplicate earlier
+    # messages); forwarded content is preserved (see _clean_email_body).
     parts = []
     subject = request.GET.get("subject", "Email Thread")
+    is_forward = _is_forward_subject(subject)
     parts.append(f"Subject: {subject}")
     parts.append(f"Thread: {len(thread_messages)} message(s)\n")
     for i, msg in enumerate(thread_messages, 1):
         parts.append(f"--- Message {i} ---")
         parts.append(f"From: {msg.get('from_name', '')} <{msg.get('from_email', '')}>")
         parts.append(f"Date: {msg.get('date', '')}")
-        body = _strip_boilerplate(_strip_quoted_reply(msg.get("body", "").strip()))
+        earlier_bodies = [m.get("body", "") for m in thread_messages[: i - 1]]
+        body = _clean_email_body(
+            msg.get("body", ""), is_first=(i == 1), is_forward=is_forward,
+            earlier_bodies=earlier_bodies,
+        )
         parts.append(body)
         parts.append("")
     return JsonResponse({"formatted_text": "\n".join(parts), "subject": subject})

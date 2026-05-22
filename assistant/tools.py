@@ -695,7 +695,7 @@ def read_email(id):
     """Fetch full email thread content for a linked EmailLink record."""
     from email_links.models import EmailLink
     from email_links import gmail
-    from .views import _strip_quoted_reply, _strip_boilerplate
+    from .views import _clean_email_body, _is_forward_subject
 
     try:
         el = EmailLink.objects.get(pk=id)
@@ -715,11 +715,16 @@ def read_email(id):
         parts.append("Linked to: " + ", ".join(f"{label}: {obj}" for label, obj in entities))
     parts.append("")
 
+    is_forward = _is_forward_subject(el.subject)
     for i, msg in enumerate(messages, 1):
         parts.append(f"--- Message {i} ---")
         parts.append(f"From: {msg.get('from_name', '')} <{msg.get('from_email', '')}>")
         parts.append(f"Date: {msg.get('date', '')}")
-        body = _strip_boilerplate(_strip_quoted_reply(msg.get("body", "").strip()))
+        earlier_bodies = [m.get("body", "") for m in messages[: i - 1]]
+        body = _clean_email_body(
+            msg.get("body", ""), is_first=(i == 1), is_forward=is_forward,
+            earlier_bodies=earlier_bodies,
+        )
         parts.append(body)
         parts.append("")
 
