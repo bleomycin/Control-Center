@@ -2185,6 +2185,28 @@ class Command(BaseCommand):
             )
             doc_pks.append(local_doc.pk)
 
+        # Document linked to a Task, so the Tasks → Documents section is
+        # exercised by sample data (mirrors the per-entity pattern used for
+        # properties, stakeholders, legal matters, etc.).
+        sample_tasks = _get_sample_tasks()
+        task_for_doc = (
+            sample_tasks.get("Schedule meeting with Michael Torres")
+            or next(iter(sample_tasks.values()), None)
+        )
+        if task_for_doc is not None:
+            task_doc = Document.objects.create(
+                title="Meeting Agenda - Michael Torres",
+                category="correspondence",
+                date=today - timedelta(days=2),
+                description="Agenda and supporting materials for the Torres meeting.",
+                gdrive_url="https://drive.google.com/file/d/task_doc01/view",
+                gdrive_file_id="task_doc01",
+                gdrive_mime_type="application/pdf",
+                gdrive_file_name="Meeting Agenda - Michael Torres.pdf",
+                related_task=task_for_doc,
+            )
+            doc_pks.append(task_doc.pk)
+
         from documents.models import GoogleDriveFolderBookmark
         GoogleDriveFolderBookmark.objects.all().delete()
         for i, (label, folder_id) in enumerate([

@@ -75,6 +75,8 @@ class DocumentListView(ListView):
             qs = qs.filter(related_stakeholder__isnull=False)
         elif entity_type == "legal":
             qs = qs.filter(related_legal_matter__isnull=False)
+        elif entity_type == "task":
+            qs = qs.filter(related_task__isnull=False)
         elif entity_type == "unlinked":
             qs = qs.filter(
                 related_property__isnull=True,
@@ -86,6 +88,7 @@ class DocumentListView(ListView):
                 related_aircraft__isnull=True,
                 related_stakeholder__isnull=True,
                 related_legal_matter__isnull=True,
+                related_task__isnull=True,
             )
 
         has_expiration = self.request.GET.get("expiring", "").strip()
@@ -150,6 +153,7 @@ class DocumentListView(ListView):
             related_aircraft__isnull=True,
             related_stakeholder__isnull=True,
             related_legal_matter__isnull=True,
+            related_task__isnull=True,
         ).count()
         return ctx
 
@@ -178,6 +182,7 @@ class DocumentCreateView(GDriveContextMixin, CreateView):
             ("aircraft", "related_aircraft"),
             ("stakeholder", "related_stakeholder"),
             ("legal_matter", "related_legal_matter"),
+            ("task", "related_task"),
         ]:
             val = self.request.GET.get(param)
             if val:
@@ -292,6 +297,7 @@ ENTITY_CONFIG = {
     "aircraft": ("assets.Aircraft", "related_aircraft"),
     "stakeholder": ("stakeholders.Stakeholder", "related_stakeholder"),
     "legal_matter": ("legal.LegalMatter", "related_legal_matter"),
+    "task": ("tasks.Task", "related_task"),
 }
 
 
@@ -414,6 +420,14 @@ def legal_matter_document_link(request, pk):
 
 def legal_matter_document_unlink(request, pk, doc_pk):
     return _document_unlink(request, "legal_matter", pk, doc_pk)
+
+
+def task_document_link(request, pk):
+    return _document_link(request, "task", pk)
+
+
+def task_document_unlink(request, pk, doc_pk):
+    return _document_unlink(request, "task", pk, doc_pk)
 
 
 # ---- Bulk create + link from Google Drive Picker (multi-select) ----

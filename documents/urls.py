@@ -32,6 +32,8 @@ urlpatterns = [
     path("unlink/stakeholder/<int:pk>/<int:doc_pk>/", views.stakeholder_document_unlink, name="stakeholder_document_unlink"),
     path("link/legal-matter/<int:pk>/", views.legal_matter_document_link, name="legal_matter_document_link"),
     path("unlink/legal-matter/<int:pk>/<int:doc_pk>/", views.legal_matter_document_unlink, name="legal_matter_document_unlink"),
+    path("link/task/<int:pk>/", views.task_document_link, name="task_document_link"),
+    path("unlink/task/<int:pk>/<int:doc_pk>/", views.task_document_unlink, name="task_document_unlink"),
     # Google Drive settings & OAuth2
     path("gdrive/settings/", views.gdrive_settings, name="gdrive_settings"),
     path("gdrive/authorize/", views.gdrive_authorize, name="gdrive_authorize"),

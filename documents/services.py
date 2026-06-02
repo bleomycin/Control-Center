@@ -24,6 +24,7 @@ ENTITY_CONFIG = {
     "aircraft": ("assets.Aircraft", "related_aircraft"),
     "stakeholder": ("stakeholders.Stakeholder", "related_stakeholder"),
     "legalmatter": ("legal.LegalMatter", "related_legal_matter"),
+    "task": ("tasks.Task", "related_task"),
     # Legacy aliases used by the existing view URL routes — keep accepting them
     # so the existing endpoint contract stays intact.
     "property": ("assets.RealEstate", "related_property"),

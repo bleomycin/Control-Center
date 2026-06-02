@@ -44,6 +44,12 @@ class DocumentModelTest(TestCase):
     def test_linked_entities_empty(self):
         self.assertEqual(self.doc.linked_entities, [])
 
+    def test_linked_entities_includes_task(self):
+        from tasks.models import Task
+        self.doc.related_task = Task.objects.create(title="Linked Task")
+        self.doc.save()
+        self.assertIn("Task", [label for label, _ in self.doc.linked_entities])
+
     def test_is_expired_false_no_date(self):
         self.assertFalse(self.doc.is_expired)
 
@@ -179,6 +185,19 @@ class DocumentListViewTest(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "Doc 0")
 
+    def test_entity_type_task_filter_and_unlinked_excludes_task(self):
+        from tasks.models import Task
+        task = Task.objects.create(title="Filter Task")
+        Document.objects.create(title="Task-Linked Doc", related_task=task)
+        # Appears under the Task filter
+        resp = self.client.get(self.url, {"entity_type": "task"})
+        self.assertContains(resp, "Task-Linked Doc")
+        self.assertNotContains(resp, "Doc 0")
+        # A task-linked doc is NOT "unlinked"
+        resp2 = self.client.get(self.url, {"entity_type": "unlinked"})
+        self.assertNotContains(resp2, "Task-Linked Doc")
+        self.assertContains(resp2, "Doc 0")
+
 
 class DocumentDetailViewTest(TestCase):
     def setUp(self):
@@ -305,7 +324,7 @@ class DocumentLinkFormTest(TestCase):
 
 
 class DocumentEntityLinkTest(TestCase):
-    """Test link/unlink views for all 9 entity types."""
+    """Test link/unlink views for all entity types."""
 
     def setUp(self):
         self.doc = Document.objects.create(title="Link Test Doc", category="deed")
@@ -340,6 +359,9 @@ class DocumentEntityLinkTest(TestCase):
         elif entity_type == "legal_matter":
             from legal.models import LegalMatter
             return LegalMatter.objects.create(title="Test Legal Matter")
+        elif entity_type == "task":
+            from tasks.models import Task
+            return Task.objects.create(title="Test Task")
 
     def _test_link_unlink(self, entity_type):
         entity = self._create_entity(entity_type)
@@ -391,6 +413,9 @@ class DocumentEntityLinkTest(TestCase):
     def test_legal_matter_link_unlink(self):
         self._test_link_unlink("legal_matter")
 
+    def test_task_link_unlink(self):
+        self._test_link_unlink("task")
+
 
 class EntityDetailDocumentSectionTest(TestCase):
     """Test that entity detail pages include the Documents section."""
@@ -432,6 +457,15 @@ class EntityDetailDocumentSectionTest(TestCase):
         resp = self.client.get(reverse("legal:detail", args=[matter.pk]))
         self.assertContains(resp, "Visible Doc")
 
+    def test_task_detail_shows_documents(self):
+        from tasks.models import Task
+        task = Task.objects.create(title="Doc Task")
+        self.doc.related_task = task
+        self.doc.save()
+        resp = self.client.get(reverse("tasks:detail", args=[task.pk]))
+        self.assertContains(resp, "Visible Doc")
+        self.assertContains(resp, "Documents")
+
 
 class BulkCreateAndLinkTest(TestCase):
     """Tests for the multi-select Drive picker bulk-create endpoint."""
@@ -466,6 +500,16 @@ class BulkCreateAndLinkTest(TestCase):
 
         d3 = docs.get(gdrive_file_id="abc3")
         self.assertEqual(d3.title, "Survey")  # no extension to strip
+
+    def test_task_bulk_link_creates_and_links(self):
+        from tasks.models import Task
+        task = Task.objects.create(title="Bulk Task")
+        files = [{"id": "tk1", "name": "Agenda.pdf", "mimeType": "application/pdf", "url": "https://drive.google.com/file/d/tk1/view"}]
+        resp = self._post("task", task.pk, files)
+        self.assertEqual(resp.status_code, 200)
+        docs = Document.objects.filter(related_task=task)
+        self.assertEqual(docs.count(), 1)
+        self.assertEqual(docs.first().gdrive_file_id, "tk1")
 
     def test_dedupes_against_existing_link_by_gdrive_file_id(self):
         prop = self._make_property()

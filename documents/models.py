@@ -60,6 +60,10 @@ class Document(models.Model):
         "legal.LegalMatter", on_delete=models.SET_NULL,
         null=True, blank=True, related_name="documents",
     )
+    related_task = models.ForeignKey(
+        "tasks.Task", on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="documents",
+    )
 
     notes_text = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -130,6 +134,8 @@ class Document(models.Model):
             links.append(("Stakeholder", self.related_stakeholder))
         if self.related_legal_matter:
             links.append(("Legal Matter", self.related_legal_matter))
+        if self.related_task:
+            links.append(("Task", self.related_task))
         return links
 
 

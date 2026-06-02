@@ -15,6 +15,7 @@ class DocumentForm(TailwindFormMixin, forms.ModelForm):
             "related_property", "related_investment", "related_loan",
             "related_lease", "related_policy", "related_vehicle",
             "related_aircraft", "related_stakeholder", "related_legal_matter",
+            "related_task",
             "notes_text",
         ]
         widgets = {
@@ -40,6 +41,7 @@ class DocumentForm(TailwindFormMixin, forms.ModelForm):
         )
         from stakeholders.models import Stakeholder
         from legal.models import LegalMatter
+        from tasks.models import Task
 
         self.fields["related_property"].queryset = RealEstate.objects.order_by("name")
         self.fields["related_investment"].queryset = Investment.objects.order_by("name")
@@ -50,6 +52,7 @@ class DocumentForm(TailwindFormMixin, forms.ModelForm):
         self.fields["related_aircraft"].queryset = Aircraft.objects.order_by("name")
         self.fields["related_stakeholder"].queryset = Stakeholder.objects.order_by("name")
         self.fields["related_legal_matter"].queryset = LegalMatter.objects.order_by("title")
+        self.fields["related_task"].queryset = Task.objects.order_by("title")
 
 
 class GoogleDriveSetupForm(TailwindFormMixin, forms.ModelForm):
