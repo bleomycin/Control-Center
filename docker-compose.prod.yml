@@ -1,0 +1,29 @@
+# Production overlay — run the app behind the Caddy/Authelia reverse proxy.
+#
+# This encodes the production networking that previously lived as an
+# uncommitted hand-edit to docker-compose.yml on the server: no published
+# host port (all traffic must enter through the proxy chain) and membership
+# in the external `caddy-net` Docker network owned by the proxy stack.
+#
+# Activate on the production host by adding this line to .env (docker
+# compose reads COMPOSE_FILE from the project .env, so upgrade.sh and all
+# plain `docker compose` commands pick it up automatically):
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+#
+# Dev machines never set COMPOSE_FILE, so plain `docker compose up` keeps
+# the published port 8000 from docker-compose.yml and ignores this file.
+#
+# The `!reset` merge tag requires docker compose v2.24+ — after activating,
+# verify the merged config with: docker compose config
+services:
+  web:
+    # Drop the host port mapping from the base file: the app must only be
+    # reachable via Caddy on caddy-net, never directly from the host.
+    ports: !reset []
+    networks:
+      - caddy-net
+
+networks:
+  caddy-net:
+    external: true

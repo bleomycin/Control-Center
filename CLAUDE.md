@@ -147,6 +147,7 @@ Eight Django apps + one e2e test package, all relationally linked:
 ## Deployment
 - After implementing features, always rebuild Docker and push GitHub release when the user asks. Standard deployment flow: run all tests → git push → docker build → push alpha release tag.
 - **Production upgrade**: `upgrade.sh` in project root automates safe upgrades (backup → git pull → docker build → restart → health check → rollback on failure).
+- **Production networking**: prod serves behind Caddy with no published port, via `docker-compose.prod.yml` activated by `COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml` in the server's `.env`. Dev never sets `COMPOSE_FILE` — plain `docker compose` keeps :8000 published.
 
 ## Feature Implementation
 - **Bundle deployment into feature completion**: A feature is not "done" until all tests pass, changes are committed and pushed to GitHub, Docker is rebuilt and verified running, and a new alpha release tag is created. Use `/deploy` skill when ready.
