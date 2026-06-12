@@ -247,6 +247,7 @@
                     emptyStateEl: document.getElementById('drawer-empty-state'),
                     sessionPk: drawerSessionPk,
                     messagesUrl: '/assistant/' + drawerSessionPk + '/messages/',
+                    turnStatusUrl: '/assistant/' + drawerSessionPk + '/turn-status/',
                     getEffort: function(mode) { return getDrawerEffort(mode); },
                     getPageContext: function() {
                         return document.querySelector('main').getAttribute('data-page-context') || null;

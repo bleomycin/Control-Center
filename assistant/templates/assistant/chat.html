@@ -694,6 +694,7 @@ var chatEngine = createChatEngine({
     emptyStateEl: document.getElementById('empty-state'),
     sessionPk: SESSION_PK,
     messagesUrl: "{% url 'assistant:drawer_messages' session.pk %}",
+    turnStatusUrl: "{% url 'assistant:turn_status' session.pk %}",
     getEffort: function(mode) { return getEffort(mode); },
     getPageContext: function() { return null; },
     onFinish: function() {

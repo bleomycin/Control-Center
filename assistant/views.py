@@ -8,7 +8,7 @@ from django.views.decorators.http import require_POST
 
 from . import client as assistant_client
 from .forms import AssistantSettingsForm, ChatInputForm
-from .models import AssistantSettings, ChatMessage, ChatSession
+from .models import AssistantSettings, AssistantTurn, ChatMessage, ChatSession
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,27 @@ def stream_message_view(request, session_id):
     if effort not in ("low", "medium", "high", "max"):
         effort = ""
 
+    # A fresh running turn means the previous message is still being processed
+    # — possibly detached after a dropped connection. Starting a second turn
+    # would interleave its messages with the in-flight one, so refuse with a
+    # terminal SSE error instead. Stale rows (process died mid-turn) don't
+    # block.
+    active = session.turns.filter(state=AssistantTurn.STATE_RUNNING).first()
+    if active and not active.is_stale:
+        def _busy():
+            yield (
+                "event: error\ndata: "
+                + json.dumps({
+                    "message": "I'm still working on your previous message — "
+                               "give it a moment, then try again.",
+                })
+                + "\n\n"
+            )
+        response = StreamingHttpResponse(_busy(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
+
     response = StreamingHttpResponse(
         assistant_client.stream_message(session, user_text, mode=mode, effort=effort),
         content_type="text/event-stream",
@@ -103,6 +124,32 @@ def stream_message_view(request, session_id):
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
     return response
+
+
+def turn_status(request, session_id):
+    """JSON status of the session's latest assistant turn.
+
+    This is what lets the chat client distinguish a severed SSE stream from a
+    finished turn: after a disconnect it polls here until the detached turn
+    (still running server-side, see client._with_heartbeat) lands, then
+    reloads messages. Reads the DB, so it works from any gunicorn worker. A
+    running turn whose worker stopped touching it (container died mid-turn)
+    is reported as "stale" so the client can stop waiting.
+    """
+    session = get_object_or_404(ChatSession, pk=session_id)
+    turn = session.turns.first()  # Meta.ordering = -created_at
+    if turn is None:
+        return JsonResponse({"state": "none"})
+    state = turn.state
+    if state == AssistantTurn.STATE_RUNNING and turn.is_stale:
+        state = "stale"
+    return JsonResponse({
+        "state": state,
+        "turn_id": turn.pk,
+        "client_disconnected": turn.client_disconnected,
+        "confirm_required": turn.confirm_required,
+        "final_message_id": turn.final_message_id,
+    })
 
 
 def new_session(request):

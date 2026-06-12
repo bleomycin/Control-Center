@@ -23,8 +23,20 @@ MAX_TOOL_ITERATIONS = 25
 MAX_MESSAGES_TO_SEND = 50
 # Bridge any silent window longer than this with a keepalive comment frame.
 # Must stay well under the client's 90s inactivity watchdog
-# (static/js/assistant-chat.js resetWatchdog) with margin for jitter.
-HEARTBEAT_INTERVAL_SECONDS = 15
+# (static/js/assistant-chat.js resetWatchdog) with margin for jitter. 5s
+# (down from 15s) also keeps more traffic on the wire during long thinking
+# phases — every observed mid-stream disconnect (2026-06-01, 2026-06-12)
+# happened in a window where only sparse keepalive frames were flowing.
+HEARTBEAT_INTERVAL_SECONDS = 5
+# After the client disconnects, the worker keeps consuming the tool loop so
+# the turn completes and persists ("detached drain"). Bounded so a wedged
+# upstream can't pin a gunicorn thread forever; generous because Opus 4.8 at
+# high/max effort legitimately spends many minutes inside one turn.
+DETACHED_DRAIN_BUDGET_SECONDS = 20 * 60
+# Throttle for refreshing AssistantTurn.updated_at from the stream worker —
+# frequent enough that the turn-status endpoint's staleness check
+# (AssistantTurn.STALE_AFTER_SECONDS) never false-positives on a live turn.
+TURN_TOUCH_INTERVAL_SECONDS = 30
 CACHE_BREAKPOINT_INTERVAL = 15  # Add cache breakpoint every N messages
 CACHE_CONTROL = {"type": "ephemeral"}
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -45,6 +57,26 @@ TRUNCATION_NOTICE = (
     "\n\n_[Response truncated — it reached the output limit. "
     "Ask me to continue.]_"
 )
+
+# Visible notices for the other 4.7+ terminal stop_reasons, mirroring the
+# max_tokens handling: a stopped response must never look complete.
+CONTEXT_WINDOW_NOTICE = (
+    "\n\n_[Response stopped — this conversation has filled the model's "
+    "context window. Start a new chat or prune older messages.]_"
+)
+REFUSAL_NOTICE = (
+    "\n\n_[The model declined to generate this response. "
+    "Try rephrasing your request.]_"
+)
+
+
+def _stop_reason_notice(response):
+    """Return the visible notice for a terminal stop_reason, or ""."""
+    return {
+        "max_tokens": TRUNCATION_NOTICE,
+        "model_context_window_exceeded": CONTEXT_WINDOW_NOTICE,
+        "refusal": REFUSAL_NOTICE,
+    }.get(getattr(response, "stop_reason", None), "")
 
 # Models that accept the `temperature` sampling parameter. Anthropic removed
 # temperature/top_p/top_k on Opus 4.7 and later — sending temperature to those
@@ -818,8 +850,7 @@ def send_message(session, user_text, mode="fast", effort=""):
                     text_parts.append(block.text)
 
             final_text = "\n".join(text_parts)
-            if getattr(response, "stop_reason", None) == "max_tokens":
-                final_text += TRUNCATION_NOTICE
+            final_text += _stop_reason_notice(response)
             assistant_msg = ChatMessage.objects.create(
                 session=session,
                 role="assistant",
@@ -844,8 +875,55 @@ def send_message(session, user_text, mode="fast", effort=""):
     return new_messages
 
 
-def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS):
-    """Wrap an SSE generator so no silent window exceeds ``interval`` seconds.
+def _touch_turn(turn):
+    """Refresh ``turn.updated_at`` so a polling client can distinguish a live
+    turn from one whose process died (AssistantTurn.is_stale). Never raises."""
+    if turn is None:
+        return
+    from django.utils import timezone
+    from .models import AssistantTurn
+    try:
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            updated_at=timezone.now()
+        )
+    except Exception:
+        logger.exception("Failed to touch AssistantTurn %s", turn.pk)
+
+
+def _finalize_turn(turn, state, **fields):
+    """Record the terminal state of a turn, never raising and never
+    overwriting a state another path already finalized (conditional update)."""
+    if turn is None:
+        return
+    from django.utils import timezone
+    from .models import AssistantTurn
+    try:
+        AssistantTurn.objects.filter(
+            pk=turn.pk, state=AssistantTurn.STATE_RUNNING
+        ).update(state=state, updated_at=timezone.now(), **fields)
+    except Exception:
+        logger.exception("Failed to finalize AssistantTurn %s", turn.pk)
+
+
+def _record_request_id(turn, req_id):
+    """Append an Anthropic request id to the turn's observability trail.
+    Only the stream worker thread writes a given turn, so the in-memory
+    append stays consistent with the row. Never raises."""
+    if turn is None or not req_id:
+        return
+    from .models import AssistantTurn
+    try:
+        turn.request_ids.append(req_id)
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            request_ids=turn.request_ids
+        )
+    except Exception:
+        logger.exception("Failed to record request id on AssistantTurn %s", turn.pk)
+
+
+def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
+    """Wrap an SSE generator so no silent window exceeds ``interval`` seconds,
+    and so losing the consumer does NOT cancel the work.
 
     The streaming tool loop blocks for long stretches with no client-visible
     output: during time-to-first-token, while the model streams tool-call
@@ -860,48 +938,87 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS):
     (assistant-chat.js only acts on ``event:``/``data:`` lines) but which still
     resets the byte-level watchdog. If the inner generator raises, a terminal
     ``error`` frame is emitted so the client always reaches a defined end state.
+
+    Disconnect semantics: if this outer generator is closed before the inner
+    one finishes (browser disconnect, proxy abort — Django closes the response
+    iterator), the worker DETACHES instead of cancelling: it stops relaying
+    frames and silently drains the inner generator to completion, bounded by
+    DETACHED_DRAIN_BUDGET_SECONDS. All persistence lives inside the inner
+    generator, so the answer is saved and visible on the next refresh, and the
+    in-flight (already billed) API call is not thrown away. ``turn`` is marked
+    client_disconnected so the turn-status endpoint can tell a polling client
+    the work is still running.
     """
     from django.db import connection
 
     frames = queue.Queue(maxsize=1)
     sentinel = object()
-    stop = threading.Event()
+    detached = threading.Event()  # consumer gone — stop relaying, keep working
+    detached_since = [None]  # monotonic timestamp, set by the consumer side
+    last_touch = [0.0]
 
     def produce():
         try:
             for frame in inner_gen:
-                # Bounded put so an aborted client (consumer gone, see Defect 2)
-                # can't wedge this thread forever — recheck stop each timeout.
-                while not stop.is_set():
+                now = time.monotonic()
+                if now - last_touch[0] >= TURN_TOUCH_INTERVAL_SECONDS:
+                    last_touch[0] = now
+                    _touch_turn(turn)
+                if detached.is_set():
+                    # Discard the frame but keep consuming so the turn
+                    # completes and persists — bounded so a wedged upstream
+                    # can't pin this thread forever.
+                    started = detached_since[0] or now
+                    if now - started > DETACHED_DRAIN_BUDGET_SECONDS:
+                        logger.error(
+                            "Abandoning detached assistant turn %s after "
+                            "%ss drain budget",
+                            getattr(turn, "pk", None),
+                            DETACHED_DRAIN_BUDGET_SECONDS,
+                        )
+                        _finalize_turn(turn, "abandoned")
+                        break
+                    continue
+                # Bounded put so an aborted client (consumer gone) can't
+                # wedge this thread — recheck detached on each timeout.
+                while not detached.is_set():
                     try:
                         frames.put(frame, timeout=1)
                         break
                     except queue.Full:
                         continue
-                if stop.is_set():
-                    break
+            else:
+                if detached.is_set():
+                    logger.info(
+                        "Detached assistant turn %s finished in background",
+                        getattr(turn, "pk", None),
+                    )
         except Exception:
             logger.exception("Assistant stream generator crashed")
-            try:
-                frames.put(
-                    f"event: error\ndata: "
-                    f"{json.dumps({'message': 'The assistant hit an unexpected error. Your data was saved — reload to see it.'})}\n\n",
-                    timeout=1,
-                )
-            except queue.Full:
-                pass
+            _finalize_turn(turn, "failed")
+            if not detached.is_set():
+                try:
+                    frames.put(
+                        f"event: error\ndata: "
+                        f"{json.dumps({'message': 'The assistant hit an unexpected error. Your data was saved — reload to see it.'})}\n\n",
+                        timeout=1,
+                    )
+                except queue.Full:
+                    pass
         finally:
             inner_gen.close()
             # The worker opened its own thread-local DB connection; release it.
             connection.close()
-            try:
-                frames.put(sentinel, timeout=1)
-            except queue.Full:
-                pass
+            if not detached.is_set():
+                try:
+                    frames.put(sentinel, timeout=1)
+                except queue.Full:
+                    pass
 
     worker = threading.Thread(target=produce, name="assistant-stream", daemon=True)
     worker.start()
 
+    completed = False
     try:
         while True:
             try:
@@ -910,12 +1027,31 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS):
                 yield ": keepalive\n\n"
                 continue
             if frame is sentinel:
+                completed = True
                 break
             yield frame
     finally:
-        # Client gone or stream complete: signal the worker and drain the queue
-        # so its bounded put() unblocks and the thread (and connection) can exit.
-        stop.set()
+        if not completed:
+            # Consumer gone before the turn finished. Detach the worker —
+            # it keeps consuming (and persisting) in the background.
+            detached_since[0] = time.monotonic()
+            detached.set()
+            logger.warning(
+                "Client disconnected mid-stream (turn=%s); "
+                "finishing the turn in the background",
+                getattr(turn, "pk", None),
+            )
+            if turn is not None:
+                from .models import AssistantTurn
+                try:
+                    AssistantTurn.objects.filter(pk=turn.pk).update(
+                        client_disconnected=True
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to flag disconnect on AssistantTurn %s", turn.pk
+                    )
+        # Drain the queue so a blocked put() unblocks promptly.
         try:
             while True:
                 frames.get_nowait()
@@ -928,12 +1064,21 @@ def stream_message(session, user_text, mode="fast", effort=""):
 
     Returns a generator of SSE frames suitable for StreamingHttpResponse. See
     ``_stream_message_impl`` for the event protocol and ``_with_heartbeat`` for
-    the keepalive behavior that keeps long, healthy requests alive.
+    the keepalive behavior that keeps long, healthy requests alive and the
+    detach-on-disconnect behavior that finishes (and persists) the turn even
+    if the browser connection dies. The AssistantTurn row created here is what
+    the client polls (turn-status endpoint) to recover from a severed stream.
     """
-    return _with_heartbeat(_stream_message_impl(session, user_text, mode=mode, effort=effort))
+    from .models import AssistantTurn
+
+    turn = AssistantTurn.objects.create(session=session)
+    return _with_heartbeat(
+        _stream_message_impl(session, user_text, mode=mode, effort=effort, turn=turn),
+        turn=turn,
+    )
 
 
-def _stream_message_impl(session, user_text, mode="fast", effort=""):
+def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     """
     Generator that yields SSE events as the assistant processes a message.
 
@@ -944,6 +1089,10 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
       event: token          — a text token from the final response
       event: done           — stream complete, message saved
       event: error          — an error occurred
+
+    ``turn`` (AssistantTurn) is finalized at every terminal path BEFORE the
+    terminal frame is yielded, so the recorded outcome is correct even if the
+    consumer never resumes the generator afterwards.
     """
     from .models import AssistantSettings, ChatMessage
 
@@ -973,6 +1122,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
             session=session, role="assistant",
             content="The assistant is not configured. Please add your Anthropic API key in [Settings](/settings/) > Assistant Settings.",
         )
+        _finalize_turn(turn, "failed")
         yield sse("error", {"message": "API key not configured"})
         return
 
@@ -1025,6 +1175,14 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
                     stream_kwargs["output_config"] = mode_config["output_config"]
 
                 with client.messages.stream(**stream_kwargs) as stream:
+                    # Capture the request id at stream OPEN (it comes from the
+                    # response headers), not only after get_final_message() —
+                    # a call killed mid-stream must still be correlatable
+                    # with Anthropic's logs.
+                    req_id = getattr(stream, "request_id", None)
+                    logger.info(f"stream open model={model_name} request_id={req_id}")
+                    _record_request_id(turn, req_id)
+
                     # Stream text tokens to client as they arrive.
                     # During extended thinking, yield periodic keepalives
                     # so the client watchdog doesn't fire (90s timeout).
@@ -1040,9 +1198,6 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
                                     last_thinking_keepalive = now
 
                     response = stream.get_final_message()
-                    # MessageStream exposes request_id from response headers;
-                    # the ParsedMessage returned by get_final_message() does not.
-                    req_id = stream.request_id
 
                 # Log request_id and actual model used
                 logger.info(f"OK model={response.model} request_id={req_id}")
@@ -1087,6 +1242,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
                 else:
                     error_msg = f"Request error ({e.status_code}). Try sending your message again."
                 _safe_create_message(session, error_msg)
+                _finalize_turn(turn, "failed")
                 yield sse("error", {"message": error_msg})
                 return
             except anthropic.APIError as e:
@@ -1101,6 +1257,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
                     continue
                 logger.error(f"Anthropic API error: {e}")
                 _safe_create_message(session, f"API error: {e}")
+                _finalize_turn(turn, "failed")
                 yield sse("error", {"message": str(e)})
                 return
 
@@ -1171,6 +1328,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
                 )
             except Exception:
                 logger.exception("Failed to save tool messages to DB")
+                _finalize_turn(turn, "failed")
                 yield sse("error", {"message": "Failed to save tool results. Try again."})
                 return
 
@@ -1182,10 +1340,11 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
         final_text = "\n".join(
             block.text for block in response.content if block.type == "text"
         )
-        if getattr(response, "stop_reason", None) == "max_tokens":
-            # Surface truncation live (text already streamed) and persist it.
-            final_text += TRUNCATION_NOTICE
-            yield sse("token", {"text": TRUNCATION_NOTICE})
+        notice = _stop_reason_notice(response)
+        if notice:
+            # Surface the stop live (text already streamed) and persist it.
+            final_text += notice
+            yield sse("token", {"text": notice})
 
         # Save the final message
         try:
@@ -1194,6 +1353,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
             )
         except Exception:
             logger.exception("Failed to save final assistant message to DB")
+            _finalize_turn(turn, "failed")
             yield sse("error", {"message": "Failed to save response. Try again."})
             return
 
@@ -1206,7 +1366,12 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
             except Exception:
                 logger.exception("Failed to generate/save session title")
 
-        if has_dry_run and not has_write_executed:
+        confirm_required = has_dry_run and not has_write_executed
+        _finalize_turn(
+            turn, "completed",
+            final_message=assistant_msg, confirm_required=confirm_required,
+        )
+        if confirm_required:
             yield sse("confirm_required", {})
         yield sse("done", {"message_id": assistant_msg.pk})
         return
@@ -1221,6 +1386,8 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
         "I reached the maximum number of tool calls for this message. Please try a more specific question.",
     )
     if fallback_msg is not None:
+        _finalize_turn(turn, "completed", final_message=fallback_msg)
         yield sse("done", {"message_id": fallback_msg.pk})
     else:
+        _finalize_turn(turn, "failed")
         yield sse("error", {"message": "Max tool iterations reached"})

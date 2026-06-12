@@ -3,7 +3,7 @@ import time
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from .client import (
@@ -2561,3 +2561,437 @@ class EmailBodyCleaningTests(TestCase):
         self.assertEqual(text.count("only over six months rather than twelve"), 1)
         self.assertIn("Six months works.", text)
         self.assertIn("[Earlier quoted messages", text)
+
+
+class _FakeCompletingStream:
+    """Stand-in MessageStream returning a clean text-only final response."""
+
+    request_id = "req_fake_ok"
+
+    def __init__(self, text="The answer.", stop_reason="end_turn"):
+        self._text = text
+        self._stop_reason = stop_reason
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def __iter__(self):
+        return iter([])  # text delivered via get_final_message, not deltas
+
+    def get_final_message(self):
+        block = MagicMock()
+        block.type = "text"
+        block.text = self._text
+        resp = MagicMock()
+        resp.model = "claude-sonnet-4-6"
+        resp.content = [block]
+        resp.stop_reason = self._stop_reason
+        return resp
+
+
+class HeartbeatDetachTests(TransactionTestCase):
+    """A severed consumer must NOT cancel the in-flight turn (the production
+    incident of 2026-06-12): the worker detaches and drains the inner
+    generator to completion so everything it persists still lands.
+
+    TransactionTestCase: the stream worker thread uses its own DB connection,
+    which cannot see rows created inside a TestCase transaction."""
+
+    def _wait_for(self, predicate, timeout=5):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return True
+            time.sleep(0.05)
+        return False
+
+    def test_disconnect_drains_inner_generator_to_completion(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        turn = AssistantTurn.objects.create(session=session)
+        events = []
+
+        def inner():
+            try:
+                yield "frame1"
+                yield "frame2"
+                events.append("mid")
+                yield "frame3"
+                events.append("completed")
+            finally:
+                events.append("closed")
+
+        gen = _with_heartbeat(inner(), turn=turn)
+        self.assertEqual(next(gen), "frame1")
+        gen.close()  # simulate the browser/proxy disconnect
+
+        self.assertTrue(
+            self._wait_for(lambda: "closed" in events),
+            f"worker did not finish, events={events}",
+        )
+        # The inner generator ran to completion instead of being cancelled.
+        self.assertIn("completed", events)
+        turn.refresh_from_db()
+        self.assertTrue(turn.client_disconnected)
+        # The wrapper does not finalize a successful turn — the impl does.
+        self.assertEqual(turn.state, AssistantTurn.STATE_RUNNING)
+
+    def test_completed_stream_relays_all_frames(self):
+        events = []
+
+        def inner():
+            try:
+                yield "frame1"
+                yield "frame2"
+                events.append("completed")
+            finally:
+                events.append("closed")
+
+        frames = list(_with_heartbeat(inner()))
+        self.assertEqual(
+            [f for f in frames if not f.startswith(":")],
+            ["frame1", "frame2"],
+        )
+        self.assertEqual(events, ["completed", "closed"])
+
+    def test_drain_budget_abandons_wedged_turn(self):
+        from unittest import mock
+
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        turn = AssistantTurn.objects.create(session=session)
+        events = []
+
+        def inner():
+            # Long enough that at least one frame is always pulled AFTER the
+            # detach (the bounded queue lets the worker run a frame or two
+            # ahead of the consumer), deterministically hitting the budget
+            # check in the detached branch.
+            try:
+                yield "frame1"
+                for i in range(1000):
+                    yield f"frame{i + 2}"
+                events.append("completed")
+            finally:
+                events.append("closed")
+
+        with mock.patch("assistant.client.DETACHED_DRAIN_BUDGET_SECONDS", -1):
+            gen = _with_heartbeat(inner(), turn=turn)
+            self.assertEqual(next(gen), "frame1")
+            gen.close()
+            self.assertTrue(
+                self._wait_for(lambda: "closed" in events),
+                f"worker did not exit, events={events}",
+            )
+        # Budget exhausted -> the inner generator was cancelled, not drained.
+        self.assertNotIn("completed", events)
+        turn.refresh_from_db()
+        self.assertEqual(turn.state, AssistantTurn.STATE_ABANDONED)
+
+    def test_inner_crash_marks_turn_failed(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        turn = AssistantTurn.objects.create(session=session)
+
+        def inner():
+            yield "frame1"
+            raise RuntimeError("boom")
+
+        frames = list(_with_heartbeat(inner(), turn=turn))
+        self.assertTrue(any(f.startswith("event: error") for f in frames))
+        turn.refresh_from_db()
+        self.assertEqual(turn.state, AssistantTurn.STATE_FAILED)
+
+
+class TurnLifecycleTests(TransactionTestCase):
+    """stream_message records the turn outcome on its AssistantTurn row.
+
+    TransactionTestCase: the whole tool loop runs in the stream worker thread
+    on its own DB connection — it must see the settings/session this test
+    commits, and the test must see what the worker commits."""
+
+    def setUp(self):
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+    def test_successful_turn_completes_with_final_message(self):
+        from .client import stream_message
+        from .models import AssistantTurn, ChatMessage, ChatSession
+
+        session = ChatSession.objects.create(title="Existing chat")
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakeCompletingStream()
+            )
+            frames = list(stream_message(session, "hello"))
+
+        self.assertTrue(
+            any(f.startswith("event: done") for f in frames), frames[-3:]
+        )
+        turn = AssistantTurn.objects.get(session=session)
+        self.assertEqual(turn.state, AssistantTurn.STATE_COMPLETED)
+        self.assertFalse(turn.client_disconnected)
+        self.assertEqual(turn.request_ids, ["req_fake_ok"])
+        saved = (
+            ChatMessage.objects.filter(session=session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertEqual(turn.final_message_id, saved.pk)
+
+    def test_api_error_marks_turn_failed(self):
+        import anthropic as anthropic_sdk
+        import httpx
+
+        from .client import stream_message
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create(title="Existing chat")
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(400, request=request, json={"error": {}})
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.side_effect = (
+                anthropic_sdk.APIStatusError(
+                    "bad request", response=response, body=None
+                )
+            )
+            frames = list(stream_message(session, "hello"))
+
+        self.assertTrue(any(f.startswith("event: error") for f in frames))
+        turn = AssistantTurn.objects.get(session=session)
+        self.assertEqual(turn.state, AssistantTurn.STATE_FAILED)
+
+    def test_disconnected_turn_still_persists_answer(self):
+        """End-to-end regression for the production incident: sever the
+        consumer mid-turn, the answer must still be saved and the turn
+        completed."""
+        from .client import stream_message
+        from .models import AssistantTurn, ChatMessage, ChatSession
+
+        session = ChatSession.objects.create(title="Existing chat")
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakeCompletingStream()
+            )
+            gen = stream_message(session, "hello")
+            next(gen)  # user_message frame
+            gen.close()  # disconnect
+
+            # The detached worker finishes in the background. Reads can race
+            # the worker's writes on the shared in-memory test DB — treat a
+            # transient lock error as "not ready yet".
+            from django.db import OperationalError
+
+            deadline = time.monotonic() + 5
+            turn = AssistantTurn.objects.get(session=session)
+            while time.monotonic() < deadline:
+                try:
+                    turn.refresh_from_db()
+                    if turn.state != AssistantTurn.STATE_RUNNING:
+                        break
+                except OperationalError:
+                    pass
+                time.sleep(0.05)
+
+        self.assertEqual(turn.state, AssistantTurn.STATE_COMPLETED)
+        self.assertTrue(turn.client_disconnected)
+        saved = (
+            ChatMessage.objects.filter(session=session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIsNotNone(saved)
+        self.assertIn("The answer.", saved.content)
+
+
+class TurnStatusViewTests(TestCase):
+    def test_no_turn(self):
+        from .models import ChatSession
+
+        session = ChatSession.objects.create()
+        data = self.client.get(
+            reverse("assistant:turn_status", args=[session.pk])
+        ).json()
+        self.assertEqual(data["state"], "none")
+
+    def test_running_fresh(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        AssistantTurn.objects.create(session=session)
+        data = self.client.get(
+            reverse("assistant:turn_status", args=[session.pk])
+        ).json()
+        self.assertEqual(data["state"], "running")
+
+    def test_running_stale_reported_as_stale(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        turn = AssistantTurn.objects.create(session=session)
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            updated_at=timezone.now()
+            - timedelta(seconds=AssistantTurn.STALE_AFTER_SECONDS + 10)
+        )
+        data = self.client.get(
+            reverse("assistant:turn_status", args=[session.pk])
+        ).json()
+        self.assertEqual(data["state"], "stale")
+
+    def test_completed_round_trips_confirm_and_message(self):
+        from .models import AssistantTurn, ChatMessage, ChatSession
+
+        session = ChatSession.objects.create()
+        msg = ChatMessage.objects.create(
+            session=session, role="assistant", content="done"
+        )
+        AssistantTurn.objects.create(
+            session=session,
+            state=AssistantTurn.STATE_COMPLETED,
+            confirm_required=True,
+            client_disconnected=True,
+            final_message=msg,
+        )
+        data = self.client.get(
+            reverse("assistant:turn_status", args=[session.pk])
+        ).json()
+        self.assertEqual(data["state"], "completed")
+        self.assertTrue(data["confirm_required"])
+        self.assertTrue(data["client_disconnected"])
+        self.assertEqual(data["final_message_id"], msg.pk)
+
+    def test_latest_turn_wins(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        AssistantTurn.objects.create(
+            session=session, state=AssistantTurn.STATE_COMPLETED
+        )
+        AssistantTurn.objects.create(session=session)  # newer, running
+        data = self.client.get(
+            reverse("assistant:turn_status", args=[session.pk])
+        ).json()
+        self.assertEqual(data["state"], "running")
+
+
+class StreamViewBusyGuardTests(TestCase):
+    """A fresh running turn blocks a second concurrent turn for the session
+    (it would interleave messages with the detached in-flight one)."""
+
+    def test_running_turn_refuses_new_stream(self):
+        from .models import AssistantTurn, ChatMessage, ChatSession
+
+        session = ChatSession.objects.create()
+        AssistantTurn.objects.create(session=session)
+        before = ChatMessage.objects.filter(session=session).count()
+
+        resp = self.client.post(
+            reverse("assistant:stream", args=[session.pk]),
+            {"message": "second question"},
+        )
+        body = b"".join(resp.streaming_content).decode()
+        self.assertIn("event: error", body)
+        self.assertIn("still working", body)
+        # The refused request must not have written anything.
+        self.assertEqual(
+            ChatMessage.objects.filter(session=session).count(), before
+        )
+
+    def test_stale_running_turn_does_not_block(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        turn = AssistantTurn.objects.create(session=session)
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            updated_at=timezone.now()
+            - timedelta(seconds=AssistantTurn.STALE_AFTER_SECONDS + 10)
+        )
+
+        with patch(
+            "assistant.views.assistant_client.stream_message",
+            return_value=iter(['event: done\ndata: {"message_id": 1}\n\n']),
+        ) as mock_stream:
+            resp = self.client.post(
+                reverse("assistant:stream", args=[session.pk]),
+                {"message": "hello again"},
+            )
+            body = b"".join(resp.streaming_content).decode()
+        self.assertIn("event: done", body)
+        mock_stream.assert_called_once()
+
+    def test_completed_turn_does_not_block(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        AssistantTurn.objects.create(
+            session=session, state=AssistantTurn.STATE_COMPLETED
+        )
+        with patch(
+            "assistant.views.assistant_client.stream_message",
+            return_value=iter(['event: done\ndata: {"message_id": 1}\n\n']),
+        ) as mock_stream:
+            self.client.post(
+                reverse("assistant:stream", args=[session.pk]),
+                {"message": "hello"},
+            )
+        mock_stream.assert_called_once()
+
+
+class StopReasonNoticeTests(TestCase):
+    """4.7+ terminal stop_reasons must never let a stopped response look
+    complete (refusal / model_context_window_exceeded, mirroring max_tokens)."""
+
+    def setUp(self):
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+    def _stream_with_stop_reason(self, stop_reason):
+        from .models import ChatMessage, ChatSession
+
+        session = ChatSession.objects.create(title="Existing chat")
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakeCompletingStream(text="partial", stop_reason=stop_reason)
+            )
+            list(_stream_message_impl(session, "hello"))
+        return (
+            ChatMessage.objects.filter(session=session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+
+    def test_refusal_notice(self):
+        from .client import REFUSAL_NOTICE
+
+        saved = self._stream_with_stop_reason("refusal")
+        self.assertIn(REFUSAL_NOTICE.strip(), saved.content)
+
+    def test_context_window_notice(self):
+        from .client import CONTEXT_WINDOW_NOTICE
+
+        saved = self._stream_with_stop_reason("model_context_window_exceeded")
+        self.assertIn(CONTEXT_WINDOW_NOTICE.strip(), saved.content)
+
+    def test_end_turn_no_notice(self):
+        saved = self._stream_with_stop_reason("end_turn")
+        self.assertEqual(saved.content, "partial")

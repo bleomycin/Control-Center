@@ -29,6 +29,19 @@ var _BARE_APP_HREF = new RegExp(
     'gi'
 );
 
+// Recovery after a severed stream: the server finishes a disconnected turn in
+// the background (assistant/client.py detached drain), so the client polls
+// turn-status until the answer lands instead of treating EOF as success.
+var RECOVERY_POLL_MS = 4000;
+// Give up polling after this long — matches the server's drain budget order
+// of magnitude (Opus max-effort turns can legitimately run many minutes).
+var RECOVERY_BUDGET_MS = 15 * 60 * 1000;
+
+var SPINNER_SVG = '<svg class="w-4 h-4 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">'
+    + '<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>'
+    + '<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>'
+    + '</svg>';
+
 function escapeHtml(text) {
     var div = document.createElement('div');
     div.textContent = text;
@@ -52,6 +65,7 @@ function renderMarkdown(text) {
  * @param {Element|null} config.emptyStateEl - empty state (nullable)
  * @param {number} config.sessionPk       - session ID
  * @param {string} config.messagesUrl     - URL to fetch rendered messages
+ * @param {string} config.turnStatusUrl   - JSON endpoint for turn state (stream recovery)
  * @param {function():string|null} config.getPageContext - returns context string or null
  * @param {function()} config.onFinish    - callback after stream ends
  * @param {function(string)} config.onTitle - callback for title events (nullable)
@@ -70,6 +84,10 @@ function createChatEngine(config) {
     var endedWithTimeout = false;  // watchdog fired (vs. a server-sent error)
     var finished = false;          // guard: finish() may be reached >1 way
     var abortController = null;     // tears down the fetch when we give up
+    var sawTerminal = false;       // a done/error SSE event arrived this stream
+    var recovering = false;        // polling turn-status after a severed stream
+    var recoverTimer = null;
+    var recoverDeadline = 0;
 
     function autoScroll() {
         config.scrollEl.scrollTop = config.scrollEl.scrollHeight;
@@ -78,19 +96,84 @@ function createChatEngine(config) {
     function resetWatchdog() {
         if (inactivityTimer) clearTimeout(inactivityTimer);
         inactivityTimer = setTimeout(function() {
-            console.error('Stream inactivity timeout (90s)');
-            endedWithError = true;
-            endedWithTimeout = true;
-            // Stop consuming the stream so the server request doesn't keep
-            // running (and writing) for a client that has given up.
-            if (abortController) abortController.abort();
-            if (currentStreamContent) {
-                currentStreamContent.innerHTML = '<span class="text-gray-400">Connection lost — loading saved results…</span>';
-            }
-            // finish() reloads on timeout so anything the server already saved
-            // becomes visible without a manual page refresh.
-            finish();
+            // 90s of total silence despite the server's 5s heartbeat frames:
+            // the connection is dead. The turn survives a disconnect
+            // server-side, so enter recovery instead of giving up.
+            console.error('Stream inactivity timeout (90s) — entering recovery');
+            recover();
         }, 90000);
+    }
+
+    function recover() {
+        // The stream ended without a terminal done/error event: the
+        // CONNECTION died, not the turn. The server finishes a disconnected
+        // turn in the background and persists the answer — poll turn-status
+        // until it lands, then reload messages.
+        if (finished || recovering) return;
+        recovering = true;
+        if (inactivityTimer) clearTimeout(inactivityTimer);
+        // Stop consuming the dead stream (no-op if it already hit EOF).
+        if (abortController) abortController.abort();
+        if (currentStreamContent) {
+            currentStreamContent.innerHTML = '<span class="text-amber-400 flex items-center gap-2">'
+                + SPINNER_SVG
+                + 'Connection interrupted — the assistant is still working…</span>';
+        }
+        recoverDeadline = Date.now() + RECOVERY_BUDGET_MS;
+        pollTurnStatus();
+    }
+
+    function pollTurnStatus() {
+        if (finished) return;
+        fetch(config.turnStatusUrl)
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (finished) return;
+                if (data.state === 'completed') {
+                    if (data.confirm_required) pendingQuickReply = true;
+                    recovering = false;
+                    finish();  // onFinish reloads messages — the answer is saved
+                    return;
+                }
+                if (data.state === 'running') {
+                    if (Date.now() > recoverDeadline) {
+                        recoveryFailed('The connection was lost and the assistant did not finish in time. Please resend your message.', false);
+                        return;
+                    }
+                    recoverTimer = setTimeout(pollTurnStatus, RECOVERY_POLL_MS);
+                    return;
+                }
+                if (data.state === 'failed') {
+                    // The server persisted a specific error message — reload
+                    // so it becomes visible.
+                    recoveryFailed('The assistant hit an error while finishing. Loading details…', true);
+                    return;
+                }
+                // abandoned / stale / none — the turn will not finish.
+                recoveryFailed('The connection was lost and the assistant could not finish. Please resend your message.', false);
+            })
+            .catch(function() {
+                // Network still down — keep trying until the deadline.
+                if (finished) return;
+                if (Date.now() > recoverDeadline) {
+                    recoveryFailed('The connection was lost and the assistant could not finish. Please resend your message.', false);
+                    return;
+                }
+                recoverTimer = setTimeout(pollTurnStatus, RECOVERY_POLL_MS);
+            });
+    }
+
+    function recoveryFailed(message, reload) {
+        recovering = false;
+        endedWithError = true;
+        // endedWithTimeout doubles as "reload anyway" in finish(): true when
+        // the server persisted something worth showing (failed turns save an
+        // error message); false keeps the resend instruction visible.
+        endedWithTimeout = !!reload;
+        if (currentStreamContent) {
+            currentStreamContent.innerHTML = '<span class="text-red-400">' + escapeHtml(message) + '</span>';
+        }
+        finish();
     }
 
     function handleEvent(event, data) {
@@ -163,7 +246,10 @@ function createChatEngine(config) {
                     + '<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>'
                     + '</svg>Thinking deeply\u2026</span>';
             }
+        } else if (event === 'done') {
+            sawTerminal = true;
         } else if (event === 'error') {
+            sawTerminal = true;
             endedWithError = true;
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">' + escapeHtml(data.message) + '</span>';
@@ -204,6 +290,8 @@ function createChatEngine(config) {
         if (finished) return;
         finished = true;
         if (inactivityTimer) clearTimeout(inactivityTimer);
+        if (recoverTimer) clearTimeout(recoverTimer);
+        recovering = false;
         streaming = false;
         config.sendBtnEl.disabled = false;
         config.sendBtnEl.textContent = 'Send';
@@ -226,6 +314,9 @@ function createChatEngine(config) {
         endedWithError = false;
         endedWithTimeout = false;
         finished = false;
+        sawTerminal = false;
+        recovering = false;
+        if (recoverTimer) clearTimeout(recoverTimer);
         // Prepend page context if available
         var context = config.getPageContext ? config.getPageContext() : null;
         var fullText = text;
@@ -300,7 +391,11 @@ function createChatEngine(config) {
             function read() {
                 reader.read().then(function(result) {
                     if (result.done) {
-                        finish();
+                        // EOF without a terminal done/error event means the
+                        // stream was SEVERED (proxy abort, network drop) —
+                        // not a finished turn. Recover instead of silently
+                        // treating it as success.
+                        if (sawTerminal) { finish(); } else { recover(); }
                         return;
                     }
                     resetWatchdog();
@@ -321,18 +416,19 @@ function createChatEngine(config) {
                     }
                     read();
                 }).catch(function(err) {
-                    // AbortError = we intentionally tore down the stream (e.g.
-                    // watchdog timeout); finish() already ran. Stay quiet.
+                    // AbortError = we intentionally tore down the stream
+                    // (watchdog → recover()); recovery is already running.
                     if (err && err.name === 'AbortError') return;
                     console.error('Stream error:', err);
-                    finish();
+                    if (sawTerminal) { finish(); } else { recover(); }
                 });
             }
 
             read();
         }).catch(function(err) {
-            // AbortError = intentional teardown; the watchdog already handled UI.
-            if (err && err.name === 'AbortError') { finish(); return; }
+            // AbortError = intentional teardown; recovery (or finish) already
+            // handled the UI — don't tear down a recovery in progress.
+            if (err && err.name === 'AbortError') { if (!recovering) finish(); return; }
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">Connection error: ' + escapeHtml(err.message) + '</span>';
             }

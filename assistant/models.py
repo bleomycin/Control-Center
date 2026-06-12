@@ -207,3 +207,62 @@ class ChatMessage(models.Model):
 
     def __str__(self):
         return f"{self.role}: {self.content[:50]}"
+
+
+class AssistantTurn(models.Model):
+    """Server-side lifecycle of one streamed assistant turn.
+
+    The SSE connection and the turn are deliberately decoupled: when the
+    browser connection is severed mid-turn (proxy abort, network fault), the
+    server keeps working and persists the answer (see client._with_heartbeat).
+    This row is what lets a reconnecting client tell the difference between
+    "the stream died but the assistant is still working" and "the turn
+    finished/failed while I was gone" — process memory can't do that across
+    gunicorn workers, the DB can.
+    """
+
+    STATE_RUNNING = "running"
+    STATE_COMPLETED = "completed"
+    STATE_FAILED = "failed"
+    STATE_ABANDONED = "abandoned"
+    STATE_CHOICES = [
+        (STATE_RUNNING, "Running"),
+        (STATE_COMPLETED, "Completed"),
+        (STATE_FAILED, "Failed"),
+        (STATE_ABANDONED, "Abandoned"),
+    ]
+
+    # A running turn whose worker hasn't touched updated_at in this long is
+    # presumed dead (container restart mid-turn). The worker touches the row
+    # at most every TURN_TOUCH_INTERVAL_SECONDS (client.py), so this must be
+    # several multiples of that to absorb tool-execution gaps.
+    STALE_AFTER_SECONDS = 180
+
+    session = models.ForeignKey(
+        ChatSession, on_delete=models.CASCADE, related_name="turns"
+    )
+    state = models.CharField(
+        max_length=10, choices=STATE_CHOICES, default=STATE_RUNNING
+    )
+    client_disconnected = models.BooleanField(default=False)
+    confirm_required = models.BooleanField(default=False)
+    request_ids = models.JSONField(default=list, blank=True)
+    final_message = models.ForeignKey(
+        ChatMessage, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    @property
+    def is_stale(self):
+        from django.utils import timezone
+        return (
+            timezone.now() - self.updated_at
+        ).total_seconds() > self.STALE_AFTER_SECONDS
+
+    def __str__(self):
+        return f"Turn {self.pk} ({self.state}) for session {self.session_id}"
