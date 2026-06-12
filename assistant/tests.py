@@ -1035,6 +1035,196 @@ class TemperaturePassthroughTests(TestCase):
             self.assertEqual(first_call_kwargs["temperature"], 0.0)
 
 
+class _FakeTruncatedStream:
+    """Stand-in MessageStream returning a text-only response that stopped at the
+    max_tokens output cap (stop_reason == "max_tokens")."""
+
+    request_id = "req_test"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def __iter__(self):
+        return iter([])  # text delivered via get_final_message, not deltas
+
+    def get_final_message(self):
+        block = MagicMock()
+        block.type = "text"
+        block.text = "partial answer"
+        resp = MagicMock()
+        resp.model = "claude-opus-4-8"
+        resp.content = [block]
+        resp.stop_reason = "max_tokens"
+        return resp
+
+
+class Opus48MigrationTests(TestCase):
+    """Safety nets for the Opus 4.6 -> 4.8 'max' mode migration."""
+
+    def test_max_mode_targets_opus_4_8(self):
+        """'max' mode is pinned to claude-opus-4-8 with adaptive thinking."""
+        from .client import MODE_CONFIGS
+
+        self.assertEqual(MODE_CONFIGS["max"]["model"], "claude-opus-4-8")
+        # Adaptive thinking must stay: it is what keeps temperature off the
+        # request, and Opus 4.8 rejects the temperature sampling param.
+        # display must stay "summarized": Opus 4.7+ default to "omitted",
+        # which streams no thinking_delta events — the SSE keepalive (and the
+        # client's 90s watchdog) depend on those deltas.
+        self.assertEqual(
+            MODE_CONFIGS["max"]["thinking"],
+            {"type": "adaptive", "display": "summarized"},
+        )
+
+    def test_thinking_modes_pin_display(self):
+        """Every thinking mode pins display explicitly, so a future model
+        swap can never silently inherit a new "omitted" default and starve
+        the SSE stream of keepalive-driving thinking_delta events."""
+        from .client import MODE_CONFIGS
+
+        for mode_name, config in MODE_CONFIGS.items():
+            if "thinking" not in config:
+                continue
+            with self.subTest(mode=mode_name):
+                self.assertEqual(
+                    config["thinking"].get("display"), "summarized"
+                )
+
+    def test_nonstreaming_max_mode_clamps_max_tokens(self):
+        """The non-streaming path clamps max_tokens under the SDK threshold
+        (the SDK raises ValueError above 21,333 tokens: "Streaming is
+        required for operations that may take longer than 10 minutes")."""
+        from .client import send_message, NONSTREAMING_MAX_TOKENS
+        from .models import AssistantSettings
+
+        self.assertLessEqual(NONSTREAMING_MAX_TOKENS, 21_333)
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hi"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_response.stop_reason = "end_turn"
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(session, "Hi", mode="max")
+
+            first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertEqual(
+                first_call_kwargs["max_tokens"], NONSTREAMING_MAX_TOKENS
+            )
+
+    def test_model_accepts_temperature_allowlist(self):
+        """Only allowlisted (temperature-capable) models accept temperature."""
+        from .client import _model_accepts_temperature
+
+        # Current-gen temperature-capable models (incl. dated ids via prefix).
+        self.assertTrue(_model_accepts_temperature("claude-sonnet-4-6"))
+        self.assertTrue(_model_accepts_temperature("claude-haiku-4-5-20251001"))
+        self.assertTrue(_model_accepts_temperature("claude-opus-4-6"))
+        # Opus 4.7+ removed sampling params -> must fail safe (no temperature).
+        self.assertFalse(_model_accepts_temperature("claude-opus-4-8"))
+        self.assertFalse(_model_accepts_temperature("claude-opus-4-7"))
+        # Unknown / empty -> fail safe.
+        self.assertFalse(_model_accepts_temperature("claude-future-9"))
+        self.assertFalse(_model_accepts_temperature(""))
+
+    def test_fast_mode_omits_temperature_for_opus_4_8(self):
+        """Fast mode on a 4.7+ model must NOT send temperature (would 400)."""
+        from .client import send_message
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.model = "claude-opus-4-8"
+        settings.temperature = 0.3
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hi"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_response.stop_reason = "end_turn"
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(session, "Hi")  # default mode="fast"
+
+            first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertNotIn("temperature", first_call_kwargs)
+
+    def test_truncated_response_appends_notice(self):
+        """A max_tokens stop_reason appends a visible truncation notice (non-stream)."""
+        from .client import send_message, TRUNCATION_NOTICE
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "A long answer cut off"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_response.stop_reason = "max_tokens"
+            mock_client.messages.create.return_value = mock_response
+
+            new_messages = send_message(session, "Hi")
+
+            final = new_messages[-1]
+            self.assertEqual(final.role, "assistant")
+            self.assertTrue(final.content.startswith("A long answer cut off"))
+            self.assertIn(TRUNCATION_NOTICE.strip(), final.content)
+
+    def test_stream_truncation_emits_notice(self):
+        """Streaming 'max' path surfaces truncation live and persists it."""
+        from .client import _stream_message_impl, TRUNCATION_NOTICE
+        from .models import AssistantSettings, ChatMessage
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+        # Non-default title so the loop skips AI title generation.
+        session = ChatSession.objects.create(title="Existing chat")
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = _FakeTruncatedStream()
+
+            frames = list(_stream_message_impl(session, "hello", mode="max"))
+
+        joined = "".join(frames)
+        self.assertIn("truncated", joined.lower())
+        self.assertTrue(frames[-1].startswith("event: done\ndata: "))
+        saved = (
+            ChatMessage.objects.filter(session=session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIsNotNone(saved)
+        self.assertIn(TRUNCATION_NOTICE.strip(), saved.content)
+
+
 class ToolDefinitionCacheTests(TestCase):
     """A2: Verify cache_control is on the last tool definition."""
 

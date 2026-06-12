@@ -31,6 +31,34 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8192
 TITLE_MODEL = "claude-haiku-4-5-20251001"
 
+# Ceiling for the NON-streaming path only. The SDK refuses non-streaming
+# create() calls whose max_tokens imply >10 minutes of generation (it raises
+# ValueError above 21,333 tokens: 600s at its assumed 128k tokens/hour).
+# The streaming path has no such limit and carries the full mode budget.
+NONSTREAMING_MAX_TOKENS = 20_480
+
+# Appended to a response that stopped because it hit the max_tokens output cap,
+# so a truncated answer is visible to the user instead of being silently cut
+# off. Opus 4.7+ count tokens higher and effort:max spends more of the budget on
+# thinking (which shares the output ceiling), so surfacing truncation matters.
+TRUNCATION_NOTICE = (
+    "\n\n_[Response truncated — it reached the output limit. "
+    "Ask me to continue.]_"
+)
+
+# Models that accept the `temperature` sampling parameter. Anthropic removed
+# temperature/top_p/top_k on Opus 4.7 and later — sending temperature to those
+# returns HTTP 400. temperature is attached ONLY for models matching this
+# allowlist (prefix match, so dated ids like "...-20251001" are covered), so an
+# unrecognized or future model fails SAFE: temperature is omitted and the model
+# uses its own default rather than erroring. Add a prefix only for a model that
+# supports temperature. (Modes that enable thinking never send temperature.)
+TEMPERATURE_CAPABLE_PREFIXES = (
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5",
+    "claude-opus-4-6",
+)
+
 # Injection point for benchmark-injected system prompt rules.
 # Set by benchmark_intelligence to test prompt variations.
 _EXTRA_RULES = ""
@@ -39,19 +67,38 @@ _EXTRA_RULES = ""
 # Think/Max force specific models to guarantee adaptive thinking support.
 MODE_CONFIGS = {
     "fast": {},  # Uses settings as-is
+    # display must stay pinned to "summarized" on every thinking mode: Opus
+    # 4.7+ default to "omitted", which streams NO thinking_delta events while
+    # the model thinks — and the SSE keepalive (client watchdog kills the
+    # stream after 90s of silence) is driven by those deltas. Same cost
+    # either way; "summarized" matches the Opus 4.6 streaming behavior the
+    # keepalive architecture was built against.
     "think": {
         "model": "claude-sonnet-4-6",
-        "thinking": {"type": "adaptive"},
+        "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": "high"},
         "max_tokens": 16384,
     },
     "max": {
-        "model": "claude-opus-4-6",
-        "thinking": {"type": "adaptive"},
+        "model": "claude-opus-4-8",
+        "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": "max"},
-        "max_tokens": 16384,
+        # Opus 4.8 counts tokens higher than 4.6, and effort:max spends more on
+        # thinking — which shares this budget with the visible output. Give extra
+        # headroom to reduce truncation; streaming handles the larger ceiling.
+        "max_tokens": 32768,
     },
 }
+
+
+def _model_accepts_temperature(model_name):
+    """True if ``model_name`` accepts the temperature sampling parameter.
+
+    Opus 4.7+ removed temperature/top_p/top_k (HTTP 400 if sent). Unrecognized
+    models fail safe — temperature is omitted and the model uses its default.
+    """
+    return bool(model_name) and model_name.startswith(TEMPERATURE_CAPABLE_PREFIXES)
+
 
 # Tools that are conditionally registered — included in the active tools
 # array when their trigger marker is present anywhere in the conversation's
@@ -662,6 +709,11 @@ def send_message(session, user_text, mode="fast", effort=""):
         model_name = mode_config["model"]
     if "max_tokens" in mode_config:
         max_tokens = mode_config["max_tokens"]
+    # This path is non-streaming, so the SDK raises ValueError for budgets
+    # above NONSTREAMING_MAX_TOKENS ("Streaming is required for operations
+    # that may take longer than 10 minutes"). Clamp under that ceiling; a
+    # response that hits the cap gets the visible truncation notice.
+    max_tokens = min(max_tokens, NONSTREAMING_MAX_TOKENS)
 
     client = anthropic.Anthropic(api_key=api_key, max_retries=5)
     system_prompt = _build_system_prompt()
@@ -680,8 +732,10 @@ def send_message(session, user_text, mode="fast", effort=""):
             if "thinking" in mode_config:
                 create_kwargs["thinking"] = mode_config["thinking"]
                 # temperature is incompatible with thinking — omit it
-            else:
+            elif _model_accepts_temperature(model_name):
                 create_kwargs["temperature"] = float(assistant_settings.temperature)
+            # else: model dropped sampling params (Opus 4.7+) — omit temperature
+            # to avoid a 400; the model uses its own default.
             if "output_config" in mode_config:
                 create_kwargs["output_config"] = mode_config["output_config"]
             response = client.messages.create(**create_kwargs)
@@ -764,6 +818,8 @@ def send_message(session, user_text, mode="fast", effort=""):
                     text_parts.append(block.text)
 
             final_text = "\n".join(text_parts)
+            if getattr(response, "stop_reason", None) == "max_tokens":
+                final_text += TRUNCATION_NOTICE
             assistant_msg = ChatMessage.objects.create(
                 session=session,
                 role="assistant",
@@ -961,8 +1017,10 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
                 if "thinking" in mode_config:
                     stream_kwargs["thinking"] = mode_config["thinking"]
                     # temperature is incompatible with thinking — omit it
-                else:
+                elif _model_accepts_temperature(model_name):
                     stream_kwargs["temperature"] = float(assistant_settings.temperature)
+                # else: model dropped sampling params (Opus 4.7+) — omit
+                # temperature to avoid a 400; the model uses its own default.
                 if "output_config" in mode_config:
                     stream_kwargs["output_config"] = mode_config["output_config"]
 
@@ -1124,6 +1182,10 @@ def _stream_message_impl(session, user_text, mode="fast", effort=""):
         final_text = "\n".join(
             block.text for block in response.content if block.type == "text"
         )
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            # Surface truncation live (text already streamed) and persist it.
+            final_text += TRUNCATION_NOTICE
+            yield sse("token", {"text": TRUNCATION_NOTICE})
 
         # Save the final message
         try:
