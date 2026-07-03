@@ -503,6 +503,8 @@ def _validate_tool_pairs(messages):
     4. The list starting on a non-user message (the API requires the first
        message to be role "user") — e.g. after truncation or after this
        repair dropped a leading message.
+    5. Messages with empty content ("", [], None) — the API rejects them
+       on replay.
 
     Returns a cleaned copy of the message list.
     """
@@ -514,6 +516,15 @@ def _validate_tool_pairs(messages):
     n = len(messages)
     while i < n:
         msg = messages[i]
+
+        # Empty content ("", [], None) is rejected by the API on any
+        # replayed message — drop it so this corruption class also
+        # self-heals instead of leaving the session bricked.
+        if not msg.get("content"):
+            logger.warning("Dropping message with empty content at index %d", i)
+            i += 1
+            continue
+
         use_ids = _tool_use_ids(msg) if msg.get("role") == "assistant" else set()
         res_ids = _tool_result_ids(msg) if msg.get("role") == "user" else set()
 
@@ -583,10 +594,14 @@ def _build_api_messages(chat_messages):
 
     for msg in chat_messages:
         if msg.tool_data:
-            # tool_data contains the raw Anthropic content blocks
+            # tool_data contains the raw Anthropic content blocks. Copy the
+            # list: cache-breakpoint injection below replaces its last
+            # element, and aliasing the model instance's JSONField list
+            # would let a request-scoped cache_control marker leak into
+            # tool_data if anything ever re-saves a history message.
             api_messages.append({
                 "role": msg.role,
-                "content": msg.tool_data,
+                "content": list(msg.tool_data),
             })
         else:
             api_messages.append({
@@ -854,13 +869,18 @@ def send_message(session, user_text, mode="fast", effort=""):
         has_tool_use = any(
             block.type == "tool_use" for block in response.content
         )
-        if has_tool_use and getattr(response, "stop_reason", None) == "max_tokens":
-            # The response was cut off by the output cap mid-tool-call, so
-            # the tool_use input may be incomplete (partial JSON). Executing
-            # it could run a write with a truncated data dict. Fall through
-            # to the final-text path, which persists any partial text plus
-            # the truncation notice; the user can ask the model to continue.
-            logger.warning("Skipping tool execution: response truncated by max_tokens")
+        if has_tool_use and _stop_reason_notice(response):
+            # The response ended on a terminal stop_reason (max_tokens /
+            # model_context_window_exceeded / refusal) while carrying
+            # tool_use blocks. For the truncation reasons the tool_use
+            # input may be incomplete (partial JSON) — executing it could
+            # run a write with a truncated data dict; a refused response
+            # must not act at all. Fall through to the final-text path,
+            # which persists any partial text plus the matching notice.
+            logger.warning(
+                "Skipping tool execution: terminal stop_reason %s",
+                getattr(response, "stop_reason", None),
+            )
             has_tool_use = False
 
         if has_tool_use:
@@ -1349,12 +1369,16 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                 return
 
         has_tool_use = any(block.type == "tool_use" for block in response.content)
-        if has_tool_use and getattr(response, "stop_reason", None) == "max_tokens":
-            # Cut off by the output cap mid-tool-call — the tool_use input
-            # may be incomplete (partial JSON). Skip execution and fall
-            # through to the final-text path, which persists any partial
-            # text plus the truncation notice.
-            logger.warning("Skipping tool execution: response truncated by max_tokens")
+        if has_tool_use and _stop_reason_notice(response):
+            # Terminal stop_reason (max_tokens / model_context_window_exceeded /
+            # refusal) with tool_use blocks present — the input may be
+            # incomplete (partial JSON), and a refused response must not act.
+            # Skip execution and fall through to the final-text path, which
+            # persists any partial text plus the matching notice.
+            logger.warning(
+                "Skipping tool execution: terminal stop_reason %s",
+                getattr(response, "stop_reason", None),
+            )
             has_tool_use = False
 
         if has_tool_use:

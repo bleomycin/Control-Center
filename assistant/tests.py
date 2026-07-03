@@ -3363,6 +3363,66 @@ class ToolPairValidationTests(TestCase):
         self._assert_api_valid(result)
         self.assertNotIn("tu_orphan", json.dumps(result))
 
+    def test_empty_content_messages_dropped(self):
+        """Bug-check fix: empty content ("", [], None) 400s on replay —
+        the repair must drop it, not pass it through."""
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": ""},
+            {"role": "assistant", "content": []},
+            {"role": "user", "content": None},
+            {"role": "assistant", "content": "real answer"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertEqual(
+            result,
+            [
+                {"role": "user", "content": "hi"},
+                {"role": "assistant", "content": "real answer"},
+            ],
+        )
+
+    def test_build_api_messages_does_not_mutate_tool_data(self):
+        """Bug-check fix: cache-breakpoint injection must not write
+        cache_control into the ChatMessage instances' tool_data lists
+        (request-scoped marker leaking into DB-bound state)."""
+        from .client import _build_api_messages
+
+        session = ChatSession.objects.create()
+        ChatMessage.objects.create(session=session, role="user", content="Start")
+        for i in range(19):
+            role = "assistant" if i % 2 == 0 else "user"
+            if role == "assistant":
+                tool_data = [{"type": "tool_use", "id": f"tu_{i}",
+                              "name": "search", "input": {}}]
+            else:
+                tool_data = [{"type": "tool_result", "tool_use_id": f"tu_{i-1}",
+                              "content": "ok"}]
+            ChatMessage.objects.create(
+                session=session, role=role, content="", tool_data=tool_data
+            )
+
+        instances = list(session.messages.all())
+        result = _build_api_messages(instances)
+
+        # The breakpoint DID fire on a tool_data message in the output...
+        self.assertTrue(any(
+            isinstance(m.get("content"), list)
+            and any("cache_control" in b for b in m["content"]
+                    if isinstance(b, dict))
+            for m in result
+        ))
+        # ...but no model instance's tool_data was touched.
+        for inst in instances:
+            for block in inst.tool_data or []:
+                self.assertNotIn(
+                    "cache_control", block,
+                    f"cache_control leaked into ChatMessage {inst.pk} tool_data",
+                )
+
     def test_truncated_window_starts_with_user(self):
         """Defect B spec test: 55-message session whose 50-message tail
         begins on an assistant message."""
@@ -3543,8 +3603,10 @@ class RedactedThinkingRoundTripTests(TestCase):
 
 
 class MaxTokensToolSkipTests(TestCase):
-    """Phase 2 defect D: a response cut off by max_tokens mid-tool-call has
-    an incomplete tool_use input — it must NOT be executed."""
+    """Phase 2 defect D: a response ending on a terminal stop_reason
+    (max_tokens / model_context_window_exceeded / refusal) while carrying
+    tool_use blocks must NOT execute them — truncation means incomplete
+    input JSON, and a refused response must not act."""
 
     def setUp(self):
         settings = AssistantSettings.load()
@@ -3603,3 +3665,77 @@ class MaxTokensToolSkipTests(TestCase):
                 session=self.session, tool_data__isnull=False
             ).exists()
         )
+
+    def _send_with_stop_reason(self, stop_reason):
+        """Run send_message against a tool_use response ending on
+        ``stop_reason``; return (mock_exec, final ChatMessage)."""
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.return_value = _api_response(
+                [_text_block("partial"), _tool_use_block("tu_cut")],
+                stop_reason=stop_reason,
+            )
+            with patch("assistant.client._execute_tool") as mock_exec:
+                new_messages = send_message(self.session, "hi")
+        return mock_exec, new_messages[-1]
+
+    def test_context_window_truncated_tool_call_skipped(self):
+        """Bug-check fix: model_context_window_exceeded is the same
+        cut-off-mid-generation shape as max_tokens."""
+        from .client import CONTEXT_WINDOW_NOTICE
+
+        mock_exec, final = self._send_with_stop_reason(
+            "model_context_window_exceeded"
+        )
+        mock_exec.assert_not_called()
+        self.assertIn(CONTEXT_WINDOW_NOTICE.strip(), final.content)
+
+    def test_refusal_with_tool_use_skipped(self):
+        """Bug-check fix: a refused response must not act on its tools."""
+        from .client import REFUSAL_NOTICE
+
+        mock_exec, final = self._send_with_stop_reason("refusal")
+        mock_exec.assert_not_called()
+        self.assertIn(REFUSAL_NOTICE.strip(), final.content)
+
+    def test_stream_context_window_truncated_tool_call_skipped(self):
+        """Streaming path uses the same widened guard."""
+        from .client import CONTEXT_WINDOW_NOTICE
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = _FakePhase2Stream(
+                _api_response(
+                    [_text_block("partial"), _tool_use_block("tu_cut")],
+                    stop_reason="model_context_window_exceeded",
+                )
+            )
+            with patch("assistant.client._execute_tool") as mock_exec:
+                frames = list(_stream_message_impl(self.session, "hi"))
+
+        mock_exec.assert_not_called()
+        self.assertTrue(frames[-1].startswith("event: done\ndata: "))
+        saved = (
+            ChatMessage.objects.filter(session=self.session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIn(CONTEXT_WINDOW_NOTICE.strip(), saved.content)
+
+    def test_normal_tool_use_stop_reason_still_executes(self):
+        """Guard must not trip on the ordinary tool_use stop_reason."""
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.side_effect = [
+                _api_response([_tool_use_block("tu_1")], stop_reason="tool_use"),
+                _api_response([_text_block("done")], stop_reason="end_turn"),
+            ]
+            with patch(
+                "assistant.client._execute_tool", return_value="{}"
+            ) as mock_exec:
+                send_message(self.session, "hi")
+
+        mock_exec.assert_called_once()
