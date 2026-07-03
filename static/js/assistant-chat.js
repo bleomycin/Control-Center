@@ -182,8 +182,9 @@ function createChatEngine(config) {
 
     function handleEvent(event, data) {
         if (event === 'tool_start') {
+            // Raw here — the whole label is escapeHtml'd once at the sink below.
             var label = data.name;
-            if (data.summary) label += '(' + escapeHtml(data.summary) + ')';
+            if (data.summary) label += '(' + data.summary + ')';
             var toolEl = document.createElement('div');
             toolEl.className = 'flex items-start gap-2 text-xs text-gray-500 mb-1';
             toolEl.setAttribute('data-tool', data.name);

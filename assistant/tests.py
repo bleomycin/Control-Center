@@ -172,6 +172,18 @@ class CredentialModelExclusionTests(TestCase):
         for name in ("name", "title", "notes_text", "due_date"):
             self.assertFalse(_is_secret_field(name), name)
 
+    def test_query_fields_path_redacts_end_to_end(self):
+        # The fields=[...] path bypasses serialize_instance (raw getattr);
+        # a secret-named field must come back redacted, never a value.
+        from tasks.models import Task
+        Task.objects.create(title="T", status="not_started",
+                            priority="high", direction="personal")
+        result = query("Task", fields=["title", "api_key"])
+        self.assertEqual(result["count"], 1)
+        row = result["results"][0]
+        self.assertEqual(row["title"], "T")
+        self.assertEqual(row["api_key"], "[redacted]")
+
 
 class MarkdownSanitizationTests(TestCase):
     """Phase 1 security: render_markdown must strip raw HTML (stored XSS
