@@ -112,6 +112,49 @@ class AssistantMarkdownRenderingTests(PlaywrightTestCase):
         html = self.page.evaluate('renderMarkdown("Line 1\\nLine 2")')
         self.assertIn("<br>", html)
 
+    def test_dompurify_loaded(self):
+        """DOMPurify is vendored and available for stream sanitization."""
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        loaded = self.page.evaluate(
+            "typeof DOMPurify !== 'undefined' && typeof DOMPurify.sanitize === 'function'"
+        )
+        self.assertTrue(loaded)
+
+    def test_svg_onload_sanitized_in_stream_path(self):
+        """Raw <svg onload=...> in streamed text renders inert (Phase 1 XSS fix)."""
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        html = self.page.evaluate(
+            'renderMarkdown("<svg onload=alert(1)></svg>quoted content")'
+        )
+        self.assertNotIn("onload", html)
+        self.assertIn("quoted content", html)
+
+    def test_script_sanitized_in_stream_path(self):
+        """Raw <script> in streamed text is stripped before innerHTML."""
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        html = self.page.evaluate(
+            'renderMarkdown("<script>alert(1)</scr" + "ipt>safe")'
+        )
+        self.assertNotIn("<script", html)
+        self.assertNotIn("alert(1)", html)
+        self.assertIn("safe", html)
+
+    def test_img_onerror_sanitized_in_stream_path(self):
+        """<img onerror=...> loses its event handler after sanitization."""
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        html = self.page.evaluate(
+            'renderMarkdown("<img src=x onerror=alert(1)>")'
+        )
+        self.assertNotIn("onerror", html)
+
+    def test_sanitize_preserves_repaired_hrefs(self):
+        """Sanitization runs after the bare-app-href repair and keeps the fixed link."""
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        html = self.page.evaluate(
+            'renderMarkdown("[Ascaya](assets/real-estate/124/)")'
+        )
+        self.assertIn('href="/assets/real-estate/124/"', html)
+
 
 class AssistantServerRenderedMarkdownTests(PlaywrightTestCase):
     """Verify server-rendered messages display markdown correctly."""
@@ -166,6 +209,22 @@ class AssistantServerRenderedMarkdownTests(PlaywrightTestCase):
         code = self.page.locator(".prose-markdown code")
         code.first.wait_for(state="visible")
         self.assertIn("some code here", code.first.text_content())
+
+    def test_server_rendered_script_is_inert(self):
+        """Stored raw <script>/<img onerror> in message history renders inert."""
+        ChatMessage.objects.create(
+            session=self.session,
+            role="assistant",
+            content='Quoting: <script>window.__xss=1</script>'
+                    '<img src=x onerror="window.__xss=2"> done.',
+        )
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        bubble = self.page.locator(".prose-markdown")
+        bubble.first.wait_for(state="visible")
+        self.assertIsNone(self.page.evaluate("window.__xss"))
+        html = bubble.first.inner_html()
+        self.assertNotIn("<script", html)
+        self.assertNotIn("onerror", html)
 
     def test_server_rendered_link(self):
         """Server-rendered assistant messages render links."""

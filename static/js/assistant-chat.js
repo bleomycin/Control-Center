@@ -7,7 +7,7 @@
  *   engine.doSend("Hello");
  */
 
-/* global marked */
+/* global marked, DOMPurify */
 
 // Configure marked.js once (idempotent)
 if (typeof marked !== 'undefined') {
@@ -49,7 +49,11 @@ function escapeHtml(text) {
 }
 
 function renderMarkdown(text) {
-    return marked.parse(text).replace(_BARE_APP_HREF, '$1/$2/');
+    // Order matters: parse → repair hrefs → sanitize. The model can quote
+    // hostile email/document HTML, and marked passes raw HTML through — this
+    // innerHTML sink is a stored-XSS path without DOMPurify.
+    var html = marked.parse(text).replace(_BARE_APP_HREF, '$1/$2/');
+    return DOMPurify.sanitize(html);
 }
 
 /**

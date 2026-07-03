@@ -382,6 +382,9 @@ def query(model, filters=None, fields=None, order_by=None, limit=DEFAULT_LIMIT):
         for obj in qs:
             data = {"__pk__": obj.pk, "__str__": str(obj), "__model__": model}
             for f in fields:
+                if registry._is_secret_field(f):
+                    data[f] = "[redacted]"
+                    continue
                 try:
                     data[f] = registry._json_safe(getattr(obj, f))
                 except Exception:

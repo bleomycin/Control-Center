@@ -103,6 +103,136 @@ class RegistryTests(TestCase):
         self.assertIn("entity_type", field_names)
 
 
+class CredentialModelExclusionTests(TestCase):
+    """Phase 1 security: credential/settings models must be unreachable
+    through the tool registry — an injected instruction in ingested email or
+    document content must not be able to read or write them."""
+
+    def test_excluded_models_not_in_registry(self):
+        build_registry()
+        from .registry import EXCLUDED_MODELS, MODEL_REGISTRY
+        for name in EXCLUDED_MODELS:
+            self.assertNotIn(name, MODEL_REGISTRY)
+            self.assertNotIn(name.lower(), MODEL_REGISTRY)
+
+    def test_get_record_excluded_model_is_unknown(self):
+        with self.assertRaisesMessage(ValueError, "Unknown model"):
+            get_record("GoogleDriveSettings", 1)
+
+    def test_query_excluded_model_is_unknown(self):
+        with self.assertRaisesMessage(ValueError, "Unknown model"):
+            query("EmailSettings")
+
+    def test_write_tools_reject_excluded_models(self):
+        from .tools import update_record
+        with self.assertRaisesMessage(ValueError, "Unknown model"):
+            create_record_helper("CalendarFeedSettings", {"token": "x"})
+        with self.assertRaisesMessage(ValueError, "Unknown model"):
+            update_record("BackupSettings", 1, {"enabled": False})
+        with self.assertRaisesMessage(ValueError, "Unknown model"):
+            delete_record("GoogleDriveSettings", 1)
+
+    def test_unknown_model_error_does_not_advertise_excluded_models(self):
+        # The message echoes the requested name; the "Available models" list
+        # it offers must not mention any excluded model.
+        from .registry import EXCLUDED_MODELS
+        with self.assertRaises(ValueError) as ctx:
+            get_model("NonexistentModel")
+        available = str(ctx.exception).split("Available models:")[1]
+        for name in EXCLUDED_MODELS:
+            self.assertNotIn(name, available)
+
+    def test_schema_text_excludes_credential_models(self):
+        from .registry import get_schema_text
+        schema = get_schema_text()
+        self.assertNotIn("GoogleDriveSettings", schema)
+        self.assertNotIn("EmailSettings", schema)
+        self.assertNotIn("CalendarFeedSettings", schema)
+        self.assertNotIn("BackupSettings", schema)
+
+    def test_list_models_excludes_credential_models(self):
+        from .registry import EXCLUDED_MODELS
+        result = list_models()
+        names = {m["name"] for m in result["models"]}
+        self.assertFalse(EXCLUDED_MODELS & names)
+
+    def test_serialize_instance_redacts_secret_fields(self):
+        # Defense in depth: even if a credential-bearing model reached the
+        # serializer, secret-named fields must not survive serialization.
+        settings = AssistantSettings(owner_name="X", api_key="sk-ant-secret-value")
+        data = serialize_instance(settings, expand_relations=False)
+        self.assertEqual(data["api_key"], "[redacted]")
+        self.assertNotIn("sk-ant-secret-value", json.dumps(data))
+
+    def test_query_fields_path_redacts_secret_fields(self):
+        from .registry import _is_secret_field
+        for name in ("password", "token", "client_secret", "api_key",
+                     "refresh_token", "access_token", "token_expiry"):
+            self.assertTrue(_is_secret_field(name), name)
+        for name in ("name", "title", "notes_text", "due_date"):
+            self.assertFalse(_is_secret_field(name), name)
+
+
+class MarkdownSanitizationTests(TestCase):
+    """Phase 1 security: render_markdown must strip raw HTML (stored XSS
+    from assistant-quoted email/document content) while normal markdown
+    output survives intact."""
+
+    def _render(self, text):
+        from dashboard.templatetags.markdown_filter import render_markdown
+        return render_markdown(text)
+
+    def test_script_stripped(self):
+        html = self._render("<script>alert(1)</script>safe text")
+        self.assertNotIn("<script", html)
+        self.assertNotIn("alert(1)", html)
+        self.assertIn("safe text", html)
+
+    def test_img_onerror_stripped(self):
+        html = self._render("<img src=x onerror=alert(1)>")
+        self.assertNotIn("onerror", html)
+        self.assertNotIn("<img", html)
+
+    def test_svg_onload_stripped(self):
+        html = self._render("<svg onload=alert(1)></svg>")
+        self.assertNotIn("onload", html)
+        self.assertNotIn("<svg", html)
+
+    def test_iframe_stripped(self):
+        html = self._render('<iframe src="https://evil.example/"></iframe>')
+        self.assertNotIn("<iframe", html)
+
+    def test_event_handler_on_allowed_tag_stripped(self):
+        html = self._render('<p onclick="alert(1)">hi</p>')
+        self.assertNotIn("onclick", html)
+        self.assertIn("hi", html)
+
+    def test_javascript_href_neutralized(self):
+        html = self._render("[click](javascript:alert(1))")
+        self.assertNotIn("javascript:", html)
+
+    def test_markdown_table_survives(self):
+        html = self._render("| a | b |\n|---|---|\n| 1 | 2 |")
+        for fragment in ("<table>", "<thead>", "<tbody>", "<th>a</th>", "<td>1</td>"):
+            self.assertIn(fragment, html)
+
+    def test_root_relative_link_survives(self):
+        html = self._render("[Thomas](/stakeholders/1/)")
+        self.assertIn('href="/stakeholders/1/"', html)
+
+    def test_code_fence_survives(self):
+        html = self._render("```python\nprint(1)\n```")
+        self.assertIn("<pre><code", html)
+        self.assertIn("language-python", html)
+        self.assertIn("print(1)", html)
+
+    def test_bold_list_and_heading_survive(self):
+        html = self._render("## Title\n\n**bold**\n\n- one\n- two")
+        self.assertIn("<h2>Title</h2>", html)
+        self.assertIn("<strong>bold</strong>", html)
+        self.assertIn("<ul>", html)
+
+
 class ToolTests(TestCase):
     @classmethod
     def setUpTestData(cls):

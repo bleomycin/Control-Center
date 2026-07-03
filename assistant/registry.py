@@ -29,6 +29,27 @@ INCLUDED_APPS = [
     "email_links",
 ]
 
+# Credential/configuration models the assistant must never reach. The tool
+# registry ingests untrusted content (emails, documents) — an injected
+# instruction could otherwise exfiltrate OAuth secrets via get_record or
+# break auth via update_record/delete_record. AssistantSettings is listed
+# defensively even though the assistant app is not in INCLUDED_APPS.
+EXCLUDED_MODELS = {
+    "GoogleDriveSettings",   # client_secret, api_key, refresh_token, access_token
+    "EmailSettings",         # password
+    "CalendarFeedSettings",  # token
+    "BackupSettings",
+    "AssistantSettings",     # api_key
+    "SampleDataStatus",      # internal config singleton
+}
+
+# Field names (substring match) redacted by serialize_instance regardless of
+# model — defense in depth should a credential model slip into the registry.
+_SECRET_FIELD_MARKERS = (
+    "password", "token", "secret", "client_secret", "api_key",
+    "refresh_token", "access_token",
+)
+
 # Search field mappings: model name -> list of text fields to search
 SEARCH_FIELDS = {
     "Stakeholder": ["name", "organization", "notes_text"],
@@ -82,6 +103,8 @@ def build_registry():
             continue
         for model in app_config.get_models():
             name = model.__name__
+            if name in EXCLUDED_MODELS:
+                continue
             MODEL_REGISTRY[name] = model
             MODEL_REGISTRY[name.lower()] = model
 
@@ -98,6 +121,12 @@ def get_model(name):
             f"Unknown model '{name}'. Available models: {', '.join(available)}"
         )
     return model
+
+
+def _is_secret_field(name):
+    """True if a field name looks credential-bearing (substring match)."""
+    lowered = name.lower()
+    return any(marker in lowered for marker in _SECRET_FIELD_MARKERS)
 
 
 def _json_safe(value):
@@ -167,6 +196,10 @@ def serialize_instance(instance, expand_relations=True):
                     result[name] = {"id": fk_id, "str": None}
             else:
                 result[name] = fk_id
+            continue
+
+        if _is_secret_field(name):
+            result[name] = "[redacted]"
             continue
 
         if name in data:

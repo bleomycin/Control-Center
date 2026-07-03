@@ -1,10 +1,28 @@
 import re
 
 import markdown
+import nh3
 from django import template
 from django.utils.safestring import mark_safe
 
 register = template.Library()
+
+# Sanitization policy: exactly the tags python-markdown emits with our
+# extensions (nl2br, fenced_code, tables, sane_lists). Rendered content can
+# include third-party text (assistant-quoted emails/documents, pasted notes),
+# so raw HTML — script, img with event handlers, iframe, style — must not
+# survive to the mark_safe sink.
+_ALLOWED_TAGS = {
+    "p", "br", "a", "strong", "em", "code", "pre", "ul", "ol", "li",
+    "blockquote", "h1", "h2", "h3", "h4", "h5", "h6",
+    "table", "thead", "tbody", "tr", "th", "td", "hr", "del",
+}
+_ALLOWED_ATTRIBUTES = {
+    "a": {"href", "title"},
+    "code": {"class"},  # fenced-code language, e.g. class="language-python"
+    "th": {"align"},
+    "td": {"align"},
+}
 
 # Ensure blank line before block-level markdown elements so nl2br
 # doesn't prevent the parser from recognizing them.
@@ -42,4 +60,12 @@ def render_markdown(value):
         extensions=["nl2br", "fenced_code", "tables", "sane_lists"],
     )
     html = _BARE_APP_HREF.sub(r'\1/\2/', html)
+    # link_rel=None: don't inject rel="noopener noreferrer" — links here are
+    # overwhelmingly internal app paths and templates assert exact hrefs.
+    html = nh3.clean(
+        html,
+        tags=_ALLOWED_TAGS,
+        attributes=_ALLOWED_ATTRIBUTES,
+        link_rel=None,
+    )
     return mark_safe(html)
