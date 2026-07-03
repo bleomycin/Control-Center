@@ -3137,3 +3137,469 @@ class StopReasonNoticeTests(TestCase):
     def test_end_turn_no_notice(self):
         saved = self._stream_with_stop_reason("end_turn")
         self.assertEqual(saved.content, "partial")
+
+
+def _tool_use_block(block_id="tu_1", name="nonexistent_tool", tool_input=None):
+    block = MagicMock()
+    block.type = "tool_use"
+    block.id = block_id
+    block.name = name
+    block.input = tool_input or {}
+    return block
+
+
+def _text_block(text):
+    block = MagicMock()
+    block.type = "text"
+    block.text = text
+    return block
+
+
+def _api_response(blocks, stop_reason="end_turn"):
+    resp = MagicMock()
+    resp.content = blocks
+    resp.stop_reason = stop_reason
+    resp.model = "claude-sonnet-4-6"
+    return resp
+
+
+class _FakePhase2Stream:
+    """Stand-in MessageStream returning a canned final response."""
+
+    request_id = "req_fake"
+
+    def __init__(self, response):
+        self._response = response
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def __iter__(self):
+        return iter([])
+
+    def get_final_message(self):
+        return self._response
+
+
+class ToolPairValidationTests(TestCase):
+    """Phase 2 defect A2/B: _validate_tool_pairs must repair orphans anywhere
+    in the list and guarantee the window starts on a genuine user message —
+    an unpaired tool message 400s every future request for the session."""
+
+    def _assert_api_valid(self, msgs):
+        """Assert the message list satisfies the Anthropic history rules."""
+        from .client import _tool_result_ids, _tool_use_ids
+
+        if msgs:
+            self.assertEqual(msgs[0].get("role"), "user")
+            self.assertEqual(_tool_result_ids(msgs[0]), set())
+        for i, msg in enumerate(msgs):
+            use_ids = _tool_use_ids(msg) if msg.get("role") == "assistant" else set()
+            if use_ids:
+                self.assertLess(i + 1, len(msgs), f"tool_use at tail (index {i})")
+                nxt = msgs[i + 1]
+                self.assertEqual(nxt.get("role"), "user")
+                from .client import _tool_result_ids as _res
+                self.assertEqual(use_ids, _res(nxt), f"unmatched pair at index {i}")
+            res_ids = _tool_result_ids(msg) if msg.get("role") == "user" else set()
+            if res_ids:
+                prev = msgs[i - 1] if i > 0 else None
+                self.assertEqual(
+                    res_ids,
+                    _tool_use_ids(prev) if prev else set(),
+                    f"orphaned tool_result at index {i}",
+                )
+
+    @staticmethod
+    def _tool_use_msg(block_id="tu_1"):
+        return {
+            "role": "assistant",
+            "content": [
+                {"type": "tool_use", "id": block_id, "name": "search", "input": {}},
+            ],
+        }
+
+    @staticmethod
+    def _tool_result_msg(block_id="tu_1"):
+        return {
+            "role": "user",
+            "content": [
+                {"type": "tool_result", "tool_use_id": block_id, "content": "ok"},
+            ],
+        }
+
+    def test_mid_list_orphaned_tool_use_dropped(self):
+        """The crash signature: tool_use saved, process died before the
+        tool_result — the orphan sits in the MIDDLE of later history."""
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            self._tool_use_msg("tu_dead"),  # orphan — no tool_result follows
+            {"role": "assistant", "content": "recovered answer"},
+            {"role": "user", "content": "next question"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertEqual(len(result), 3)
+        self.assertNotIn(
+            "tu_dead", json.dumps(result), "orphaned tool_use survived repair"
+        )
+
+    def test_mid_list_orphaned_tool_result_dropped(self):
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "plain answer"},
+            self._tool_result_msg("tu_ghost"),  # no preceding tool_use
+            {"role": "user", "content": "next question"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertNotIn("tu_ghost", json.dumps(result))
+
+    def test_mismatched_pair_ids_dropped_together(self):
+        """A tool_result answering the WRONG ids is as fatal as a missing one."""
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            self._tool_use_msg("tu_a"),
+            self._tool_result_msg("tu_b"),  # answers an id that doesn't exist
+            {"role": "user", "content": "next"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertNotIn("tu_a", json.dumps(result))
+        self.assertNotIn("tu_b", json.dumps(result))
+
+    def test_valid_pairs_preserved(self):
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            self._tool_use_msg("tu_1"),
+            self._tool_result_msg("tu_1"),
+            self._tool_use_msg("tu_2"),
+            self._tool_result_msg("tu_2"),
+            {"role": "assistant", "content": "final answer"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self.assertEqual(result, msgs)
+
+    def test_existing_end_trim_still_works(self):
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            self._tool_use_msg("tu_tail"),  # orphan at the very end
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertEqual(result, [{"role": "user", "content": "hi"}])
+
+    def test_existing_start_trim_still_works(self):
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            self._tool_result_msg("tu_cut"),  # truncation cut its tool_use
+            {"role": "assistant", "content": "answer"},
+            {"role": "user", "content": "next"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertEqual(result[0], {"role": "user", "content": "next"})
+
+    def test_leading_assistant_message_dropped(self):
+        """Defect B: truncation can slice the window to start on an
+        assistant message — the API requires messages[0] to be role user."""
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            {"role": "assistant", "content": "answer to a sliced-off question"},
+            {"role": "user", "content": "next question"},
+            {"role": "assistant", "content": "next answer"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertEqual(result[0], {"role": "user", "content": "next question"})
+
+    def test_leading_assistant_tool_pair_dropped_together(self):
+        """Dropping a leading assistant tool_use must also drop its (kept)
+        tool_result — otherwise the repair itself creates a new orphan."""
+        from .client import _validate_tool_pairs
+
+        msgs = [
+            self._tool_use_msg("tu_head"),
+            self._tool_result_msg("tu_head"),
+            {"role": "assistant", "content": "answer"},
+            {"role": "user", "content": "next"},
+        ]
+        result = _validate_tool_pairs(msgs)
+        self._assert_api_valid(result)
+        self.assertEqual(result, [{"role": "user", "content": "next"}])
+
+    def test_build_api_messages_repairs_bricked_session(self):
+        """End-to-end (spec test A): a session with a mid-history orphaned
+        tool_use row self-heals through _build_api_messages."""
+        from .client import _build_api_messages
+
+        session = ChatSession.objects.create()
+        ChatMessage.objects.create(session=session, role="user", content="hi")
+        ChatMessage.objects.create(
+            session=session, role="assistant", content="",
+            tool_data=[{"type": "tool_use", "id": "tu_orphan",
+                        "name": "search", "input": {}}],
+        )  # crash happened here — no tool_result row was ever saved
+        ChatMessage.objects.create(session=session, role="user", content="are you ok?")
+        ChatMessage.objects.create(session=session, role="assistant", content="yes")
+        ChatMessage.objects.create(session=session, role="user", content="good")
+
+        result = _build_api_messages(session.messages.all())
+        self._assert_api_valid(result)
+        self.assertNotIn("tu_orphan", json.dumps(result))
+
+    def test_truncated_window_starts_with_user(self):
+        """Defect B spec test: 55-message session whose 50-message tail
+        begins on an assistant message."""
+        from .client import MAX_MESSAGES_TO_SEND, _build_api_messages
+
+        session = ChatSession.objects.create()
+        for i in range(MAX_MESSAGES_TO_SEND + 5):
+            role = "user" if i % 2 == 0 else "assistant"
+            ChatMessage.objects.create(session=session, role=role, content=f"m{i}")
+        # Sanity: the raw tail really does start on an assistant message.
+        raw_tail_first = list(session.messages.all())[-MAX_MESSAGES_TO_SEND]
+        self.assertEqual(raw_tail_first.role, "assistant")
+
+        result = _build_api_messages(session.messages.all())
+        self.assertEqual(result[0]["role"], "user")
+
+
+class AtomicToolSaveTests(TestCase):
+    """Phase 2 defect A1: the assistant tool_use message and its user
+    tool_result message must persist together or not at all."""
+
+    def setUp(self):
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+        self.session = ChatSession.objects.create(title="Existing chat")
+
+    def _failing_create(self):
+        """A ChatMessage.objects.create stand-in that fails on the
+        tool_result save (the second create of the pair)."""
+        real_create = ChatMessage.objects.create
+
+        def failing(**kwargs):
+            tool_data = kwargs.get("tool_data")
+            if kwargs.get("role") == "user" and tool_data:
+                raise RuntimeError("simulated crash between the two creates")
+            return real_create(**kwargs)
+
+        return failing
+
+    def test_send_message_rolls_back_orphaned_tool_use(self):
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.return_value = _api_response(
+                [_tool_use_block("tu_1")], stop_reason="tool_use"
+            )
+            with patch.object(
+                ChatMessage.objects, "create", side_effect=self._failing_create()
+            ):
+                with self.assertRaises(RuntimeError):
+                    send_message(self.session, "hi")
+
+        self.assertFalse(
+            ChatMessage.objects.filter(
+                session=self.session, tool_data__isnull=False
+            ).exists(),
+            "a tool message persisted without its pair",
+        )
+
+    def test_stream_rolls_back_orphaned_tool_use(self):
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = _FakePhase2Stream(
+                _api_response([_tool_use_block("tu_1")], stop_reason="tool_use")
+            )
+            with patch.object(
+                ChatMessage.objects, "create", side_effect=self._failing_create()
+            ):
+                frames = list(_stream_message_impl(self.session, "hi"))
+
+        self.assertTrue(any(f.startswith("event: error") for f in frames))
+        self.assertFalse(
+            ChatMessage.objects.filter(
+                session=self.session, tool_data__isnull=False
+            ).exists(),
+            "a tool message persisted without its pair",
+        )
+
+    def test_send_message_saves_pair_after_tools_execute(self):
+        """Reorder check: tools run BEFORE the pair is saved, so a mocked
+        clean run persists both rows and the loop completes."""
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.side_effect = [
+                _api_response([_tool_use_block("tu_1")], stop_reason="tool_use"),
+                _api_response([_text_block("done")], stop_reason="end_turn"),
+            ]
+            send_message(self.session, "hi")
+
+        tool_msgs = list(
+            ChatMessage.objects.filter(
+                session=self.session, tool_data__isnull=False
+            ).order_by("pk")
+        )
+        self.assertEqual(len(tool_msgs), 2)
+        self.assertEqual(tool_msgs[0].role, "assistant")
+        self.assertEqual(tool_msgs[1].role, "user")
+        self.assertEqual(
+            tool_msgs[1].tool_data[0]["tool_use_id"],
+            tool_msgs[0].tool_data[0]["id"],
+        )
+
+
+class RedactedThinkingRoundTripTests(TestCase):
+    """Phase 2 defect C: redacted_thinking blocks must be copied into the
+    saved assistant content verbatim — dropping them modifies the replayed
+    assistant turn and 400s the session."""
+
+    def setUp(self):
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+        self.session = ChatSession.objects.create(title="Existing chat")
+
+    def _redacted_block(self, data="opaque-redacted-payload"):
+        block = MagicMock()
+        block.type = "redacted_thinking"
+        block.data = data
+        return block
+
+    def test_send_message_round_trips_redacted_thinking(self):
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.side_effect = [
+                _api_response(
+                    [self._redacted_block(), _tool_use_block("tu_1")],
+                    stop_reason="tool_use",
+                ),
+                _api_response([_text_block("done")], stop_reason="end_turn"),
+            ]
+            send_message(self.session, "hi", mode="max")
+
+            # Saved assistant content includes the block verbatim...
+            saved = ChatMessage.objects.filter(
+                session=self.session, role="assistant", tool_data__isnull=False
+            ).first()
+            self.assertIn(
+                {"type": "redacted_thinking", "data": "opaque-redacted-payload"},
+                saved.tool_data,
+            )
+            # ...and the next API call replays it unmodified.
+            second_call_messages = (
+                mock_client.messages.create.call_args_list[1][1]["messages"]
+            )
+            assistant_turns = [
+                m for m in second_call_messages
+                if m["role"] == "assistant" and isinstance(m["content"], list)
+            ]
+            self.assertIn(
+                {"type": "redacted_thinking", "data": "opaque-redacted-payload"},
+                assistant_turns[-1]["content"],
+            )
+
+    def test_stream_round_trips_redacted_thinking(self):
+        streams = [
+            _FakePhase2Stream(_api_response(
+                [self._redacted_block(), _tool_use_block("tu_1")],
+                stop_reason="tool_use",
+            )),
+            _FakePhase2Stream(_api_response([_text_block("done")])),
+        ]
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.side_effect = streams
+            list(_stream_message_impl(self.session, "hi", mode="max"))
+
+        saved = ChatMessage.objects.filter(
+            session=self.session, role="assistant", tool_data__isnull=False
+        ).first()
+        self.assertIn(
+            {"type": "redacted_thinking", "data": "opaque-redacted-payload"},
+            saved.tool_data,
+        )
+
+
+class MaxTokensToolSkipTests(TestCase):
+    """Phase 2 defect D: a response cut off by max_tokens mid-tool-call has
+    an incomplete tool_use input — it must NOT be executed."""
+
+    def setUp(self):
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+        self.session = ChatSession.objects.create(title="Existing chat")
+
+    def test_send_message_skips_truncated_tool_call(self):
+        from .client import TRUNCATION_NOTICE, send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.return_value = _api_response(
+                [_text_block("partial"), _tool_use_block("tu_cut")],
+                stop_reason="max_tokens",
+            )
+            with patch("assistant.client._execute_tool") as mock_exec:
+                new_messages = send_message(self.session, "hi")
+
+        mock_exec.assert_not_called()
+        # Single API call — the turn ended instead of looping on tools.
+        self.assertEqual(mock_client.messages.create.call_count, 1)
+        final = new_messages[-1]
+        self.assertTrue(final.content.startswith("partial"))
+        self.assertIn(TRUNCATION_NOTICE.strip(), final.content)
+        # No tool messages were saved — nothing to orphan.
+        self.assertFalse(
+            ChatMessage.objects.filter(
+                session=self.session, tool_data__isnull=False
+            ).exists()
+        )
+
+    def test_stream_skips_truncated_tool_call(self):
+        from .client import TRUNCATION_NOTICE
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = _FakePhase2Stream(
+                _api_response(
+                    [_text_block("partial"), _tool_use_block("tu_cut")],
+                    stop_reason="max_tokens",
+                )
+            )
+            with patch("assistant.client._execute_tool") as mock_exec:
+                frames = list(_stream_message_impl(self.session, "hi"))
+
+        mock_exec.assert_not_called()
+        self.assertTrue(frames[-1].startswith("event: done\ndata: "))
+        saved = (
+            ChatMessage.objects.filter(session=self.session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIn(TRUNCATION_NOTICE.strip(), saved.content)
+        self.assertFalse(
+            ChatMessage.objects.filter(
+                session=self.session, tool_data__isnull=False
+            ).exists()
+        )

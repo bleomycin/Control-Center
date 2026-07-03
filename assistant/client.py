@@ -13,6 +13,7 @@ import time
 
 import anthropic
 from django.conf import settings
+from django.db import transaction
 
 from . import registry
 from .tools import TOOL_DEFINITIONS, TOOL_HANDLERS, summarize
@@ -460,42 +461,109 @@ def _build_system_prompt():
     ]
 
 
+def _tool_use_ids(msg):
+    """IDs of tool_use blocks in an API message (empty for non-list content)."""
+    content = (msg or {}).get("content")
+    if isinstance(content, list):
+        return {
+            b.get("id") for b in content
+            if isinstance(b, dict) and b.get("type") == "tool_use"
+        }
+    return set()
+
+
+def _tool_result_ids(msg):
+    """tool_use_ids referenced by tool_result blocks in an API message."""
+    content = (msg or {}).get("content")
+    if isinstance(content, list):
+        return {
+            b.get("tool_use_id") for b in content
+            if isinstance(b, dict) and b.get("type") == "tool_result"
+        }
+    return set()
+
+
 def _validate_tool_pairs(messages):
     """
-    Ensure tool_use and tool_result messages are properly paired.
+    Ensure tool_use and tool_result messages are properly paired, ANYWHERE
+    in the list — not just at the ends. The Anthropic API returns HTTP 400
+    for the whole request if any assistant tool_use is not answered by a
+    tool_result in the very next (user) message, so a single unpaired
+    message left in history bricks the session permanently. Repairing
+    mid-list orphans here makes an already-corrupted session self-heal on
+    its next turn.
 
-    Fixes two edge cases:
-    1. Truncation sliced off a tool_use, leaving an orphaned tool_result at the start.
-    2. Connection dropped after saving tool_use but before tool_result (orphan at the end).
+    Handled cases:
+    1. Truncation sliced off a tool_use, leaving an orphaned tool_result
+       at the start.
+    2. A crash between saving the tool_use message and its tool_result
+       (deploy, OOM, container restart) — orphan anywhere in the list.
+    3. A tool_result message whose preceding assistant tool_use is missing
+       or doesn't match its ids.
+    4. The list starting on a non-user message (the API requires the first
+       message to be role "user") — e.g. after truncation or after this
+       repair dropped a leading message.
 
     Returns a cleaned copy of the message list.
     """
     if not messages:
         return messages
 
-    def _has_tool_use(msg):
-        content = msg.get("content")
-        if isinstance(content, list):
-            return any(b.get("type") == "tool_use" for b in content)
-        return False
+    result = []
+    i = 0
+    n = len(messages)
+    while i < n:
+        msg = messages[i]
+        use_ids = _tool_use_ids(msg) if msg.get("role") == "assistant" else set()
+        res_ids = _tool_result_ids(msg) if msg.get("role") == "user" else set()
 
-    def _has_tool_result(msg):
-        content = msg.get("content")
-        if isinstance(content, list):
-            return any(b.get("type") == "tool_result" for b in content)
-        return False
+        if use_ids:
+            nxt = messages[i + 1] if i + 1 < n else None
+            nxt_res_ids = (
+                _tool_result_ids(nxt)
+                if nxt is not None and nxt.get("role") == "user"
+                else set()
+            )
+            # A valid pair answers every tool_use id, and references no
+            # id outside this assistant message (a stray extra tool_result
+            # is also a 400).
+            if use_ids == nxt_res_ids:
+                result.append(msg)
+                result.append(nxt)
+                i += 2
+                continue
+            # Unpaired tool_use — drop the assistant message. A partial or
+            # mismatched tool_result message (if any) is handled by the
+            # res_ids branch on the next iteration.
+            logger.warning(
+                "Dropping assistant message with unpaired tool_use at index %d", i
+            )
+            i += 1
+            continue
 
-    result = list(messages)
+        if res_ids:
+            # tool_result whose paired assistant tool_use is missing (or was
+            # dropped above) — the API rejects unexpected tool_use_ids.
+            logger.warning(
+                "Dropping user message with orphaned tool_result at index %d", i
+            )
+            i += 1
+            continue
 
-    # Strip orphaned tool_result at the start (its tool_use was truncated away)
-    while result and result[0].get("role") == "user" and _has_tool_result(result[0]):
-        logger.warning("Stripping orphaned tool_result at start of message list")
+        result.append(msg)
+        i += 1
+
+    # Final normalization: the first message must be role "user" and must
+    # not itself be a tool_result message (its tool_use partner would have
+    # to precede it). Valid pairs are consumed together above, so dropping
+    # a leading assistant message can expose its (kept) tool_result — the
+    # loop keeps trimming until the head is a genuine user message.
+    while result:
+        first = result[0]
+        if first.get("role") == "user" and not _tool_result_ids(first):
+            break
+        logger.warning("Dropping leading non-user message to satisfy API ordering")
         result.pop(0)
-
-    # Strip orphaned tool_use at the end (tool_result was never saved)
-    while result and result[-1].get("role") == "assistant" and _has_tool_use(result[-1]):
-        logger.warning("Stripping orphaned tool_use at end of message list")
-        result.pop()
 
     return result
 
@@ -528,9 +596,10 @@ def _build_api_messages(chat_messages):
 
     truncated = api_messages[-MAX_MESSAGES_TO_SEND:]
 
-    # Validate tool_use / tool_result pairing after truncation.
-    # Strip orphaned tool_result at the start (truncation cut its tool_use)
-    # and orphaned tool_use at the end (connection dropped before tool_result).
+    # Validate tool_use / tool_result pairing after truncation. Repairs
+    # orphaned tool messages anywhere in the window and guarantees the
+    # first message is role "user" (both are hard API requirements — a
+    # violation 400s every subsequent request for the session).
     truncated = _validate_tool_pairs(truncated)
 
     # Add cache breakpoints at regular intervals for long conversations.
@@ -785,10 +854,19 @@ def send_message(session, user_text, mode="fast", effort=""):
         has_tool_use = any(
             block.type == "tool_use" for block in response.content
         )
+        if has_tool_use and getattr(response, "stop_reason", None) == "max_tokens":
+            # The response was cut off by the output cap mid-tool-call, so
+            # the tool_use input may be incomplete (partial JSON). Executing
+            # it could run a write with a truncated data dict. Fall through
+            # to the final-text path, which persists any partial text plus
+            # the truncation notice; the user can ask the model to continue.
+            logger.warning("Skipping tool execution: response truncated by max_tokens")
+            has_tool_use = False
 
         if has_tool_use:
-            # Save the assistant's tool_use response
-            # Include thinking blocks (must be round-tripped for extended thinking)
+            # Build the assistant's tool_use content. thinking AND
+            # redacted_thinking blocks must be round-tripped unmodified —
+            # dropping either modifies the replayed assistant turn (400).
             assistant_content = []
             for block in response.content:
                 if block.type == "thinking":
@@ -796,6 +874,11 @@ def send_message(session, user_text, mode="fast", effort=""):
                         "type": "thinking",
                         "thinking": block.thinking,
                         "signature": block.signature,
+                    })
+                elif block.type == "redacted_thinking":
+                    assistant_content.append({
+                        "type": "redacted_thinking",
+                        "data": block.data,
                     })
                 elif block.type == "text":
                     assistant_content.append({
@@ -810,15 +893,9 @@ def send_message(session, user_text, mode="fast", effort=""):
                         "input": block.input,
                     })
 
-            assistant_msg = ChatMessage.objects.create(
-                session=session,
-                role="assistant",
-                content="",  # text content extracted below
-                tool_data=assistant_content,
-            )
-            new_messages.append(assistant_msg)
-
-            # Execute each tool call and build results
+            # Execute each tool call FIRST, then persist. Saving the
+            # tool_use message before execution meant a crash during a tool
+            # run reliably orphaned it — bricking the session.
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
@@ -829,13 +906,23 @@ def send_message(session, user_text, mode="fast", effort=""):
                         "content": result_str,
                     })
 
-            # Save tool results as a user message (Anthropic convention)
-            tool_result_msg = ChatMessage.objects.create(
-                session=session,
-                role="user",
-                content="",
-                tool_data=tool_results,
-            )
+            # Save the tool_use + tool_result pair atomically so history can
+            # never hold one without the other. Short write txn only — the
+            # API call and tool execution stay outside (SQLite write lock).
+            with transaction.atomic():
+                assistant_msg = ChatMessage.objects.create(
+                    session=session,
+                    role="assistant",
+                    content="",  # text content extracted below
+                    tool_data=assistant_content,
+                )
+                tool_result_msg = ChatMessage.objects.create(
+                    session=session,
+                    role="user",
+                    content="",
+                    tool_data=tool_results,
+                )
+            new_messages.append(assistant_msg)
             new_messages.append(tool_result_msg)
 
             # Update api_messages for next iteration
@@ -1262,13 +1349,21 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                 return
 
         has_tool_use = any(block.type == "tool_use" for block in response.content)
+        if has_tool_use and getattr(response, "stop_reason", None) == "max_tokens":
+            # Cut off by the output cap mid-tool-call — the tool_use input
+            # may be incomplete (partial JSON). Skip execution and fall
+            # through to the final-text path, which persists any partial
+            # text plus the truncation notice.
+            logger.warning("Skipping tool execution: response truncated by max_tokens")
+            has_tool_use = False
 
         if has_tool_use:
             # Clear any text that streamed before tool_use was detected
             yield sse("clear", {})
 
-            # Build assistant content blocks (saved to DB after tools complete)
-            # Include thinking blocks for round-tripping (required for tool loops with adaptive thinking)
+            # Build assistant content blocks (saved to DB after tools complete).
+            # thinking AND redacted_thinking blocks must be round-tripped
+            # unmodified — dropping either modifies the replayed turn (400).
             assistant_content = []
             for block in response.content:
                 if block.type == "thinking":
@@ -1276,6 +1371,10 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                         "type": "thinking",
                         "thinking": block.thinking,
                         "signature": block.signature,
+                    })
+                elif block.type == "redacted_thinking":
+                    assistant_content.append({
+                        "type": "redacted_thinking", "data": block.data,
                     })
                 elif block.type == "text":
                     assistant_content.append({"type": "text", "text": block.text})
@@ -1315,17 +1414,20 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                         output = result_obj
                     yield sse("tool_done", {"name": block.name, "result_summary": r_summary, "output": output})
 
-            # Save both messages together — if execution crashed above,
-            # neither is saved, preventing orphaned tool_use messages.
+            # Save both messages atomically — a crash between the two
+            # creates (or during either) persists neither, so history can
+            # never hold a tool_use without its tool_result. Tools already
+            # executed above; only the two creates sit inside the txn.
             try:
-                ChatMessage.objects.create(
-                    session=session, role="assistant", content="",
-                    tool_data=assistant_content,
-                )
-                ChatMessage.objects.create(
-                    session=session, role="user", content="",
-                    tool_data=tool_results,
-                )
+                with transaction.atomic():
+                    ChatMessage.objects.create(
+                        session=session, role="assistant", content="",
+                        tool_data=assistant_content,
+                    )
+                    ChatMessage.objects.create(
+                        session=session, role="user", content="",
+                        tool_data=tool_results,
+                    )
             except Exception:
                 logger.exception("Failed to save tool messages to DB")
                 _finalize_turn(turn, "failed")
