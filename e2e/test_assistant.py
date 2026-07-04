@@ -648,3 +648,28 @@ class AssistantStreamRecoveryTests(PlaywrightTestCase):
         )
         self.assertEqual(self.page.locator("text=resend").count(), 0)
         self.assertEqual(self.page.locator("text=still working").count(), 0)
+
+    def test_busy_guard_error_restores_input(self):
+        """The busy-guard refusal (a server-sent error event) must put the
+        typed text back into the input — the submit handler cleared it, and
+        the whole point of the refusal is that the message should be resent
+        in a moment."""
+        from assistant.models import AssistantTurn
+
+        # A fresh (non-stale) running turn makes the real send view refuse
+        # with the busy-guard SSE error — no route mocking needed.
+        AssistantTurn.objects.create(
+            session=self.session, state=AssistantTurn.STATE_RUNNING
+        )
+        self._goto()
+        self._send("second question")
+
+        self.page.wait_for_selector("text=still working", timeout=5000)
+        self.page.wait_for_function(
+            "document.getElementById('chat-input').value === 'second question'",
+            timeout=5000,
+        )
+        # The client-rendered bubble is preserved too (no reload on error).
+        self.assertTrue(
+            self.page.locator("text=second question").count() >= 1
+        )

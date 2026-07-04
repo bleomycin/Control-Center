@@ -4455,6 +4455,46 @@ class SentinelDeliveryTests(TestCase):
         self.assertIn("frame1", frames)
 
 
+class WorkerCleanupTests(TestCase):
+    """Phase 4 addendum: a raising inner_gen.close() in the worker's finally
+    must not skip the DB-connection release or the end sentinel."""
+
+    def test_raising_close_still_delivers_sentinel(self):
+        class ExplodingClose:
+            """Iterator whose close() raises — the shape of a generator whose
+            own finally blows up when resumed with GeneratorExit."""
+
+            def __init__(self):
+                self._frames = iter(["frame1"])
+
+            def __iter__(self):
+                return self
+
+            def __next__(self):
+                return next(self._frames)
+
+            def close(self):
+                raise RuntimeError("boom on close")
+
+        with self.assertLogs("assistant.client", level="ERROR") as captured:
+            gen = _with_heartbeat(ExplodingClose(), interval=5)
+            start = time.monotonic()
+            frames = list(gen)
+            elapsed = time.monotonic() - start
+        self.assertIn("frame1", frames)
+        # Sentinel-based termination is immediate. Pre-fix the raise killed
+        # the worker before the sentinel put, so the consumer's only escape
+        # was the liveness fallback after a full 5s queue timeout.
+        self.assertLess(
+            elapsed, 2,
+            "stream terminated via the liveness fallback, not the sentinel",
+        )
+        self.assertTrue(
+            any("close failed" in line for line in captured.output),
+            f"close failure was not caught and logged: {captured.output}",
+        )
+
+
 class MidStreamRetryTests(TestCase):
     """Phase 4 Defects C/D: a retryable failure after tokens already streamed
     must reset the client bubble, and the retry-wait keepalive loop must

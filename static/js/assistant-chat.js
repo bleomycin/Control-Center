@@ -286,6 +286,11 @@ function createChatEngine(config) {
         } else if (event === 'error') {
             sawTerminal = true;
             endedWithError = true;
+            // The submit handler cleared the textarea before doSend ran; a
+            // server-sent error (busy guard, API failure) means the message
+            // needs resending — put the text back so it isn't lost. Guarded:
+            // restoreInputText never clobbers newer typing.
+            restoreInputText();
             if (currentStreamContent) {
                 currentStreamContent.innerHTML = '<span class="text-red-400">' + escapeHtml(data.message) + '</span>';
             }

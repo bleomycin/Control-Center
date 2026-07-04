@@ -1373,9 +1373,19 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
                 f"{json.dumps({'message': 'The assistant hit an unexpected error. Your data was saved — reload to see it.'})}\n\n",
             )
         finally:
-            inner_gen.close()
-            # The worker opened its own thread-local DB connection; release it.
-            connection.close()
+            # The cleanup steps are independent — a raising inner_gen.close()
+            # must not leak the worker's DB connection or skip the sentinel
+            # (the consumer would keepalive until the liveness fallback).
+            try:
+                inner_gen.close()
+            except Exception:
+                logger.exception("Assistant inner stream close failed")
+            try:
+                # The worker opened its own thread-local DB connection;
+                # release it.
+                connection.close()
+            except Exception:
+                logger.exception("Assistant worker connection close failed")
             _queue_final_frame(frames, detached, sentinel)
 
     worker = threading.Thread(target=produce, name="assistant-stream", daemon=True)
