@@ -1,9 +1,12 @@
 import json
 import logging
+from datetime import timedelta
 
 from django.contrib import messages
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import client as assistant_client
@@ -11,6 +14,26 @@ from .forms import AssistantSettingsForm, ChatInputForm
 from .models import AssistantSettings, AssistantTurn, ChatMessage, ChatSession
 
 logger = logging.getLogger(__name__)
+
+# Shown whenever a history-mutating operation is refused because a turn is
+# still running (HTTP 409). The client surfaces this text directly.
+BUSY_MESSAGE = (
+    "The assistant is still working on this conversation — "
+    "wait for it to finish, then try again."
+)
+
+
+def _live_running_turn(session):
+    """The session's RUNNING turn if it is live (not stale), else None.
+
+    A detached turn (client disconnected, still draining in background) is
+    still writing ChatMessage rows — history-mutating views must not race it.
+    Stale rows (worker process died mid-turn) don't count.
+    """
+    turn = session.turns.filter(state=AssistantTurn.STATE_RUNNING).first()
+    if turn and not turn.is_stale:
+        return turn
+    return None
 
 
 def chat_page(request, session_id=None):
@@ -54,29 +77,6 @@ def chat_page(request, session_id=None):
     })
 
 
-def send_message_view(request, session_id):
-    """Handle a user message via HTMX POST."""
-    session = get_object_or_404(ChatSession, pk=session_id)
-
-    if request.method != "POST":
-        return HttpResponse(status=405)
-
-    user_text = request.POST.get("message", "").strip()
-    if not user_text:
-        return HttpResponse(status=400)
-
-    new_messages = assistant_client.send_message(session, user_text)
-
-    display_messages = [m for m in new_messages if m.content]
-
-    response = render(request, "assistant/partials/_message_list.html", {
-        "chat_messages": display_messages,
-    })
-    # Trigger session list refresh (title may have changed)
-    response["HX-Trigger"] = "refreshSessions"
-    return response
-
-
 def stream_message_view(request, session_id):
     """Stream assistant response via SSE."""
     session = get_object_or_404(ChatSession, pk=session_id)
@@ -96,13 +96,23 @@ def stream_message_view(request, session_id):
     if effort not in ("low", "medium", "high", "max"):
         effort = ""
 
-    # A fresh running turn means the previous message is still being processed
-    # — possibly detached after a dropped connection. Starting a second turn
-    # would interleave its messages with the in-flight one, so refuse with a
-    # terminal SSE error instead. Stale rows (process died mid-turn) don't
-    # block.
-    active = session.turns.filter(state=AssistantTurn.STATE_RUNNING).first()
-    if active and not active.is_stale:
+    # Admission control: at most one running turn per session, enforced by
+    # the one_running_turn_per_session DB constraint — not a check-then-create
+    # (two fast POSTs both passed the old pre-check and interleaved their
+    # ChatMessage writes). Creating the turn IS the check: the second create
+    # hits IntegrityError and gets the busy refusal. A stale running row
+    # (worker process died mid-turn) must not block forever, so it is
+    # finalized as abandoned first — one conditional UPDATE, also race-free.
+    stale_cutoff = timezone.now() - timedelta(
+        seconds=AssistantTurn.STALE_AFTER_SECONDS
+    )
+    session.turns.filter(
+        state=AssistantTurn.STATE_RUNNING, updated_at__lt=stale_cutoff
+    ).update(state=AssistantTurn.STATE_ABANDONED, updated_at=timezone.now())
+    try:
+        with transaction.atomic():
+            turn = AssistantTurn.objects.create(session=session)
+    except IntegrityError:
         def _busy():
             yield (
                 "event: error\ndata: "
@@ -118,7 +128,9 @@ def stream_message_view(request, session_id):
         return response
 
     response = StreamingHttpResponse(
-        assistant_client.stream_message(session, user_text, mode=mode, effort=effort),
+        assistant_client.stream_message(
+            session, user_text, mode=mode, effort=effort, turn=turn
+        ),
         content_type="text/event-stream",
     )
     response["Cache-Control"] = "no-cache"
@@ -152,11 +164,11 @@ def turn_status(request, session_id):
     })
 
 
+@require_POST
 def new_session(request):
-    """Create a new chat session."""
+    """Create a new chat session. POST-only: GET-triggered state changes are
+    reachable by link prefetchers and bypass CSRF (Phase 5 Defect D)."""
     session = ChatSession.objects.create()
-    if request.headers.get("HX-Request"):
-        return redirect("assistant:chat_session", session_id=session.pk)
     return redirect("assistant:chat_session", session_id=session.pk)
 
 
@@ -164,6 +176,11 @@ def new_session(request):
 def bulk_delete_sessions(request):
     """Delete multiple chat sessions at once."""
     ids = request.POST.getlist("selected")
+    # Same race as delete_session: a session with a live running turn is
+    # still being written by a detached worker — refuse the whole batch.
+    for busy_session in ChatSession.objects.filter(pk__in=ids):
+        if _live_running_turn(busy_session):
+            return HttpResponse(BUSY_MESSAGE, status=409)
     if ids:
         # Don't delete the current session if it's in the list
         current_id = request.POST.get("current")
@@ -184,9 +201,14 @@ def bulk_delete_sessions(request):
     return redirect("assistant:chat")
 
 
+@require_POST
 def delete_session(request, session_id):
     """Delete a chat session."""
     session = get_object_or_404(ChatSession, pk=session_id)
+    # Deleting cascades to the running turn's ChatMessages while a detached
+    # worker may still be writing them — refuse until the turn finishes.
+    if _live_running_turn(session):
+        return HttpResponse(BUSY_MESSAGE, status=409)
     session.delete()
 
     if request.headers.get("HX-Request"):
@@ -203,6 +225,7 @@ def delete_session(request, session_id):
     return redirect("assistant:chat")
 
 
+@require_POST
 def rename_session(request, session_id):
     """Rename a chat session title."""
     session = get_object_or_404(ChatSession, pk=session_id)
@@ -222,41 +245,57 @@ def rename_session(request, session_id):
     return redirect("assistant:chat_session", session_id=session.pk)
 
 
+@require_POST
 def retry_message(request, session_id, message_id):
-    """Retry from an assistant message: delete it and everything after, return preceding user text."""
-    if request.method != "POST":
-        return HttpResponse(status=405)
-
+    """Retry from an assistant message: delete its turn and everything after,
+    return the preceding user text."""
     session = get_object_or_404(ChatSession, pk=session_id)
     msg = get_object_or_404(ChatMessage, pk=message_id, session=session)
 
     if msg.role != "assistant":
         return JsonResponse({"error": "Can only retry assistant messages"}, status=400)
 
-    # Find the user message immediately before this assistant message
+    # A detached running turn may still be writing this history (Defect C).
+    if _live_running_turn(session):
+        return JsonResponse({"error": BUSY_MESSAGE}, status=409)
+
+    # Find the REAL user message that started this turn. Tool-result rows are
+    # also role="user" with content="" — matching one of those returned empty
+    # text and made Retry silently destructive (deleted the answer, re-asked
+    # nothing).
     user_msg = (
-        session.messages.filter(role="user", created_at__lt=msg.created_at)
+        session.messages.filter(
+            role="user", tool_data__isnull=True, created_at__lt=msg.created_at
+        )
+        .exclude(content="")
         .order_by("-created_at")
         .first()
     )
     user_text = user_msg.content if user_msg else ""
 
-    # Delete this message and everything after it
-    session.messages.filter(created_at__gte=msg.created_at).delete()
+    # Delete the whole turn being retried: everything after the user message
+    # that started it (its tool pairs included), so the resend regenerates
+    # from a clean boundary.
+    if user_msg is not None:
+        session.messages.filter(created_at__gt=user_msg.created_at).delete()
+    else:
+        session.messages.filter(created_at__gte=msg.created_at).delete()
 
     return JsonResponse({"user_text": user_text, "action": "retry"})
 
 
+@require_POST
 def edit_message(request, session_id, message_id):
     """Edit a user message: delete it and everything after, return its text."""
-    if request.method != "POST":
-        return HttpResponse(status=405)
-
     session = get_object_or_404(ChatSession, pk=session_id)
     msg = get_object_or_404(ChatMessage, pk=message_id, session=session)
 
     if msg.role != "user":
         return JsonResponse({"error": "Can only edit user messages"}, status=400)
+
+    # A detached running turn may still be writing this history (Defect C).
+    if _live_running_turn(session):
+        return JsonResponse({"error": BUSY_MESSAGE}, status=409)
 
     user_text = msg.content
 
@@ -266,15 +305,42 @@ def edit_message(request, session_id, message_id):
     return JsonResponse({"user_text": user_text, "action": "edit"})
 
 
+@require_POST
 def prune_history(request, session_id):
-    """Delete older messages, keeping the last N."""
-    session = get_object_or_404(ChatSession, pk=session_id)
-    keep = int(request.POST.get("keep", 20))
+    """Delete older messages, keeping roughly the last N.
 
-    message_ids = list(
-        session.messages.order_by("-created_at").values_list("pk", flat=True)[keep:]
-    )
-    ChatMessage.objects.filter(pk__in=message_ids).delete()
+    The cut never lands mid tool-pair: it advances to the next real user
+    message (role=user, no tool_data, non-empty content), the same clean turn
+    boundary the truncation anchor uses. A blind "keep last N" slice could
+    strand a tool_result whose tool_use was deleted — a permanent DB orphan
+    that the pairing repair then re-trims on every request.
+    """
+    session = get_object_or_404(ChatSession, pk=session_id)
+    # A detached running turn may still be appending to this history.
+    if _live_running_turn(session):
+        return HttpResponse(BUSY_MESSAGE, status=409)
+
+    try:
+        keep = int(request.POST.get("keep", 20))
+    except (TypeError, ValueError):
+        keep = 20
+    keep = max(2, min(keep, 500))
+
+    msgs = list(session.messages.order_by("created_at", "pk"))
+    if len(msgs) > keep:
+        cut = len(msgs) - keep
+        while cut < len(msgs) and not (
+            msgs[cut].role == "user"
+            and not msgs[cut].tool_data
+            and (msgs[cut].content or "").strip()
+        ):
+            cut += 1
+        # No clean boundary in the tail (pathological history) → prune
+        # nothing rather than create orphans.
+        if cut < len(msgs):
+            ChatMessage.objects.filter(
+                pk__in=[m.pk for m in msgs[:cut]]
+            ).delete()
 
     messages = session.messages.all()
     display_messages = [m for m in messages if m.content]
@@ -557,10 +623,15 @@ def gmail_thread_fetch(request):
     return JsonResponse({"formatted_text": "\n".join(parts), "subject": subject})
 
 
+@require_POST
 def drawer_session(request):
     """Return or create a session for the drawer.
 
     ?new=1 forces a fresh session.  Otherwise returns the most recent.
+    POST-only even though the common case is a read: both branches can create
+    a session, and GET state changes are prefetchable and bypass CSRF
+    (Defect D). The endpoint is only ever called from JS (base.html), which
+    already sends the CSRF header.
     """
     if request.GET.get("new"):
         session = ChatSession.objects.create()

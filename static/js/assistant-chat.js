@@ -351,6 +351,12 @@ function createChatEngine(config) {
     }
 
     function doSend(text) {
+        // In-flight guard (Phase 5 Defect B): a second send while a stream is
+        // active would reset this closure's shared state and garble both
+        // streams. Guarding here covers EVERY entry point — Enter-dispatched
+        // submits, retry/edit resubmits, quick-reply buttons — not just the
+        // disabled send button.
+        if (streaming) return;
         endedWithError = false;
         endedWithTimeout = false;
         finished = false;

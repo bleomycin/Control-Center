@@ -530,9 +530,16 @@ class ViewTests(TestCase):
         self.assertContains(response, "Ask anything")
 
     def test_new_session(self):
-        response = self.client.get(reverse("assistant:new_session"))
+        response = self.client.post(reverse("assistant:new_session"))
         self.assertEqual(response.status_code, 302)
         self.assertTrue(ChatSession.objects.exists())
+
+    def test_new_session_get_rejected(self):
+        """State-changing views must not be reachable by GET (prefetch/CSRF
+        bypass) — Phase 5 Defect D."""
+        response = self.client.get(reverse("assistant:new_session"))
+        self.assertEqual(response.status_code, 405)
+        self.assertFalse(ChatSession.objects.exists())
 
     def test_delete_session(self):
         session = ChatSession.objects.create()
@@ -560,19 +567,26 @@ class ViewTests(TestCase):
         self.assertContains(response, "Chat 2")
 
     def test_send_without_api_key(self):
-        """Without API key, should return error message."""
+        """Without API key, an error message is persisted. Calls the client
+        function directly — the unguarded /send/ view and its route were
+        removed in Phase 5 (Defect D); send_message stays for management
+        commands and tests."""
+        from .client import send_message
+
         session = ChatSession.objects.create()
-        response = self.client.post(
-            reverse("assistant:send", kwargs={"session_id": session.pk}),
-            {"message": "Hello"},
-            HTTP_HX_REQUEST="true",
-        )
-        self.assertEqual(response.status_code, 200)
+        send_message(session, "Hello")
         self.assertTrue(
             ChatMessage.objects.filter(
                 session=session, role="assistant", content__icontains="not configured"
             ).exists()
         )
+
+    def test_send_route_removed(self):
+        """The dead unguarded /send/ endpoint is gone (Phase 5 Defect D)."""
+        from django.urls import NoReverseMatch
+
+        with self.assertRaises(NoReverseMatch):
+            reverse("assistant:send", kwargs={"session_id": 1})
 
     def test_chat_page_loads_marked_js(self):
         """Chat page includes the marked.js library for markdown rendering."""
@@ -664,6 +678,46 @@ class RetryMessageTests(TestCase):
             })
         )
         self.assertEqual(response.status_code, 405)
+
+    def test_retry_tool_turn_finds_real_user_text(self):
+        """Regression (found in the Phase 2 bug-check, fixed in Phase 5): for
+        a tool-using turn the 'preceding user message' used to match the
+        tool_result row (role=user, content="") — Retry then deleted the
+        answer and re-asked NOTHING. The lookup must skip tool rows and the
+        deletion must remove the whole turn (tool pairs included) so the
+        resend regenerates from a clean boundary."""
+        user_msg3 = ChatMessage.objects.create(
+            session=self.session, role="user", content="Tool question"
+        )
+        tool_use = ChatMessage.objects.create(
+            session=self.session, role="assistant", content="",
+            tool_data=[{"type": "tool_use", "id": "tu_1", "name": "query",
+                        "input": {}}],
+        )
+        tool_result = ChatMessage.objects.create(
+            session=self.session, role="user", content="",
+            tool_data=[{"type": "tool_result", "tool_use_id": "tu_1",
+                        "content": "{}"}],
+        )
+        answer = ChatMessage.objects.create(
+            session=self.session, role="assistant", content="Tool answer"
+        )
+
+        response = self.client.post(
+            reverse("assistant:retry_message", kwargs={
+                "session_id": self.session.pk,
+                "message_id": answer.pk,
+            })
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["user_text"], "Tool question")
+        remaining = list(self.session.messages.values_list("pk", flat=True))
+        # Everything after the real user question is gone — tool pair included.
+        self.assertEqual(remaining, [
+            self.user_msg1.pk, self.asst_msg1.pk,
+            self.user_msg2.pk, self.asst_msg2.pk,
+            user_msg3.pk,
+        ])
 
 
 class EditMessageTests(TestCase):
@@ -1022,7 +1076,7 @@ class DrawerViewTests(TestCase):
     def test_drawer_session_returns_most_recent(self):
         s1 = ChatSession.objects.create(title="Old")
         s2 = ChatSession.objects.create(title="New")
-        response = self.client.get(reverse("assistant:drawer_session"))
+        response = self.client.post(reverse("assistant:drawer_session"))
         self.assertEqual(response.status_code, 200)
         data = response.json()
         # Most recent by updated_at (s2 was created last)
@@ -1031,9 +1085,16 @@ class DrawerViewTests(TestCase):
 
     def test_drawer_session_creates_when_none(self):
         self.assertEqual(ChatSession.objects.count(), 0)
-        response = self.client.get(reverse("assistant:drawer_session"))
+        response = self.client.post(reverse("assistant:drawer_session"))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(ChatSession.objects.count(), 1)
+
+    def test_drawer_session_get_rejected(self):
+        """Both branches can create a session, so the endpoint is POST-only
+        (Phase 5 Defect D)."""
+        response = self.client.get(reverse("assistant:drawer_session"))
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(ChatSession.objects.count(), 0)
 
     def test_drawer_messages_returns_html(self):
         session = ChatSession.objects.create()
@@ -3230,6 +3291,451 @@ class StreamViewBusyGuardTests(TestCase):
                 {"message": "hello"},
             )
         mock_stream.assert_called_once()
+
+    def test_refused_request_creates_no_second_turn(self):
+        """The busy refusal is the DB constraint speaking (IntegrityError on
+        the second create), not a racy pre-check — the refused request must
+        leave exactly the one original running turn."""
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        first = AssistantTurn.objects.create(session=session)
+        resp = self.client.post(
+            reverse("assistant:stream", args=[session.pk]),
+            {"message": "second question"},
+        )
+        b"".join(resp.streaming_content)
+        turns = session.turns.all()
+        self.assertEqual(turns.count(), 1)
+        self.assertEqual(turns.first().pk, first.pk)
+
+    def test_stale_turn_finalized_as_abandoned_on_admission(self):
+        """Admission finalizes a stale running row (worker died) instead of
+        letting it block forever — and the new turn is created by the VIEW,
+        before streaming begins."""
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        stale = AssistantTurn.objects.create(session=session)
+        AssistantTurn.objects.filter(pk=stale.pk).update(
+            updated_at=timezone.now()
+            - timedelta(seconds=AssistantTurn.STALE_AFTER_SECONDS + 10)
+        )
+        with patch(
+            "assistant.views.assistant_client.stream_message",
+            return_value=iter(['event: done\ndata: {"message_id": 1}\n\n']),
+        ) as mock_stream:
+            resp = self.client.post(
+                reverse("assistant:stream", args=[session.pk]),
+                {"message": "hello again"},
+            )
+            b"".join(resp.streaming_content)
+        stale.refresh_from_db()
+        self.assertEqual(stale.state, AssistantTurn.STATE_ABANDONED)
+        new_turn = mock_stream.call_args.kwargs.get("turn")
+        self.assertIsNotNone(new_turn)
+        self.assertEqual(new_turn.state, AssistantTurn.STATE_RUNNING)
+        self.assertEqual(new_turn.session_id, session.pk)
+
+
+class SingleRunningTurnConstraintTests(TestCase):
+    """Phase 5 Defect A: one_running_turn_per_session is enforced by the DB,
+    closing the TOCTOU window two fast POSTs used to slip through."""
+
+    def test_second_running_turn_rejected(self):
+        from django.db import IntegrityError, transaction
+
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        AssistantTurn.objects.create(session=session)
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                AssistantTurn.objects.create(session=session)
+
+    def test_terminal_states_do_not_block(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        for state in (
+            AssistantTurn.STATE_COMPLETED,
+            AssistantTurn.STATE_FAILED,
+            AssistantTurn.STATE_ABANDONED,
+        ):
+            AssistantTurn.objects.create(session=session, state=state)
+        # Any number of terminal turns coexist with one running turn.
+        AssistantTurn.objects.create(session=session)
+        self.assertEqual(session.turns.count(), 4)
+
+    def test_sessions_are_independent(self):
+        from .models import AssistantTurn, ChatSession
+
+        s1 = ChatSession.objects.create()
+        s2 = ChatSession.objects.create()
+        AssistantTurn.objects.create(session=s1)
+        AssistantTurn.objects.create(session=s2)  # must not raise
+        self.assertEqual(s1.turns.count(), 1)
+        self.assertEqual(s2.turns.count(), 1)
+
+    def test_finalizing_frees_the_slot(self):
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        first = AssistantTurn.objects.create(session=session)
+        first.state = AssistantTurn.STATE_COMPLETED
+        first.save(update_fields=["state"])
+        AssistantTurn.objects.create(session=session)  # must not raise
+
+
+class HistoryMutationGuardTests(TestCase):
+    """Phase 5 Defect C: history-mutating views refuse (409) while a live
+    running turn may still be writing — a detached worker races edit/retry/
+    prune deletes into broken pairing (400s) otherwise."""
+
+    def setUp(self):
+        from .models import ChatMessage, ChatSession
+
+        self.session = ChatSession.objects.create(title="Guarded")
+        self.user_msg = ChatMessage.objects.create(
+            session=self.session, role="user", content="Question"
+        )
+        self.asst_msg = ChatMessage.objects.create(
+            session=self.session, role="assistant", content="Answer"
+        )
+
+    def _running_turn(self):
+        from .models import AssistantTurn
+
+        return AssistantTurn.objects.create(session=self.session)
+
+    def _stale_turn(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import AssistantTurn
+
+        turn = self._running_turn()
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            updated_at=timezone.now()
+            - timedelta(seconds=AssistantTurn.STALE_AFTER_SECONDS + 10)
+        )
+        return turn
+
+    def test_retry_refused_while_running(self):
+        self._running_turn()
+        resp = self.client.post(
+            reverse("assistant:retry_message", kwargs={
+                "session_id": self.session.pk,
+                "message_id": self.asst_msg.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("still working", resp.json()["error"])
+        self.assertEqual(self.session.messages.count(), 2)
+
+    def test_edit_refused_while_running(self):
+        self._running_turn()
+        resp = self.client.post(
+            reverse("assistant:edit_message", kwargs={
+                "session_id": self.session.pk,
+                "message_id": self.user_msg.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertIn("still working", resp.json()["error"])
+        self.assertEqual(self.session.messages.count(), 2)
+
+    def test_prune_refused_while_running(self):
+        self._running_turn()
+        resp = self.client.post(
+            reverse("assistant:prune", kwargs={"session_id": self.session.pk}),
+            {"keep": 2},
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(self.session.messages.count(), 2)
+
+    def test_delete_session_refused_while_running(self):
+        from .models import ChatSession
+
+        self._running_turn()
+        resp = self.client.post(
+            reverse("assistant:delete_session", kwargs={
+                "session_id": self.session.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertTrue(ChatSession.objects.filter(pk=self.session.pk).exists())
+
+    def test_bulk_delete_refused_while_running(self):
+        from .models import ChatSession
+
+        self._running_turn()
+        other = ChatSession.objects.create(title="Other")
+        resp = self.client.post(
+            reverse("assistant:bulk_delete_sessions"),
+            {"selected": [self.session.pk, other.pk]},
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(ChatSession.objects.count(), 2)
+
+    def test_stale_turn_does_not_block_mutations(self):
+        self._stale_turn()
+        resp = self.client.post(
+            reverse("assistant:retry_message", kwargs={
+                "session_id": self.session.pk,
+                "message_id": self.asst_msg.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["user_text"], "Question")
+
+
+class MutatingGetRejectionTests(TestCase):
+    """Phase 5 Defect D: no state-mutating endpoint is reachable by GET
+    (GET bypasses CSRF; link prefetchers can fire it)."""
+
+    def setUp(self):
+        from .models import ChatSession
+
+        self.session = ChatSession.objects.create()
+
+    def test_prune_get_rejected(self):
+        from .models import ChatMessage
+
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="keep me"
+        )
+        resp = self.client.get(
+            reverse("assistant:prune", kwargs={"session_id": self.session.pk})
+        )
+        self.assertEqual(resp.status_code, 405)
+        self.assertEqual(self.session.messages.count(), 1)
+
+    def test_delete_session_get_rejected(self):
+        from .models import ChatSession
+
+        resp = self.client.get(
+            reverse("assistant:delete_session", kwargs={
+                "session_id": self.session.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 405)
+        self.assertTrue(ChatSession.objects.filter(pk=self.session.pk).exists())
+
+    def test_rename_get_rejected(self):
+        resp = self.client.get(
+            reverse("assistant:rename_session", kwargs={
+                "session_id": self.session.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 405)
+
+
+class PruneHistoryHardeningTests(TestCase):
+    """Phase 5 Defect D (keep validation) + pair-aware cut: prune never 500s
+    on bad input and never strands half a tool pair in the DB."""
+
+    def _prune(self, **data):
+        return self.client.post(
+            reverse("assistant:prune", kwargs={"session_id": self.session.pk}),
+            data,
+        )
+
+    def setUp(self):
+        from .models import ChatSession
+
+        self.session = ChatSession.objects.create()
+
+    def _add_text_turns(self, n):
+        from .models import ChatMessage
+
+        for i in range(n):
+            ChatMessage.objects.create(
+                session=self.session, role="user", content=f"q{i}"
+            )
+            ChatMessage.objects.create(
+                session=self.session, role="assistant", content=f"a{i}"
+            )
+
+    def _add_tool_turn(self, i):
+        from .models import ChatMessage
+
+        ChatMessage.objects.create(
+            session=self.session, role="user", content=f"tool question {i}"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="",
+            tool_data=[{"type": "tool_use", "id": f"tu_{i}", "name": "query",
+                        "input": {}}],
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="",
+            tool_data=[{"type": "tool_result", "tool_use_id": f"tu_{i}",
+                        "content": "{}"}],
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content=f"tool answer {i}"
+        )
+
+    def test_non_numeric_keep_defaults_no_500(self):
+        self._add_text_turns(15)  # 30 messages
+        resp = self._prune(keep="not-a-number")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.session.messages.count(), 20)
+
+    def test_keep_clamped_to_sane_floor(self):
+        self._add_text_turns(5)  # 10 messages
+        resp = self._prune(keep="-3")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.session.messages.count(), 2)
+
+    def test_cut_never_splits_a_tool_pair(self):
+        for i in range(5):
+            self._add_tool_turn(i)  # 20 messages, turn boundaries at 0,4,8,...
+        # keep=10 → blind cut at index 10 (the middle of turn 3's tool pair).
+        # The cut must advance to the next user-text boundary (index 12).
+        resp = self._prune(keep=10)
+        self.assertEqual(resp.status_code, 200)
+        remaining = list(self.session.messages.order_by("created_at", "pk"))
+        self.assertEqual(len(remaining), 8)
+        first = remaining[0]
+        self.assertEqual(first.role, "user")
+        self.assertEqual(first.content, "tool question 3")
+        self.assertIsNone(first.tool_data)
+        # No orphaned tool_result: every tool_result's tool_use is present.
+        use_ids = set()
+        for m in remaining:
+            for b in m.tool_data or []:
+                if b.get("type") == "tool_use":
+                    use_ids.add(b["id"])
+        for m in remaining:
+            for b in m.tool_data or []:
+                if b.get("type") == "tool_result":
+                    self.assertIn(b["tool_use_id"], use_ids)
+
+    def test_no_clean_boundary_prunes_nothing(self):
+        from .models import ChatMessage
+
+        # Pathological: one leading user text, then only tool rows.
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="only question"
+        )
+        for i in range(10):
+            ChatMessage.objects.create(
+                session=self.session, role="assistant", content="",
+                tool_data=[{"type": "tool_use", "id": f"tu_{i}",
+                            "name": "query", "input": {}}],
+            )
+            ChatMessage.objects.create(
+                session=self.session, role="user", content="",
+                tool_data=[{"type": "tool_result", "tool_use_id": f"tu_{i}",
+                            "content": "{}"}],
+            )
+        before = self.session.messages.count()
+        resp = self._prune(keep=5)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.session.messages.count(), before)
+
+
+class TurnToucherTests(TransactionTestCase):
+    """Phase 5 Defect E: the turn stays fresh on a time basis, independent of
+    produced frames — a long silent inner step (slow tool call, wedged
+    upstream) must not make a LIVE turn read as stale and admit a second
+    interleaving turn.
+
+    TransactionTestCase: the toucher runs in its own thread on its own DB
+    connection — it must see the turn this test commits, and the test must
+    see the toucher's committed updates."""
+
+    def _make_turn(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import AssistantTurn, ChatSession
+
+        session = ChatSession.objects.create()
+        turn = AssistantTurn.objects.create(session=session)
+        # Backdate past the stale threshold: only an ongoing time-based touch
+        # can bring it back.
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            updated_at=timezone.now()
+            - timedelta(seconds=AssistantTurn.STALE_AFTER_SECONDS + 10)
+        )
+        turn.refresh_from_db()
+        return turn
+
+    def test_silent_inner_step_keeps_turn_fresh(self):
+        import threading as _threading
+        import time as _time
+
+        from .client import _with_heartbeat
+
+        turn = self._make_turn()
+        self.assertTrue(turn.is_stale)
+        release = _threading.Event()
+
+        def inner():
+            # A "silent inner step": no frames until released.
+            release.wait(10)
+            yield 'event: done\ndata: {}\n\n'
+
+        with patch("assistant.client.TURN_TOUCH_INTERVAL_SECONDS", 0.05):
+            gen = _with_heartbeat(inner(), interval=0.05, turn=turn)
+            consumer = _threading.Thread(
+                target=lambda: [None for _ in gen], daemon=True
+            )
+            consumer.start()
+            try:
+                from django.db import OperationalError
+
+                deadline = _time.monotonic() + 5
+                fresh = False
+                while _time.monotonic() < deadline:
+                    # Reads can race the toucher's writes on the shared
+                    # in-memory test DB — treat a transient lock error as
+                    # "not ready yet".
+                    try:
+                        turn.refresh_from_db()
+                    except OperationalError:
+                        _time.sleep(0.02)
+                        continue
+                    if not turn.is_stale:
+                        fresh = True
+                        break
+                    _time.sleep(0.02)
+                # Refreshed while the inner generator had produced NOTHING.
+                self.assertTrue(
+                    fresh, "turn stayed stale during a silent inner step"
+                )
+            finally:
+                release.set()
+                consumer.join(timeout=5)
+
+    def test_touch_only_refreshes_running_turns(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .client import _touch_turn
+        from .models import AssistantTurn
+
+        turn = self._make_turn()
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            state=AssistantTurn.STATE_COMPLETED,
+            updated_at=timezone.now() - timedelta(seconds=500),
+        )
+        turn.refresh_from_db()
+        before = turn.updated_at
+        _touch_turn(turn)
+        turn.refresh_from_db()
+        # A finalized turn keeps its terminal timestamp.
+        self.assertEqual(turn.updated_at, before)
 
 
 class StopReasonNoticeTests(TestCase):

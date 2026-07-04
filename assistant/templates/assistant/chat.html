@@ -13,8 +13,10 @@
                 <button type="button" id="select-mode-toggle"
                         class="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
                         onclick="toggleSelectMode()">Select</button>
-                <a href="{% url 'assistant:new_session' %}"
-                   class="text-xs text-blue-400 hover:text-blue-300">+ New</a>
+                <form method="post" action="{% url 'assistant:new_session' %}" class="inline">
+                    {% csrf_token %}
+                    <button type="submit" class="text-xs text-blue-400 hover:text-blue-300">+ New</button>
+                </form>
             </div>
         </div>
         {# Bulk action bar - shown when in select mode with items selected #}
@@ -92,7 +94,10 @@
                     <svg class="w-3.5 h-3.5 inline -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     <span class="hidden sm:inline ml-1">Process Email</span>
                 </button>
-                <a href="{% url 'assistant:new_session' %}" class="lg:hidden text-xs text-blue-400 hover:text-blue-300">+ New</a>
+                <form method="post" action="{% url 'assistant:new_session' %}" class="lg:hidden inline">
+                    {% csrf_token %}
+                    <button type="submit" class="text-xs text-blue-400 hover:text-blue-300">+ New</button>
+                </form>
                 <form hx-post="{% url 'assistant:prune' session.pk %}" hx-target="#message-list" hx-swap="innerHTML" hx-confirm="Prune older messages? This keeps the last 20." class="hidden sm:block">
                     <input type="hidden" name="keep" value="20">
                     <button type="submit" class="text-xs text-gray-500 hover:text-gray-300" title="Prune history">
@@ -731,7 +736,10 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     e.preventDefault();
     var input = document.getElementById('chat-input');
     var text = input.value.trim();
-    if (!text) return;
+    // Ignore submits while a stream is active (Enter bypasses the disabled
+    // send button) BEFORE clearing the input — the engine's own doSend guard
+    // would silently swallow the text otherwise.
+    if (!text || chatEngine.isStreaming()) return;
 
     // Prepend marker blocks. Final order in the message must be:
     //   [AttachedEmails]\n...\n[/AttachedEmails]\n
@@ -764,10 +772,23 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
         fetch('/assistant/' + SESSION_PK + '/edit/' + editId + '/', {
             method: 'POST',
             headers: {'X-CSRFToken': CSRF_TOKEN},
-        }).then(function() {
-            return refreshMessages();
-        }).then(function() {
-            chatEngine.doSend(text);
+        }).then(function(r) {
+            if (!r.ok) {
+                // 409 while a turn is still running (or any failure): nothing
+                // was deleted — restore the edit state instead of sending a
+                // duplicate message.
+                return r.json().catch(function() { return {}; }).then(function(data) {
+                    pendingEditMessageId = editId;
+                    input.value = text;
+                    sendBtn.textContent = 'Resend';
+                    sendBtn.classList.add('bg-amber-600', 'hover:bg-amber-500');
+                    sendBtn.classList.remove('bg-blue-600', 'hover:bg-blue-500');
+                    showChatNotice(data.error || 'Could not edit the message. Try again.');
+                });
+            }
+            return refreshMessages().then(function() {
+                chatEngine.doSend(text);
+            });
         });
         return;
     }
@@ -813,13 +834,38 @@ function copyMessage(btn) {
     }
 }
 
+// Transient notice for refused actions (409 while a turn is running, etc.) —
+// non-blocking, so it never wedges automation the way alert() would.
+function showChatNotice(msg) {
+    var existing = document.getElementById('chat-notice');
+    if (existing) existing.remove();
+    var el = document.createElement('div');
+    el.id = 'chat-notice';
+    el.className = 'fixed bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto '
+        + 'sm:-translate-x-1/2 sm:max-w-md z-50 px-4 py-2 '
+        + 'bg-gray-800 border border-amber-600/50 rounded-lg shadow-lg '
+        + 'text-sm text-amber-300 text-center';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function() { el.remove(); }, 5000);
+}
+
+// Surface 409 "assistant is still working" refusals from HTMX-driven forms
+// (prune, session delete) — HTMX swaps nothing on an error status, so
+// without this the click would silently do nothing.
+document.body.addEventListener('htmx:responseError', function(e) {
+    if (e.detail.xhr && e.detail.xhr.status === 409) {
+        showChatNotice(e.detail.xhr.responseText || 'The assistant is still working — wait for it to finish.');
+    }
+});
+
 function retryMessage(messageId) {
     fetch('/assistant/' + SESSION_PK + '/retry/' + messageId + '/', {
         method: 'POST',
         headers: {'X-CSRFToken': CSRF_TOKEN},
     }).then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.error) return;
+        if (data.error) { showChatNotice(data.error); return; }
         refreshMessages().then(function() {
             var input = document.getElementById('chat-input');
             input.value = data.user_text;

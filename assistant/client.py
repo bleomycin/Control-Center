@@ -42,9 +42,11 @@ HEARTBEAT_INTERVAL_SECONDS = 5
 # upstream can't pin a gunicorn thread forever; generous because Opus 4.8 at
 # high/max effort legitimately spends many minutes inside one turn.
 DETACHED_DRAIN_BUDGET_SECONDS = 20 * 60
-# Throttle for refreshing AssistantTurn.updated_at from the stream worker —
-# frequent enough that the turn-status endpoint's staleness check
-# (AssistantTurn.STALE_AFTER_SECONDS) never false-positives on a live turn.
+# Cadence of the dedicated toucher thread that refreshes
+# AssistantTurn.updated_at for the whole life of the stream worker (see
+# _with_heartbeat.keep_turn_fresh) — frequent enough that the staleness check
+# (AssistantTurn.STALE_AFTER_SECONDS) never false-positives on a live turn,
+# even one blocked in a single long tool call or a wedged upstream.
 TURN_TOUCH_INTERVAL_SECONDS = 30
 CACHE_CONTROL = {"type": "ephemeral"}
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -1227,15 +1229,17 @@ def send_message(session, user_text, mode="fast", effort=""):
 
 def _touch_turn(turn):
     """Refresh ``turn.updated_at`` so a polling client can distinguish a live
-    turn from one whose process died (AssistantTurn.is_stale). Never raises."""
+    turn from one whose process died (AssistantTurn.is_stale). Only running
+    turns are touched — a finalized turn keeps its terminal timestamp. Never
+    raises."""
     if turn is None:
         return
     from django.utils import timezone
     from .models import AssistantTurn
     try:
-        AssistantTurn.objects.filter(pk=turn.pk).update(
-            updated_at=timezone.now()
-        )
+        AssistantTurn.objects.filter(
+            pk=turn.pk, state=AssistantTurn.STATE_RUNNING
+        ).update(updated_at=timezone.now())
     except Exception:
         logger.exception("Failed to touch AssistantTurn %s", turn.pk)
 
@@ -1325,15 +1329,31 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
     sentinel = object()
     detached = threading.Event()  # consumer gone — stop relaying, keep working
     detached_since = [None]  # monotonic timestamp, set by the consumer side
-    last_touch = [0.0]
+    worker_done = threading.Event()  # worker finished — stops the toucher
+
+    def keep_turn_fresh():
+        """Touch the turn on a fixed cadence, independent of produced frames
+        (Phase 5 Defect E). The per-frame touch this replaces starved during
+        any long silent inner step — a slow tool call or a wedged upstream
+        blocking >STALE_AFTER_SECONDS made a LIVE turn read as stale, so the
+        admission guard let a second turn interleave with the first. Runs for
+        the WORKER's lifetime (not the consumer's), so detached drains stay
+        fresh too."""
+        try:
+            while not worker_done.wait(TURN_TOUCH_INTERVAL_SECONDS):
+                _touch_turn(turn)
+        finally:
+            try:
+                # This thread's own DB connection (thread-local), like the
+                # worker's.
+                connection.close()
+            except Exception:
+                logger.exception("Assistant turn toucher connection close failed")
 
     def produce():
         try:
             for frame in inner_gen:
                 now = time.monotonic()
-                if now - last_touch[0] >= TURN_TOUCH_INTERVAL_SECONDS:
-                    last_touch[0] = now
-                    _touch_turn(turn)
                 if detached.is_set():
                     # Discard the frame but keep consuming so the turn
                     # completes and persists — bounded so a wedged upstream
@@ -1376,6 +1396,7 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
             # The cleanup steps are independent — a raising inner_gen.close()
             # must not leak the worker's DB connection or skip the sentinel
             # (the consumer would keepalive until the liveness fallback).
+            worker_done.set()
             try:
                 inner_gen.close()
             except Exception:
@@ -1390,6 +1411,10 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
 
     worker = threading.Thread(target=produce, name="assistant-stream", daemon=True)
     worker.start()
+    if turn is not None:
+        threading.Thread(
+            target=keep_turn_fresh, name="assistant-turn-touch", daemon=True
+        ).start()
 
     completed = False
     try:
@@ -1441,19 +1466,24 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
             pass
 
 
-def stream_message(session, user_text, mode="fast", effort=""):
+def stream_message(session, user_text, mode="fast", effort="", turn=None):
     """Public entry point — the streaming tool loop wrapped with a heartbeat.
 
     Returns a generator of SSE frames suitable for StreamingHttpResponse. See
     ``_stream_message_impl`` for the event protocol and ``_with_heartbeat`` for
     the keepalive behavior that keeps long, healthy requests alive and the
     detach-on-disconnect behavior that finishes (and persists) the turn even
-    if the browser connection dies. The AssistantTurn row created here is what
-    the client polls (turn-status endpoint) to recover from a severed stream.
+    if the browser connection dies. The AssistantTurn row is what the client
+    polls (turn-status endpoint) to recover from a severed stream.
+
+    ``turn`` is normally created by the caller (views.stream_message_view)
+    under the one_running_turn_per_session constraint, so admission control
+    happens before any work starts; created here only for direct callers.
     """
     from .models import AssistantTurn
 
-    turn = AssistantTurn.objects.create(session=session)
+    if turn is None:
+        turn = AssistantTurn.objects.create(session=session)
     return _with_heartbeat(
         _stream_message_impl(session, user_text, mode=mode, effort=effort, turn=turn),
         turn=turn,

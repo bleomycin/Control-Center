@@ -222,7 +222,10 @@
 
         function initDrawer(query) {
             var url = '/assistant/drawer-session/' + (query || '');
+            // POST: both branches of the endpoint can create a session, and
+            // GET state changes bypass CSRF (Phase 5 Defect D).
             fetch(url, {
+                method: 'POST',
                 headers: {'X-CSRFToken': CSRF_TOKEN_GLOBAL}
             })
             .then(function(r) { return r.json(); })

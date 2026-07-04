@@ -233,9 +233,10 @@ class AssistantTurn(models.Model):
     ]
 
     # A running turn whose worker hasn't touched updated_at in this long is
-    # presumed dead (container restart mid-turn). The worker touches the row
-    # at most every TURN_TOUCH_INTERVAL_SECONDS (client.py), so this must be
-    # several multiples of that to absorb tool-execution gaps.
+    # presumed dead (container restart mid-turn). A dedicated toucher thread
+    # refreshes the row every TURN_TOUCH_INTERVAL_SECONDS for the worker's
+    # whole lifetime (client._with_heartbeat), independent of produced
+    # frames, so this is several multiples of that cadence.
     STALE_AFTER_SECONDS = 180
 
     session = models.ForeignKey(
@@ -256,6 +257,19 @@ class AssistantTurn(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        constraints = [
+            # At most one RUNNING turn per session, enforced where it can't
+            # race: two concurrent sends both passing an application-level
+            # pre-check would interleave their ChatMessage writes and corrupt
+            # tool pairing (the Phase 2 bug class from a different cause).
+            # The admission path (views.stream_message_view) creates the turn
+            # first and treats IntegrityError as "busy".
+            models.UniqueConstraint(
+                fields=["session"],
+                condition=models.Q(state="running"),
+                name="one_running_turn_per_session",
+            ),
+        ]
 
     @property
     def is_stale(self):

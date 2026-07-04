@@ -673,3 +673,135 @@ class AssistantStreamRecoveryTests(PlaywrightTestCase):
         self.assertTrue(
             self.page.locator("text=second question").count() >= 1
         )
+
+
+class AssistantConcurrencyGuardTests(PlaywrightTestCase):
+    """Phase 5 Defects B/C, client side: a second send mid-stream is ignored
+    (single page — the point is that no second stream ever starts), and
+    history-mutating actions surface the server's 409 refusal.
+
+    NOTE: these deliberately do NOT call doSend twice on one engine to
+    simulate SERVER concurrency — two concurrent turns need two tabs/pages
+    (one engine instance interleaves stream state). The server-side guard is
+    covered by unit tests + the seeded-turn busy-guard e2e above.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.session = ChatSession.objects.create(title="Concurrency Chat")
+
+    def _goto(self):
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+
+    def test_enter_mid_stream_is_ignored(self):
+        """Enter dispatches submit directly (bypassing the disabled button);
+        mid-stream it used to fire a second doSend that reset the shared
+        closure state and garbled both streams. The second submit must be
+        ignored BEFORE the input is cleared, and the first stream must
+        complete normally."""
+        # Seed history so the post-done reload renders the same answer the
+        # stream delivered (keeps the assertion race-free).
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="first question"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="hello world"
+        )
+        self._goto()
+        # Slow two-chunk stream so there is a real mid-stream window; count
+        # stream POSTs so the ignored submit is provable.
+        self.page.evaluate(
+            """() => {
+                window._streamCalls = 0;
+                const orig = window.fetch;
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        window._streamCalls += 1;
+                        const enc = new TextEncoder();
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(
+                                    'event: user_message\\n'
+                                    + 'data: {"id": 1, "content": "q", "turn_id": 42}\\n\\n'
+                                    + 'event: token\\n'
+                                    + 'data: {"text": "hello world"}\\n\\n'
+                                ));
+                                setTimeout(() => {
+                                    ctrl.enqueue(enc.encode(
+                                        'event: done\\ndata: {"message_id": 1}\\n\\n'
+                                    ));
+                                    ctrl.close();
+                                }, 1500);
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+        self._send("first question")
+        self.page.wait_for_selector("text=hello world", timeout=5000)
+
+        # Mid-stream: type again and press Enter (the real bypass path).
+        self.page.fill("#chat-input", "second question")
+        self.page.press("#chat-input", "Enter")
+        self.page.wait_for_timeout(300)
+
+        # The second submit was ignored before doing anything: no second
+        # stream request, and the typed text was NOT cleared.
+        self.assertEqual(self.page.evaluate("window._streamCalls"), 1)
+        self.assertEqual(
+            self.page.input_value("#chat-input"), "second question"
+        )
+
+        # The first stream still completes normally.
+        self.page.wait_for_function(
+            "document.getElementById('send-btn')"
+            " && !document.getElementById('send-btn').disabled",
+            timeout=10000,
+        )
+        self.assertEqual(self.page.evaluate("window._streamCalls"), 1)
+        self.assertEqual(self.page.locator("text=resend").count(), 0)
+        self.assertEqual(self.page.locator("text=Connection error").count(), 0)
+        self.assertTrue(
+            self.page.locator("text=first question").count() >= 1
+        )
+
+    def _send(self, text):
+        self.page.fill("#chat-input", text)
+        self.page.click("#send-btn")
+
+    def test_retry_blocked_while_turn_running(self):
+        """With a live running turn, Retry must be refused server-side (409),
+        surface a visible notice, and delete nothing."""
+        from assistant.models import AssistantTurn
+
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="the question"
+        )
+        answer = ChatMessage.objects.create(
+            session=self.session, role="assistant", content="the answer"
+        )
+        AssistantTurn.objects.create(
+            session=self.session, state=AssistantTurn.STATE_RUNNING
+        )
+        self._goto()
+
+        self.page.evaluate(f"retryMessage({answer.pk})")
+
+        self.page.wait_for_selector("#chat-notice", timeout=5000)
+        self.assertIn(
+            "still working",
+            self.page.locator("#chat-notice").text_content(),
+        )
+        # Nothing was deleted — both bubbles still render.
+        self.assertTrue(self.page.locator("text=the question").count() >= 1)
+        self.assertTrue(self.page.locator("text=the answer").count() >= 1)
+        self.assertEqual(
+            ChatMessage.objects.filter(session=self.session).count(), 2
+        )
