@@ -590,8 +590,9 @@ def warm_cache(request):
     warm with the wrong array writes an entry no real request can read —
     every drawer-open paid a full 2x (1h TTL) cache write for nothing.
     max_tokens=0 is the supported pre-warm form: prefill runs (writing the
-    cache at the tools/system breakpoints) and returns immediately with no
-    output tokens billed.
+    cache at the system breakpoint, whose entry covers the tools+system
+    prefix as one unit) and returns immediately with no output tokens
+    billed.
     """
     try:
         from .client import (

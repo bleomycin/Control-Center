@@ -1370,31 +1370,20 @@ class Opus48MigrationTests(TestCase):
 
 
 class ToolDefinitionCacheTests(TestCase):
-    """A2: Verify cache_control is on the last tool definition."""
+    """Tools carry NO cache_control of their own: the system prompt is
+    frozen, so the entry written at the system breakpoint covers the
+    tools+system prefix as one unit. The freed slot funds the
+    previous-turn anchor marker (budget: system + anchor + [-2] +
+    top-level tail = 4)."""
 
-    def test_last_tool_has_cache_control(self):
+    def test_no_tool_has_cache_control(self):
         from .tools import TOOL_DEFINITIONS
-        last_tool = TOOL_DEFINITIONS[-1]
-        self.assertIn("cache_control", last_tool)
-        self.assertEqual(last_tool["cache_control"]["type"], "ephemeral")
-        # TTL must match system prompt (1h) — tools are processed first in hierarchy
-        self.assertEqual(last_tool["cache_control"]["ttl"], "1h")
-
-    def test_last_tool_is_cache_breakpoint(self):
-        # The last tool definition is the cache breakpoint — anything ahead
-        # of it (the rest of the tools, system prompt fragments) gets cached.
-        # When new tools are added at the end, this name updates.
-        from .tools import TOOL_DEFINITIONS
-        last_tool = TOOL_DEFINITIONS[-1]
-        self.assertEqual(last_tool["name"], "read_document")
-
-    def test_other_tools_no_cache_control(self):
-        """Only the last tool should have cache_control."""
-        from .tools import TOOL_DEFINITIONS
-        for tool in TOOL_DEFINITIONS[:-1]:
+        for tool in TOOL_DEFINITIONS:
             self.assertNotIn(
                 "cache_control", tool,
-                f"Tool '{tool['name']}' should not have cache_control"
+                f"Tool '{tool['name']}' must not carry cache_control — it"
+                " would overspend the 4-breakpoint budget and 400 every"
+                " request (see _apply_message_cache_marker)."
             )
 
 
@@ -1484,15 +1473,15 @@ class WarmCacheEndpointTests(TestCase):
 
 
 class CacheBreakpointTests(TestCase):
-    """Phase 3 defect A: message-level cache markers.
+    """Phase 3 defect A + hardening: message-level cache markers.
 
-    The tail breakpoint is now the top-level ``cache_control`` kwarg every
-    API call passes (asserted in Phase3RequestConstructionTests), so
-    _build_api_messages carries at most ONE message-level marker — on the
-    last block of the second-to-last message, when that message has
-    block-form content (the 20-block-lookback bridge for tool loops).
-    String content is never wrapped: wrapping would change a message's
-    bytes when the marker moves, invalidating the cached prefix.
+    The tail breakpoint is the top-level ``cache_control`` kwarg every API
+    call passes (asserted in Phase3RequestConstructionTests). On top of
+    that, _apply_message_cache_marker places at most TWO message-level
+    markers: one on the second-to-last message (tool-loop lookback bridge /
+    next-turn anchor writer), one on the PREVIOUS turn's user message (the
+    distance-zero read of the anchor entry — after a tool-heavy turn the
+    anchor sits beyond the 20-block lookback of the [-2] marker).
     """
 
     @staticmethod
@@ -1541,17 +1530,25 @@ class CacheBreakpointTests(TestCase):
 
         result = _build_api_messages(session.messages.all())
 
-        self.assertEqual(self._count_markers(result), [len(result) - 2])
+        # Two markers: the previous-turn user anchor (Msg 16) + [-2] (Msg 18).
+        self.assertEqual(self._count_markers(result), [16, len(result) - 2])
         wrapped = result[-2]["content"]
         self.assertEqual(wrapped[0]["type"], "text")
         self.assertEqual(wrapped[0]["text"], "Msg 18")
-        # Every other message keeps its plain-string shape.
+        anchor = result[16]["content"]
+        self.assertEqual(anchor[0]["type"], "text")
+        self.assertEqual(anchor[0]["text"], "Msg 16")
+        # Every unmarked message keeps its plain-string shape.
         self.assertTrue(all(
-            isinstance(m["content"], str) for m in result[:-2] + result[-1:]
+            isinstance(m["content"], str)
+            for i, m in enumerate(result)
+            if i not in (16, len(result) - 2)
         ))
 
-    def test_at_most_one_message_marker(self):
-        """Breakpoint budget: tools + system + top-level tail + this one = 4."""
+    def test_stale_markers_stripped_on_reapplication(self):
+        """Only one user text in this history → no anchor marker, and
+        re-application after the list grows must move (not accumulate)
+        the [-2] marker."""
         from .client import _apply_message_cache_marker
 
         msgs = [{"role": "user", "content": "hi"}]
@@ -1588,6 +1585,129 @@ class CacheBreakpointTests(TestCase):
         ]
         _apply_message_cache_marker(msgs)
         self.assertNotIn("cache_control", blocks[-1])
+
+    @staticmethod
+    def _tool_heavy_turn(msgs, turn_idx, n_calls=12):
+        """Append one tool-heavy turn (user text, one batched tool_use/
+        tool_result pair with n_calls calls each — >20 content blocks —
+        and a final answer)."""
+        msgs.append({"role": "user", "content": f"question {turn_idx}"})
+        msgs.append({"role": "assistant", "content": [
+            {"type": "tool_use", "id": f"tu_{turn_idx}_{j}", "name": "search",
+             "input": {"q": str(j)}}
+            for j in range(n_calls)
+        ]})
+        msgs.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": f"tu_{turn_idx}_{j}",
+             "content": "ok"}
+            for j in range(n_calls)
+        ]})
+        msgs.append({"role": "assistant", "content": f"answer {turn_idx}"})
+
+    def test_previous_turn_user_message_gets_anchor_marker(self):
+        """The cross-turn read anchor: with a tool-heavy previous turn, the
+        previous user message must carry its own marker — the [-2]
+        marker's 20-block lookback cannot reach it."""
+        from .client import (
+            _apply_message_cache_marker,
+            _build_turn_context,
+            _inject_turn_context,
+        )
+
+        msgs = []
+        self._tool_heavy_turn(msgs, 1)
+        msgs.append({"role": "user", "content": "question 2"})
+        injected = _inject_turn_context(msgs, _build_turn_context())
+
+        result = _apply_message_cache_marker(injected)
+
+        # Anchor on "question 1" (index 0), [-2] on "question 2".
+        self.assertEqual(self._count_markers(result), [0, len(result) - 2])
+        self.assertEqual(result[0]["content"][0]["text"], "question 1")
+        self.assertEqual(
+            result[len(result) - 2]["content"][0]["text"], "question 2"
+        )
+
+    def test_turn_context_is_never_the_anchor(self):
+        """The injected [System context] message is a plain-string user
+        message too — it must be excluded from anchor selection, or the
+        anchor would land on volatile per-turn bytes."""
+        from .client import (
+            _apply_message_cache_marker,
+            _build_turn_context,
+            _inject_turn_context,
+        )
+
+        msgs = []
+        self._tool_heavy_turn(msgs, 1)
+        self._tool_heavy_turn(msgs, 2)
+        msgs.append({"role": "user", "content": "question 3"})
+        injected = _inject_turn_context(msgs, _build_turn_context())
+        # Mid-loop shape: pairs appended AFTER the context message.
+        injected.append({"role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu_now", "name": "search", "input": {}}
+        ]})
+        injected.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu_now", "content": "ok"}
+        ]})
+
+        result = _apply_message_cache_marker(injected)
+
+        marked = self._count_markers(result)
+        marked_texts = [
+            result[i]["content"][0].get("text", "")
+            for i in marked
+            if result[i]["content"][0].get("type") == "text"
+        ]
+        self.assertNotIn(
+            "[System context", "".join(marked_texts)[:1000],
+            "anchor must never land on the injected turn context",
+        )
+        # Anchor = "question 2" (previous turn), [-2] = the tool_use msg.
+        anchor_idx = marked[0]
+        self.assertEqual(result[anchor_idx]["content"][0]["text"], "question 2")
+        self.assertEqual(marked[1], len(result) - 2)
+
+    def test_anchor_stable_across_loop_reapplication(self):
+        """Re-applying after the loop appends a pair keeps the anchor on the
+        same message (now in wrapped block form) — the scan must recognize
+        both string and single-text-block shapes."""
+        from .client import _apply_message_cache_marker
+
+        msgs = []
+        self._tool_heavy_turn(msgs, 1)
+        msgs.append({"role": "user", "content": "question 2"})
+
+        first = _apply_message_cache_marker(msgs)
+        first.append({"role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu_x", "name": "search", "input": {}}
+        ]})
+        first.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu_x", "content": "ok"}
+        ]})
+        second = _apply_message_cache_marker(first)
+
+        marked = self._count_markers(second)
+        # Anchor stays on "question 1"; [-2] moved to the tool_use message.
+        self.assertEqual(marked, [0, len(second) - 2])
+        self.assertEqual(second[0]["content"][0]["text"], "question 1")
+
+    def test_thinking_block_is_never_marked(self):
+        """cache_control on thinking/redacted_thinking blocks is rejected
+        by the API — a [-2] message ending in one is left unmarked."""
+        from .client import _apply_message_cache_marker
+
+        msgs = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": [
+                {"type": "redacted_thinking", "data": "opaque"},
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"}
+            ]},
+        ]
+        result = _apply_message_cache_marker(msgs)
+        self.assertEqual(self._count_markers(result), [])
 
 
 class SummarizeBatchTests(TestCase):
@@ -3881,8 +4001,10 @@ class TurnContextTests(TestCase):
             list(_stream_message_impl(self.session, "new question"))
 
             sent = MockClient.return_value.messages.stream.call_args[1]["messages"]
-        # History untouched, context trailing, exactly one context message.
-        self.assertEqual(sent[0]["content"], "old question")
+        # History bytes untouched (the old question is the cross-turn
+        # anchor, so it travels in wrapped block form — hash-equivalent),
+        # context trailing, exactly one context message.
+        self.assertEqual(sent[0]["content"][0]["text"], "old question")
         self.assertTrue(sent[-1]["content"].startswith("[System context"))
         self.assertEqual(sent[-2]["content"][0]["text"], "new question")
         self.assertEqual(
@@ -3913,7 +4035,8 @@ class TurnContextTests(TestCase):
 class Phase3RequestConstructionTests(TestCase):
     """Phase 3 defect A: a tail cache breakpoint on EVERY request — the
     top-level cache_control kwarg — including each tool-loop iteration,
-    plus the single mid-loop message marker for the 20-block lookback."""
+    plus the [-2] marker (mid-loop lookback bridge / anchor writer) and
+    the previous-turn user-message anchor marker."""
 
     def setUp(self):
         settings = AssistantSettings.load()
@@ -4001,6 +4124,37 @@ class Phase3RequestConstructionTests(TestCase):
             list(_stream_message_impl(self.session, "hi"))
             kwargs = MockClient.return_value.messages.stream.call_args[1]
         self.assertEqual(kwargs["cache_control"], CACHE_CONTROL)
+
+    def test_follow_up_turn_marks_previous_user_message(self):
+        """Cross-turn anchor: on a session with prior turns, the request
+        must carry a marker on the PREVIOUS turn's user message (distance-
+        zero read of the anchor entry) in addition to the [-2] marker."""
+        from .client import send_message
+
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="old question"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="old answer"
+        )
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.return_value = self._text_response()
+            send_message(self.session, "new question")
+            messages = mock_client.messages.create.call_args_list[0][1]["messages"]
+
+        marked = [
+            (i, m["content"][-1])
+            for i, m in enumerate(messages)
+            if isinstance(m.get("content"), list)
+            and isinstance(m["content"][-1], dict)
+            and "cache_control" in m["content"][-1]
+        ]
+        self.assertEqual(len(marked), 2)
+        self.assertEqual(marked[0][1]["text"], "old question")
+        self.assertEqual(marked[1][0], len(messages) - 2)
+        self.assertEqual(marked[1][1]["text"], "new question")
 
 
 class AnchoredTruncationTests(TestCase):

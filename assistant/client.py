@@ -433,6 +433,14 @@ def _build_system_prompt():
     ]
 
 
+# First line of every injected turn-context message. Cache-marker anchor
+# selection uses it to tell the request-scoped context apart from text the
+# user actually typed (both are plain-string user messages).
+TURN_CONTEXT_HEADER = (
+    "[System context — auto-generated for this turn; not typed by the user]"
+)
+
+
 def _build_turn_context():
     """Live per-turn context: today's date, timezone/datetime guidance,
     reminder policy, owner, valid entity types, and record counts.
@@ -448,7 +456,7 @@ def _build_turn_context():
     stats = summarize()
 
     stats_lines = [
-        "[System context — auto-generated for this turn; not typed by the user]",
+        TURN_CONTEXT_HEADER,
         "## Current system state",
     ]
     from django.utils import timezone
@@ -701,27 +709,80 @@ def _anchored_window_start(api_messages):
     return start
 
 
+def _user_text_of(msg):
+    """The typed text of a user message, or None if ``msg`` is not a
+    plain-text user message.
+
+    Recognizes both byte-equivalent shapes a user text travels in: the
+    persisted plain string, and the single text block a previous marker
+    application wrapped it into. Tool_result messages (role "user",
+    list of tool_result blocks) return None."""
+    if msg.get("role") != "user":
+        return None
+    content = msg.get("content")
+    if isinstance(content, str):
+        return content
+    if (
+        isinstance(content, list)
+        and len(content) == 1
+        and isinstance(content[0], dict)
+        and content[0].get("type") == "text"
+    ):
+        return content[0].get("text")
+    return None
+
+
+def _mark_message(result, idx):
+    """Attach a cache_control marker to the last block of ``result[idx]``
+    (copying; wrapping string content into its equivalent single text
+    block). Thinking blocks cannot carry cache_control — a message ending
+    in one is left unmarked rather than 400ing the request."""
+    msg = result[idx]
+    content = msg.get("content")
+    if isinstance(content, list) and content and isinstance(content[-1], dict):
+        if content[-1].get("type") in ("thinking", "redacted_thinking"):
+            return
+        new_content = list(content)
+        new_content[-1] = {**new_content[-1], "cache_control": CACHE_CONTROL}
+        result[idx] = {**msg, "content": new_content}
+    elif isinstance(content, str) and content:
+        result[idx] = {
+            **msg,
+            "content": [
+                {"type": "text", "text": content, "cache_control": CACHE_CONTROL},
+            ],
+        }
+
+
 def _apply_message_cache_marker(api_messages):
-    """Return a copy of ``api_messages`` carrying exactly one message-level
-    cache_control marker, on the last block of the second-to-last message.
+    """Return a copy of ``api_messages`` carrying at most two message-level
+    cache_control markers: one on the second-to-last message, one on the
+    PREVIOUS turn's user message.
 
-    Breakpoint budget (max 4/request): tools [1h] + system [1h] + this
-    marker + the top-level ``cache_control`` kwarg each API call passes,
-    which auto-marks the tail of the final message. The tail breakpoint is
-    what makes the growing tool-loop history cacheable at all (Defect A).
-    This second marker serves two purposes:
+    Breakpoint budget (max 4/request): system [1h] + these two + the
+    top-level ``cache_control`` kwarg each API call passes, which
+    auto-marks the tail of the final message. (Tools carry no marker of
+    their own: the system prompt is frozen, so the entry written at the
+    system breakpoint covers the tools+system prefix as one unit.) The
+    tail breakpoint is what makes the growing tool-loop history cacheable
+    at all (Defect A). The other two:
 
-    - Within a tool loop, [-2] is the assistant tool_use message (15+
-      blocks when tool calls are batched, ahead of an equally large
+    - [-2] marker: within a tool loop it is the assistant tool_use message
+      (15+ blocks when tool calls are batched, ahead of an equally large
       tool_result tail) — a mid-iteration entry keeps consecutive entries
-      inside the API's 20-block lookback limit.
-    - On a turn's first request, [-2] is the just-saved user message (the
-      turn context rides after it as [-1]) — the entry ending there is the
-      one the NEXT turn's byte-identical prefix reads, since everything
-      after it (context, this turn's responses) is new next turn.
+      inside the API's 20-block lookback limit. On a turn's first request
+      it is the just-saved user message (the turn context rides after it
+      as [-1]) — writing the anchor entry the NEXT turn reads.
+    - Previous-turn user-message marker: every cache entry written past
+      that point during the previous turn embeds that turn's context
+      message at a position where this turn's bytes differ, so the anchor
+      entry is the deepest one this turn can read — and after a tool-heavy
+      turn it sits further back than the 20-block lookback reaches from
+      [-2]. A breakpoint placed directly ON the anchor reads it at
+      distance zero regardless of how large the previous turn was.
 
     String content is wrapped into an equivalent single text block to carry
-    the marker — the API hashes both forms identically and ignores
+    a marker — the API hashes both forms identically and ignores
     cache_control for prefix matching (verified live 2026-07-03), so marker
     movement between iterations and turns cannot invalidate the prefix.
     """
@@ -731,7 +792,7 @@ def _apply_message_cache_marker(api_messages):
         if isinstance(content, list) and any(
             isinstance(b, dict) and "cache_control" in b for b in content
         ):
-            # Strip a stale marker (this helper runs once per API call on a
+            # Strip stale markers (this helper runs once per API call on a
             # list that grows between calls). Copy — never mutate blocks
             # that alias ChatMessage.tool_data.
             content = [
@@ -742,20 +803,22 @@ def _apply_message_cache_marker(api_messages):
             msg = {**msg, "content": content}
         result.append(msg)
 
+    # The current turn's user message is the newest real user text (the
+    # injected turn context also matches the shape — its fixed header
+    # excludes it); the anchor is the one before that.
+    user_text_indexes = [
+        i for i, msg in enumerate(result)
+        if (text := _user_text_of(msg))
+        and text.strip()
+        and not text.startswith(TURN_CONTEXT_HEADER)
+    ]
+
     if len(result) >= 2:
-        msg = result[-2]
-        content = msg.get("content")
-        if isinstance(content, list) and content and isinstance(content[-1], dict):
-            new_content = list(content)
-            new_content[-1] = {**new_content[-1], "cache_control": CACHE_CONTROL}
-            result[-2] = {**msg, "content": new_content}
-        elif isinstance(content, str) and content:
-            result[-2] = {
-                **msg,
-                "content": [
-                    {"type": "text", "text": content, "cache_control": CACHE_CONTROL},
-                ],
-            }
+        _mark_message(result, len(result) - 2)
+    if len(user_text_indexes) >= 2:
+        anchor = user_text_indexes[-2]
+        if anchor != len(result) - 2:
+            _mark_message(result, anchor)
     return result
 
 

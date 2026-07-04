@@ -1035,9 +1035,14 @@ TOOL_DEFINITIONS = [
             },
             "required": ["id"],
         },
-        "cache_control": {"type": "ephemeral", "ttl": "1h"},
     },
 ]
+# NOTE: tool definitions deliberately carry NO cache_control marker. The
+# system prompt is frozen (assistant/client.py _build_system_prompt), so the
+# entry written at its 1h breakpoint covers the tools+system prefix as one
+# unit — a separate tools breakpoint bought nothing and spent 1 of the 4
+# per-request slots, which _apply_message_cache_marker needs for the
+# previous-turn anchor marker.
 
 # Map tool names to functions
 TOOL_HANDLERS = {
