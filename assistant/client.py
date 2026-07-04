@@ -1271,6 +1271,26 @@ def _record_request_id(turn, req_id):
         logger.exception("Failed to record request id on AssistantTurn %s", turn.pk)
 
 
+def _queue_final_frame(frames, detached, item):
+    """Deliver a terminal frame (error/sentinel) to the consumer, retrying
+    while a consumer is attached.
+
+    A ``put(timeout=1)`` that gives up on ``queue.Full`` can DROP the end
+    sentinel when the consumer is blocked >1s flushing to a slow client
+    socket — the outer loop then yields keepalives forever, pinning a
+    gunicorn thread (Phase 4 Defect A). The consumer drains the queue on
+    teardown and sets ``detached``, so this loop always terminates once the
+    consumer is gone; while one is attached, its next ``get`` frees a slot.
+    """
+    while not detached.is_set():
+        try:
+            frames.put(item, timeout=1)
+            return True
+        except queue.Full:
+            continue
+    return False
+
+
 def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
     """Wrap an SSE generator so no silent window exceeds ``interval`` seconds,
     and so losing the consumer does NOT cancel the work.
@@ -1346,24 +1366,17 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
         except Exception:
             logger.exception("Assistant stream generator crashed")
             _finalize_turn(turn, "failed")
-            if not detached.is_set():
-                try:
-                    frames.put(
-                        f"event: error\ndata: "
-                        f"{json.dumps({'message': 'The assistant hit an unexpected error. Your data was saved — reload to see it.'})}\n\n",
-                        timeout=1,
-                    )
-                except queue.Full:
-                    pass
+            _queue_final_frame(
+                frames,
+                detached,
+                f"event: error\ndata: "
+                f"{json.dumps({'message': 'The assistant hit an unexpected error. Your data was saved — reload to see it.'})}\n\n",
+            )
         finally:
             inner_gen.close()
             # The worker opened its own thread-local DB connection; release it.
             connection.close()
-            if not detached.is_set():
-                try:
-                    frames.put(sentinel, timeout=1)
-                except queue.Full:
-                    pass
+            _queue_final_frame(frames, detached, sentinel)
 
     worker = threading.Thread(target=produce, name="assistant-stream", daemon=True)
     worker.start()
@@ -1374,6 +1387,15 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
             try:
                 frame = frames.get(timeout=interval)
             except queue.Empty:
+                # Liveness fallback (Defect A): a dead worker with an empty
+                # queue can never produce another frame — the sentinel was
+                # lost (dropped put, or a crash before the finally ran).
+                # Without this check the loop keepalives forever, pinning a
+                # gunicorn thread until the tab closes. A detached-drain
+                # worker exits normally, so this also can't misfire there.
+                if not worker.is_alive() and frames.empty():
+                    completed = True
+                    break
                 yield ": keepalive\n\n"
                 continue
             if frame is sentinel:
@@ -1457,11 +1479,19 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     def sse(event, data):
         return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
-    # Save user message
+    # Save user message. The frame also carries the AssistantTurn pk (created
+    # before the first frame, see stream_message) so the client can correlate
+    # turn-status polls with THIS turn during stream recovery — matching an
+    # older turn would read as a false "completed" and silently drop the
+    # just-typed message (Phase 4 Defect B).
     user_msg = ChatMessage.objects.create(
         session=session, role="user", content=user_text,
     )
-    yield sse("user_message", {"id": user_msg.pk, "content": user_text})
+    yield sse("user_message", {
+        "id": user_msg.pk,
+        "content": user_text,
+        "turn_id": turn.pk if turn is not None else None,
+    })
 
     # Load settings
     assistant_settings = AssistantSettings.load()
@@ -1590,11 +1620,17 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                     else:
                         wait = 2 ** attempt
                     logger.warning(f"Anthropic API {e.status_code} (attempt {attempt + 1}/5), retrying in {wait}s")
+                    # Tokens may already have streamed before the failure —
+                    # reset the client bubble or the retried attempt's full
+                    # answer concatenates onto the partial fragment.
+                    yield sse("clear", {})
                     # Send keepalive during wait so client watchdog doesn't fire
                     deadline = time.monotonic() + wait
                     while time.monotonic() < deadline:
                         yield ": keepalive\n\n"
-                        time.sleep(min(5, deadline - time.monotonic()))
+                        # The yield can block on a slow client past the
+                        # deadline — clamp so sleep() never goes negative.
+                        time.sleep(max(0, min(5, deadline - time.monotonic())))
                     continue
                 # Non-retryable (400, 401, 403, etc.) or final retry exhausted
                 logger.error(f"Anthropic API error {e.status_code}: {e}")
@@ -1611,10 +1647,13 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                 if "overloaded" in str(e).lower() and attempt < 4:
                     wait = 2 ** attempt
                     logger.warning(f"Anthropic overloaded (attempt {attempt + 1}/5), retrying in {wait}s")
+                    # Same as above: reset any partially streamed text
+                    # before the retry re-streams the full answer.
+                    yield sse("clear", {})
                     deadline = time.monotonic() + wait
                     while time.monotonic() < deadline:
                         yield ": keepalive\n\n"
-                        time.sleep(min(5, deadline - time.monotonic()))
+                        time.sleep(max(0, min(5, deadline - time.monotonic())))
                     continue
                 logger.error(f"Anthropic API error: {e}")
                 _safe_create_message(session, f"API error: {e}")

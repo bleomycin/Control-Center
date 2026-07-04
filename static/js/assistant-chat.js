@@ -92,6 +92,13 @@ function createChatEngine(config) {
     var recovering = false;        // polling turn-status after a severed stream
     var recoverTimer = null;
     var recoverDeadline = 0;
+    // Turn correlation (Phase 4 Defect B): the AssistantTurn pk for THIS
+    // stream, delivered in the user_message SSE event. turn-status returns
+    // the session's LATEST turn — without matching ids, recovery after a
+    // failed POST matches a PREVIOUS completed turn and reloads history
+    // over the just-typed message (silent loss).
+    var activeTurnId = null;
+    var lastSentText = '';         // restored into the input on resend-failures
 
     function autoScroll() {
         config.scrollEl.scrollTop = config.scrollEl.scrollHeight;
@@ -133,6 +140,15 @@ function createChatEngine(config) {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (finished) return;
+                // Correlation gate: only trust the report when it is about
+                // THIS stream's turn. activeTurnId === null means the send
+                // POST never got as far as creating a turn (proxy 502,
+                // network blip) — any turn reported is a previous one, and
+                // "completed" would be a false success.
+                if (activeTurnId === null || data.turn_id !== activeTurnId) {
+                    recoveryFailed('The connection was lost before your message reached the assistant. Please resend it.', false);
+                    return;
+                }
                 if (data.state === 'completed') {
                     if (data.confirm_required) pendingQuickReply = true;
                     recovering = false;
@@ -167,6 +183,15 @@ function createChatEngine(config) {
             });
     }
 
+    function restoreInputText() {
+        // The submit handlers clear the textarea before doSend runs; on a
+        // "please resend" failure put the text back so nothing is lost.
+        // Skip if the user already typed something new.
+        if (config.inputEl && !config.inputEl.value.trim() && lastSentText) {
+            config.inputEl.value = lastSentText;
+        }
+    }
+
     function recoveryFailed(message, reload) {
         recovering = false;
         endedWithError = true;
@@ -174,6 +199,7 @@ function createChatEngine(config) {
         // the server persisted something worth showing (failed turns save an
         // error message); false keeps the resend instruction visible.
         endedWithTimeout = !!reload;
+        if (!reload) restoreInputText();
         if (currentStreamContent) {
             currentStreamContent.innerHTML = '<span class="text-red-400">' + escapeHtml(message) + '</span>';
         }
@@ -181,7 +207,11 @@ function createChatEngine(config) {
     }
 
     function handleEvent(event, data) {
-        if (event === 'tool_start') {
+        if (event === 'user_message') {
+            // First frame of every stream — records which AssistantTurn this
+            // stream belongs to, so recovery polls can be correlated.
+            if (data.turn_id) activeTurnId = data.turn_id;
+        } else if (event === 'tool_start') {
             // Raw here — the whole label is escapeHtml'd once at the sink below.
             var label = data.name;
             if (data.summary) label += '(' + data.summary + ')';
@@ -321,6 +351,8 @@ function createChatEngine(config) {
         finished = false;
         sawTerminal = false;
         recovering = false;
+        activeTurnId = null;
+        lastSentText = text;
         if (recoverTimer) clearTimeout(recoverTimer);
         // Prepend page context if available
         var context = config.getPageContext ? config.getPageContext() : null;
@@ -389,6 +421,11 @@ function createChatEngine(config) {
             body: body,
             signal: abortController.signal,
         }).then(function(resp) {
+            // A non-2xx response (403 CSRF, 500, proxy 502) has an HTML
+            // body, not SSE — reading it as a stream parses zero events and
+            // EOFs into recover(), which used to read as a false success.
+            // Route it to the error path instead (Phase 4 Defect B).
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
             var reader = resp.body.getReader();
             var decoder = new TextDecoder();
             var buffer = '';
@@ -414,7 +451,17 @@ function createChatEngine(config) {
                         if (line.startsWith('event: ')) {
                             currentEvent = line.substring(7);
                         } else if (line.startsWith('data: ')) {
-                            var eventData = JSON.parse(line.substring(6));
+                            // One malformed data line must not abort the
+                            // whole read loop (and discard every remaining
+                            // event in this chunk) — skip just that line.
+                            var eventData = null;
+                            try {
+                                eventData = JSON.parse(line.substring(6));
+                            } catch (parseErr) {
+                                console.error('Skipping malformed SSE data line:', parseErr);
+                                currentEvent = '';
+                                continue;
+                            }
                             handleEvent(currentEvent, eventData);
                             currentEvent = '';
                         }
@@ -434,12 +481,19 @@ function createChatEngine(config) {
             // AbortError = intentional teardown; recovery (or finish) already
             // handled the UI — don't tear down a recovery in progress.
             if (err && err.name === 'AbortError') { if (!recovering) finish(); return; }
+            // Request-level failure (network error, or the !resp.ok throw
+            // above): no turn was confirmed, so preserve the typed text and
+            // end the stream terminally. finish() also disarms the
+            // watchdog — leaving it armed used to fire recover() 90s later
+            // and reload history over the message.
+            console.error('Stream request failed:', err);
+            endedWithError = true;
             if (currentStreamContent) {
-                currentStreamContent.innerHTML = '<span class="text-red-400">Connection error: ' + escapeHtml(err.message) + '</span>';
+                currentStreamContent.innerHTML = '<span class="text-red-400">Connection error: '
+                    + escapeHtml(err.message) + '. Your message was not processed — please resend it.</span>';
             }
-            streaming = false;
-            config.sendBtnEl.disabled = false;
-            config.sendBtnEl.textContent = 'Send';
+            restoreInputText();
+            finish();
         });
     }
 

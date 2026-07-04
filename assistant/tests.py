@@ -4363,3 +4363,179 @@ class SharedClientTests(TestCase):
             MockClient.assert_called_once_with(
                 api_key="sk-test-key", max_retries=5
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — streaming transport reliability
+# ---------------------------------------------------------------------------
+
+
+class _FakePhase4FailingStream:
+    """Stand-in MessageStream that streams one text token, then dies with a
+    retryable 529 mid-iteration — the mid-stream retry shape (Defects C/D)."""
+
+    request_id = "req_fail_529"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def __iter__(self):
+        import anthropic as anthropic_sdk
+        import httpx
+
+        delta = MagicMock()
+        delta.type = "text_delta"
+        delta.text = "partial answer that must be cleared"
+        event = MagicMock()
+        event.type = "content_block_delta"
+        event.delta = delta
+        yield event
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(
+            529, request=request, json={"error": {"type": "overloaded_error"}}
+        )
+        raise anthropic_sdk.APIStatusError(
+            "overloaded", response=response, body=None
+        )
+
+    def get_final_message(self):  # pragma: no cover — never reached
+        raise AssertionError("get_final_message called on a failing stream")
+
+
+class SentinelDeliveryTests(TestCase):
+    """Phase 4 Defect A: the outer stream must reach a defined end state even
+    when the end sentinel would previously have been dropped (slow consumer)
+    or lost entirely (worker died before delivering it)."""
+
+    def _drain(self, gen, deadline_seconds=5):
+        """Consume until StopIteration or the deadline; returns (frames, done)."""
+        frames = []
+        deadline = time.monotonic() + deadline_seconds
+        while time.monotonic() < deadline:
+            try:
+                frames.append(next(gen))
+            except StopIteration:
+                return frames, True
+        gen.close()
+        return frames, False
+
+    def test_slow_consumer_still_terminates(self):
+        """Consumer blocked past the old 1s sentinel-put timeout while the
+        queue is full: the sentinel put used to give up (queue.Full) and the
+        outer loop then yielded keepalives forever."""
+
+        def inner():
+            yield "frame1"
+            yield "frame2"
+
+        gen = _with_heartbeat(inner(), interval=0.2)
+        first = next(gen)
+        self.assertEqual(first, "frame1")
+        # Worker now fills the queue with frame2 and finishes; pre-fix the
+        # sentinel put timed out at 1s and was dropped.
+        time.sleep(2.5)
+        frames, terminated = self._drain(gen)
+        self.assertTrue(terminated, f"stream never terminated: {frames[-5:]}")
+        self.assertIn("frame2", frames)
+
+    def test_dead_worker_without_sentinel_terminates(self):
+        """Liveness fallback: if the sentinel is lost entirely, a dead worker
+        with an empty queue must break the keepalive loop."""
+
+        def inner():
+            yield "frame1"
+
+        with patch("assistant.client._queue_final_frame", return_value=False):
+            gen = _with_heartbeat(inner(), interval=0.05)
+            frames, terminated = self._drain(gen)
+        self.assertTrue(terminated, f"stream never terminated: {frames[-5:]}")
+        self.assertIn("frame1", frames)
+
+
+class MidStreamRetryTests(TestCase):
+    """Phase 4 Defects C/D: a retryable failure after tokens already streamed
+    must reset the client bubble, and the retry-wait keepalive loop must
+    tolerate a consumer that blocks past the backoff deadline."""
+
+    def setUp(self):
+        self.session = ChatSession.objects.create()
+        settings_obj = AssistantSettings.load()
+        settings_obj.api_key = "sk-test-key"
+        settings_obj.save()
+
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_clear_frame_precedes_second_attempt(self, MockClient):
+        MockClient.return_value.messages.stream.side_effect = [
+            _FakePhase4FailingStream(),
+            _FakeCompletingStream(text="clean full answer"),
+        ]
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast"))
+
+        token_idx = [
+            i for i, f in enumerate(frames) if f.startswith("event: token")
+        ]
+        clear_idx = [
+            i for i, f in enumerate(frames) if f.startswith("event: clear")
+        ]
+        self.assertTrue(token_idx, frames)
+        self.assertTrue(clear_idx, f"no clear frame before retry: {frames}")
+        # The clear arrives after the partial token and before the stream ends.
+        self.assertGreater(clear_idx[0], token_idx[0])
+        self.assertTrue(any(f.startswith("event: done") for f in frames))
+        self.assertEqual(MockClient.return_value.messages.stream.call_count, 2)
+
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_retry_wait_tolerates_consumer_blocking_past_deadline(self, MockClient):
+        """The keepalive yield inside the retry wait can block on a slow
+        client until the backoff deadline has passed; sleep() must never
+        receive a negative value (used to ValueError and fail the turn)."""
+        MockClient.return_value.messages.stream.side_effect = [
+            _FakePhase4FailingStream(),
+            _FakeCompletingStream(text="recovered"),
+        ]
+        gen = _stream_message_impl(self.session, "hello", mode="fast")
+        frames = []
+        slept = False
+        for frame in gen:
+            frames.append(frame)
+            if not slept and frame == ": keepalive\n\n":
+                slept = True
+                time.sleep(1.5)  # longer than the 1s attempt-0 backoff
+        self.assertTrue(slept, f"no keepalive during retry wait: {frames}")
+        self.assertTrue(
+            any(f.startswith("event: done") for f in frames), frames[-3:]
+        )
+
+
+class TurnIdInStreamTests(TransactionTestCase):
+    """Phase 4 Defect B (server half): the first SSE frame carries the
+    AssistantTurn pk so the client can correlate turn-status polls with THIS
+    turn instead of matching a previous completed one (silent message loss).
+
+    TransactionTestCase: stream_message runs the loop in a worker thread on
+    its own DB connection."""
+
+    def setUp(self):
+        settings_obj = AssistantSettings.load()
+        settings_obj.api_key = "sk-test-key"
+        settings_obj.save()
+
+    def test_user_message_frame_carries_turn_id(self):
+        from .client import stream_message
+        from .models import AssistantTurn
+
+        session = ChatSession.objects.create(title="Existing chat")
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakeCompletingStream()
+            )
+            frames = list(stream_message(session, "hello"))
+
+        user_frames = [f for f in frames if f.startswith("event: user_message")]
+        self.assertEqual(len(user_frames), 1, frames[:3])
+        payload = json.loads(user_frames[0].split("data: ", 1)[1])
+        turn = AssistantTurn.objects.get(session=session)
+        self.assertEqual(payload["turn_id"], turn.pk)

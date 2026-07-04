@@ -474,3 +474,114 @@ class AssistantToolDisplayTests(PlaywrightTestCase):
         self.assertEqual(tool_el.count(), 1)
         text = tool_el.text_content().strip()
         self.assertEqual(text, "summarize")
+
+
+class AssistantStreamRecoveryTests(PlaywrightTestCase):
+    """Phase 4 Defects B/E: transport failures must never silently drop a
+    sent message, and one malformed SSE line must not abort the stream."""
+
+    def setUp(self):
+        super().setUp()
+        self.session = ChatSession.objects.create(title="Recovery Chat")
+
+    def _goto(self):
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+
+    def _send(self, text):
+        self.page.fill("#chat-input", text)
+        self.page.click("#send-btn")
+
+    def test_502_on_stream_shows_resend_and_preserves_text(self):
+        """An HTML error response (proxy 502) used to parse as an empty SSE
+        stream and recover() into a false success that reloaded history over
+        the typed message."""
+        self._goto()
+        self.page.route(
+            "**/stream/",
+            lambda route: route.fulfill(
+                status=502, content_type="text/html", body="<html>Bad Gateway</html>"
+            ),
+        )
+        self._send("important question")
+
+        # Error UI with a resend instruction — not a silent success.
+        self.page.wait_for_selector("text=please resend it", timeout=5000)
+        # The typed text is restored into the input for a one-click resend...
+        self.assertEqual(
+            self.page.input_value("#chat-input"), "important question"
+        )
+        # ...and the user bubble was not reloaded away.
+        self.assertTrue(
+            self.page.locator("text=important question").count() >= 1
+        )
+
+    def test_severed_stream_does_not_match_previous_completed_turn(self):
+        """A stream that dies before any frame arrives leaves the client with
+        no turn_id; polling turn-status then reports a PREVIOUS completed
+        turn, which used to read as success (silent message loss)."""
+        from assistant.models import AssistantTurn
+
+        # A previously completed turn + its answer already in history.
+        old_msg = ChatMessage.objects.create(
+            session=self.session, role="assistant", content="old answer"
+        )
+        AssistantTurn.objects.create(
+            session=self.session,
+            state=AssistantTurn.STATE_COMPLETED,
+            final_message=old_msg,
+        )
+        self._goto()
+        # 200 SSE response with an empty body: connection severed before the
+        # first frame — no user_message event, no turn_id.
+        self.page.route(
+            "**/stream/",
+            lambda route: route.fulfill(
+                status=200, content_type="text/event-stream", body=""
+            ),
+        )
+        self._send("brand new question")
+
+        self.page.wait_for_selector("text=Please resend it", timeout=10000)
+        # The typed message is preserved, not reloaded over.
+        self.assertTrue(
+            self.page.locator("text=brand new question").count() >= 1
+        )
+        self.assertEqual(
+            self.page.input_value("#chat-input"), "brand new question"
+        )
+
+    def test_malformed_sse_line_does_not_abort_stream(self):
+        """One bad data: line must be skipped — the remaining events in the
+        chunk (tokens, done) must still be processed."""
+        # Seed history so the post-done reload renders the same answer the
+        # stream delivered (keeps the assertion race-free).
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="q"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="hello world"
+        )
+        self._goto()
+        sse_body = (
+            'event: user_message\n'
+            'data: {"id": 1, "content": "q", "turn_id": 999999}\n\n'
+            'event: token\n'
+            'data: {broken json!\n\n'
+            'event: token\n'
+            'data: {"text": "hello world"}\n\n'
+            'event: done\n'
+            'data: {"message_id": 1}\n\n'
+        )
+        self.page.route(
+            "**/stream/",
+            lambda route: route.fulfill(
+                status=200, content_type="text/event-stream", body=sse_body
+            ),
+        )
+        self._send("q")
+
+        self.page.wait_for_selector("text=hello world", timeout=5000)
+        # No recovery/error UI — the stream reached its terminal done event.
+        self.assertEqual(self.page.locator("text=please resend").count(), 0)
+        self.assertEqual(self.page.locator("text=Connection error").count(), 0)
