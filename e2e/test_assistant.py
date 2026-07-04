@@ -585,3 +585,66 @@ class AssistantStreamRecoveryTests(PlaywrightTestCase):
         # No recovery/error UI — the stream reached its terminal done event.
         self.assertEqual(self.page.locator("text=please resend").count(), 0)
         self.assertEqual(self.page.locator("text=Connection error").count(), 0)
+
+    def test_event_name_survives_chunk_split(self):
+        """An SSE frame whose "event:" line ends one network chunk and whose
+        "data:" line starts the next must still dispatch. The parser used to
+        reset the pending event name between chunks, silently dropping the
+        frame — a dropped "done" routed a healthy stream into recovery and a
+        resend prompt."""
+        # Seed history so the post-done reload renders the same answer the
+        # stream delivered (keeps the assertion race-free).
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="q"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="hello world"
+        )
+        self._goto()
+        # The split lands between done's "event:" line and its "data:" line.
+        chunk1 = (
+            'event: user_message\n'
+            'data: {"id": 1, "content": "q", "turn_id": 999999}\n\n'
+            'event: token\n'
+            'data: {"text": "hello world"}\n\n'
+            'event: done\n'
+        )
+        chunk2 = 'data: {"message_id": 1}\n\n'
+        # route.fulfill delivers the body as a single chunk, so patch fetch
+        # with a two-enqueue ReadableStream to force the exact boundary.
+        self.page.evaluate(
+            """([c1, c2]) => {
+                const orig = window.fetch;
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        const enc = new TextEncoder();
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(c1));
+                                setTimeout(() => {
+                                    ctrl.enqueue(enc.encode(c2));
+                                    ctrl.close();
+                                }, 100);
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }""",
+            [chunk1, chunk2],
+        )
+        self._send("q")
+
+        self.page.wait_for_selector("text=hello world", timeout=5000)
+        # The split done frame must dispatch: clean finish, no recovery UI.
+        self.page.wait_for_function(
+            "document.getElementById('send-btn')"
+            " && !document.getElementById('send-btn').disabled",
+            timeout=10000,
+        )
+        self.assertEqual(self.page.locator("text=resend").count(), 0)
+        self.assertEqual(self.page.locator("text=still working").count(), 0)

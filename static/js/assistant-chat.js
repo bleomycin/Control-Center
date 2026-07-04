@@ -429,6 +429,10 @@ function createChatEngine(config) {
             var reader = resp.body.getReader();
             var decoder = new TextDecoder();
             var buffer = '';
+            // Like buffer, the pending event name must survive a chunk
+            // boundary: a frame's "event:" line can arrive in one network
+            // chunk and its "data:" line in the next.
+            var currentEvent = '';
 
             function read() {
                 reader.read().then(function(result) {
@@ -445,7 +449,6 @@ function createChatEngine(config) {
                     var lines = buffer.split('\n');
                     buffer = lines.pop();
 
-                    var currentEvent = '';
                     for (var i = 0; i < lines.length; i++) {
                         var line = lines[i];
                         if (line.startsWith('event: ')) {
