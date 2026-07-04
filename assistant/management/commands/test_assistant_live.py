@@ -236,12 +236,18 @@ class Command(BaseCommand):
 
     def test_cache_hit_on_second_call(self):
         """A2: Verify tool+system prompt caching produces cache hits."""
-        from assistant.client import _build_system_prompt, _get_client_and_model
-        from assistant.tools import TOOL_DEFINITIONS
+        from assistant.client import (
+            _build_system_prompt,
+            _get_active_tools,
+            _get_client_and_model,
+        )
 
         client, model_name = _get_client_and_model()
         system = _build_system_prompt()
-        tools = TOOL_DEFINITIONS
+        # Same tool array as real requests — tools are position 0 of the
+        # cache key, so testing with a different array would report hits
+        # against a cache universe no real request reads.
+        tools = _get_active_tools([])
         messages = [{"role": "user", "content": "Say hi."}]
 
         r1 = client.messages.create(

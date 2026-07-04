@@ -583,16 +583,28 @@ def drawer_messages(request, session_id):
 
 @require_POST
 def warm_cache(request):
-    """Fire a minimal API call to warm Anthropic's prompt cache."""
+    """Fire a minimal API call to warm Anthropic's prompt cache.
+
+    The tools array MUST match what real requests send (_get_active_tools,
+    not raw TOOL_DEFINITIONS): tools are position 0 of the cache key, so a
+    warm with the wrong array writes an entry no real request can read —
+    every drawer-open paid a full 2x (1h TTL) cache write for nothing.
+    max_tokens=0 is the supported pre-warm form: prefill runs (writing the
+    cache at the tools/system breakpoints) and returns immediately with no
+    output tokens billed.
+    """
     try:
-        from .client import _build_system_prompt, _get_client_and_model
-        from .tools import TOOL_DEFINITIONS
+        from .client import (
+            _build_system_prompt,
+            _get_active_tools,
+            _get_client_and_model,
+        )
         client, model_name = _get_client_and_model()
         client.messages.create(
             model=model_name,
-            max_tokens=1,
+            max_tokens=0,
             system=_build_system_prompt(),
-            tools=TOOL_DEFINITIONS,
+            tools=_get_active_tools([]),
             messages=[{"role": "user", "content": "hi"}],
         )
     except Exception:

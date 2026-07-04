@@ -21,7 +21,15 @@ from .tools import TOOL_DEFINITIONS, TOOL_HANDLERS, summarize
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ITERATIONS = 25
-MAX_MESSAGES_TO_SEND = 50
+# Anchored truncation (hysteresis), replacing the old fixed sliding window.
+# A sliding window (always "last N") shifts the window start on EVERY turn
+# once history exceeds N, so the byte prefix differs from position 0 each
+# request — permanent message-cache miss. Instead the window start stays
+# FIXED until the window exceeds TRUNCATION_HIGH_WATER, then jumps forward
+# in one step to a user-text anchor leaving ~MAX_MESSAGES_TO_SEND messages:
+# one cache miss per ~30 messages instead of one per turn.
+MAX_MESSAGES_TO_SEND = 50  # low-water mark: window size right after a trim
+TRUNCATION_HIGH_WATER = 80  # trim only once the window exceeds this
 # Bridge any silent window longer than this with a keepalive comment frame.
 # Must stay well under the client's 90s inactivity watchdog
 # (static/js/assistant-chat.js resetWatchdog) with margin for jitter. 5s
@@ -38,7 +46,6 @@ DETACHED_DRAIN_BUDGET_SECONDS = 20 * 60
 # frequent enough that the turn-status endpoint's staleness check
 # (AssistantTurn.STALE_AFTER_SECONDS) never false-positives on a live turn.
 TURN_TOUCH_INTERVAL_SECONDS = 30
-CACHE_BREAKPOINT_INTERVAL = 15  # Add cache breakpoint every N messages
 CACHE_CONTROL = {"type": "ephemeral"}
 DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8192
@@ -133,6 +140,36 @@ def _model_accepts_temperature(model_name):
     return bool(model_name) and model_name.startswith(TEMPERATURE_CAPABLE_PREFIXES)
 
 
+# Process-wide Anthropic client cache. Constructing a fresh client per turn
+# pays a new httpx pool + TCP/TLS handshake (~100-300ms of TTFT); the SDK
+# client is documented thread-safe, so one instance per (api_key, retries)
+# pair is shared across gunicorn threads and the stream worker threads.
+# The factory identity check exists for the test suite: tests patch
+# ``assistant.client.anthropic.Anthropic`` per-test, and a cached client
+# built from a previous test's mock (or the real class) must never leak
+# into the next test.
+_CLIENT_CACHE = {}
+_CLIENT_CACHE_LOCK = threading.Lock()
+_CLIENT_FACTORY = None
+
+
+def _get_shared_client(api_key, max_retries):
+    """Return a cached Anthropic client, rebuilt only when the key (or the
+    client class itself) changes."""
+    global _CLIENT_FACTORY
+    factory = anthropic.Anthropic
+    with _CLIENT_CACHE_LOCK:
+        if factory is not _CLIENT_FACTORY:
+            _CLIENT_CACHE.clear()
+            _CLIENT_FACTORY = factory
+        cache_key = (api_key, max_retries)
+        client = _CLIENT_CACHE.get(cache_key)
+        if client is None:
+            client = factory(api_key=api_key, max_retries=max_retries)
+            _CLIENT_CACHE[cache_key] = client
+        return client
+
+
 # Tools that are conditionally registered — included in the active tools
 # array when their trigger marker is present anywhere in the conversation's
 # user-authored free text. Keeps the toolset byte-identical to pre-feature
@@ -198,7 +235,7 @@ SYSTEM_PREAMBLE = """You are the Control Center Assistant — an AI built into a
 2. **Be precise**: When querying data, use specific filters rather than loading everything. Start narrow, broaden if needed.
 3. **Show your work**: When answering complex questions, briefly explain which queries you're running so the user understands.
 4. **Links**: When referencing records, include their URL so the user can click through. ALWAYS use root-relative paths that start with a leading slash, exactly as returned by the tools (e.g., `/stakeholders/482/` — note the leading `/`). Copy the URL string from the tool's result verbatim — do not reformat, trim, or drop the leading slash. NEVER prepend a host, port, or protocol — no `http://localhost` or any domain.
-5. **Dates**: Today's date is provided in the system stats. Use it for relative date calculations.
+5. **Dates**: Today's date is provided in the [System context] block appended to the latest user message. Use it for relative date calculations.
 6. **Be concise**: Give direct answers. Use markdown formatting for readability — tables for comparisons, lists for enumerations, bold for key facts. In record previews and creation plans, always use human-readable labels (e.g. "Provider type", "Visit type", "Status") — never expose raw field names like snake_case identifiers.
 7. **Batch tool calls aggressively**: Every API round-trip adds latency. Always call as many tools as possible in a single response. If you need to search for 15 entities, call search() 15 times in one response — do NOT split them across multiple iterations. Fewer iterations = faster results for the user.
 8. **Meetings vs Appointments**: For scheduling meetings (business, legal, personal), create a `Task` with `task_type="meeting"` and set `due_date` + `due_time`. The `Appointment` model is ONLY for medical/healthcare appointments (doctor visits, lab work, etc.) — never use it for general meetings.
@@ -292,14 +329,14 @@ Use the `assigned_to` field (FK to Stakeholder) for the person responsible for t
 - "when time allows", "eventually", "low priority", "nice to have" → `priority="low"`
 - No cue → default to `priority="medium"`
 
-**Due dates** — resolve relative references against today's date (from system stats):
+**Due dates** — resolve relative references against today's date (from the [System context] block):
 - "next week Thursday" → calculate the actual date
 - "end of month" → last day of current month
 - "by Friday" → the coming Friday
 - "ASAP" with no date → tomorrow
 - No deadline mentioned → leave `due_date` blank
 
-**Stakeholder entity_type** — valid values are listed in the system state below. Use these inference rules:
+**Stakeholder entity_type** — valid values are listed in the [System context] block. Use these inference rules:
 - Company, firm, corporation, LLC, Inc., LLP, organization → "firm"
 - Attorney, lawyer, counsel, partner (at a law firm) → "attorney"
 - Bank, lender, credit line → "lender"
@@ -376,16 +413,44 @@ The system contains the following models and fields:
 
 
 def _build_system_prompt():
-    """Construct the full system prompt with schema and live stats.
+    """Construct the static system prompt (preamble + schema) as a single
+    cacheable block.
 
-    Returns a list of content blocks with cache_control on the static
-    portion (preamble + schema) so Anthropic caches it across calls.
-    The dynamic stats block is appended without caching.
+    This MUST stay byte-identical across requests: system renders before
+    messages in the cache prefix, so any volatile byte here invalidates
+    every message-level cache entry downstream. All dynamic content (date,
+    live record counts, settings-derived policy) lives in
+    ``_build_turn_context()`` instead, appended to the latest user message
+    at request-build time — a change there invalidates nothing before it.
     """
     schema = registry.get_schema_text()
+    return [
+        {
+            "type": "text",
+            "text": SYSTEM_PREAMBLE + _EXTRA_RULES + schema,
+            "cache_control": {"type": "ephemeral", "ttl": "1h"},
+        },
+    ]
+
+
+def _build_turn_context():
+    """Live per-turn context: today's date, timezone/datetime guidance,
+    reminder policy, owner, valid entity types, and record counts.
+
+    Returned as plain text that ``_inject_turn_context`` appends as a
+    trailing user message when the request is built (never persisted to
+    ChatMessage rows). This content used to be an uncached second system
+    block — because system renders before messages, every count change
+    (i.e. every write the assistant made) and every date rollover killed
+    the whole message cache. At the tail of the newest user turn it is
+    rebuilt each turn but invalidates only itself.
+    """
     stats = summarize()
 
-    stats_lines = ["\n## Current system state"]
+    stats_lines = [
+        "[System context — auto-generated for this turn; not typed by the user]",
+        "## Current system state",
+    ]
     from django.utils import timezone
     from django.conf import settings as dj_settings
     stats_lines.append(f"Today: {timezone.localdate().isoformat()}")
@@ -448,17 +513,25 @@ def _build_system_prompt():
         label = key.replace("_", " ").title()
         stats_lines.append(f"- {label}: {value}")
 
-    return [
-        {
-            "type": "text",
-            "text": SYSTEM_PREAMBLE + _EXTRA_RULES + schema,
-            "cache_control": {"type": "ephemeral", "ttl": "1h"},
-        },
-        {
-            "type": "text",
-            "text": "\n".join(stats_lines),
-        },
-    ]
+    return "\n".join(stats_lines)
+
+
+def _inject_turn_context(api_messages, context_text):
+    """Return a copy of ``api_messages`` with ``context_text`` appended as
+    its own trailing user message.
+
+    Request-scoped only — ChatMessage rows are never touched, and
+    consecutive user messages are legal (the API merges them into a single
+    turn). A SEPARATE message — rather than concatenating onto the user's
+    message — keeps every persisted message's bytes identical from turn to
+    turn, so the context (the only per-turn volatile content) is also the
+    only thing each new turn re-processes; the history prefix keeps cache-
+    chaining across turns. Within a turn's tool loop the context sits early
+    in the growing list and is byte-stable across iterations.
+    """
+    if not context_text:
+        return api_messages
+    return list(api_messages) + [{"role": "user", "content": context_text}]
 
 
 def _tool_use_ids(msg):
@@ -579,6 +652,113 @@ def _validate_tool_pairs(messages):
     return result
 
 
+def _next_user_text_index(api_messages, from_idx):
+    """First index >= ``from_idx`` holding a plain-text user message (the
+    start of a turn). Tool_result messages are role "user" but list-content,
+    so they never match. Returns None if no such message exists."""
+    for i in range(max(from_idx, 0), len(api_messages)):
+        msg = api_messages[i]
+        content = msg.get("content")
+        if msg.get("role") == "user" and isinstance(content, str) and content.strip():
+            return i
+    return None
+
+
+def _anchored_window_start(api_messages):
+    """Deterministic, stable start index for the truncation window.
+
+    Replays the history's trim events: the window start stays fixed until
+    the window first exceeds TRUNCATION_HIGH_WATER messages, at which point
+    it jumps forward to the first user-TEXT message at or after
+    (overflow point - MAX_MESSAGES_TO_SEND). Because each decision depends
+    only on message positions before its overflow point, appending new
+    messages never changes earlier decisions — the retained prefix is
+    byte-identical between turns (one cache miss per trim, not per turn).
+
+    Anchoring on a user-text message (a turn boundary) also fixes the
+    head-trim cascade: a raw positional cut after a tool-heavy turn (up to
+    25 pairs = 50 tool messages) can open the window mid-pair or with no
+    leading user-text message at all, which the pairing repair then trims
+    down to almost nothing (the model answers with amnesia). A turn
+    boundary is always a valid window head.
+    """
+    total = len(api_messages)
+    start = 0
+    while total - start > TRUNCATION_HIGH_WATER:
+        # The moment this window first exceeded the high-water mark…
+        overflow_at = start + TRUNCATION_HIGH_WATER + 1
+        # …it cut back to ~MAX_MESSAGES_TO_SEND messages, anchored on the
+        # next turn boundary. The anchor search may pass overflow_at when a
+        # single tool-heavy turn spans the whole low-water span — the
+        # current turn's user message always terminates the search.
+        target = overflow_at - MAX_MESSAGES_TO_SEND
+        anchor = _next_user_text_index(api_messages, target)
+        if anchor is None:
+            # No user-text message anywhere ahead (corrupt/synthetic
+            # history): raw positional cut; _validate_tool_pairs repairs.
+            anchor = target
+        start = anchor
+    return start
+
+
+def _apply_message_cache_marker(api_messages):
+    """Return a copy of ``api_messages`` carrying exactly one message-level
+    cache_control marker, on the last block of the second-to-last message.
+
+    Breakpoint budget (max 4/request): tools [1h] + system [1h] + this
+    marker + the top-level ``cache_control`` kwarg each API call passes,
+    which auto-marks the tail of the final message. The tail breakpoint is
+    what makes the growing tool-loop history cacheable at all (Defect A).
+    This second marker serves two purposes:
+
+    - Within a tool loop, [-2] is the assistant tool_use message (15+
+      blocks when tool calls are batched, ahead of an equally large
+      tool_result tail) — a mid-iteration entry keeps consecutive entries
+      inside the API's 20-block lookback limit.
+    - On a turn's first request, [-2] is the just-saved user message (the
+      turn context rides after it as [-1]) — the entry ending there is the
+      one the NEXT turn's byte-identical prefix reads, since everything
+      after it (context, this turn's responses) is new next turn.
+
+    String content is wrapped into an equivalent single text block to carry
+    the marker — the API hashes both forms identically and ignores
+    cache_control for prefix matching (verified live 2026-07-03), so marker
+    movement between iterations and turns cannot invalidate the prefix.
+    """
+    result = []
+    for msg in api_messages:
+        content = msg.get("content")
+        if isinstance(content, list) and any(
+            isinstance(b, dict) and "cache_control" in b for b in content
+        ):
+            # Strip a stale marker (this helper runs once per API call on a
+            # list that grows between calls). Copy — never mutate blocks
+            # that alias ChatMessage.tool_data.
+            content = [
+                {k: v for k, v in b.items() if k != "cache_control"}
+                if isinstance(b, dict) else b
+                for b in content
+            ]
+            msg = {**msg, "content": content}
+        result.append(msg)
+
+    if len(result) >= 2:
+        msg = result[-2]
+        content = msg.get("content")
+        if isinstance(content, list) and content and isinstance(content[-1], dict):
+            new_content = list(content)
+            new_content[-1] = {**new_content[-1], "cache_control": CACHE_CONTROL}
+            result[-2] = {**msg, "content": new_content}
+        elif isinstance(content, str) and content:
+            result[-2] = {
+                **msg,
+                "content": [
+                    {"type": "text", "text": content, "cache_control": CACHE_CONTROL},
+                ],
+            }
+    return result
+
+
 def _build_api_messages(chat_messages):
     """
     Convert ChatMessage queryset to Anthropic API message format.
@@ -586,19 +766,20 @@ def _build_api_messages(chat_messages):
     Messages with tool_data are formatted as content blocks.
     Plain text messages use simple string content.
 
-    Adds explicit cache_control breakpoints every CACHE_BREAKPOINT_INTERVAL
-    messages to ensure cache hits on long conversations (the API has a
-    20-block lookback limit for automatic caching).
+    Truncation is anchored (see _anchored_window_start): the window start
+    is stable across turns and always lands on a turn boundary, then the
+    Phase 2 pairing repair runs on the result, then the message-level cache
+    marker is applied.
     """
     api_messages = []
 
     for msg in chat_messages:
         if msg.tool_data:
             # tool_data contains the raw Anthropic content blocks. Copy the
-            # list: cache-breakpoint injection below replaces its last
-            # element, and aliasing the model instance's JSONField list
-            # would let a request-scoped cache_control marker leak into
-            # tool_data if anything ever re-saves a history message.
+            # list: cache-marker injection replaces block dicts, and
+            # aliasing the model instance's JSONField list would let a
+            # request-scoped cache_control marker leak into tool_data if
+            # anything ever re-saves a history message.
             api_messages.append({
                 "role": msg.role,
                 "content": list(msg.tool_data),
@@ -609,7 +790,7 @@ def _build_api_messages(chat_messages):
                 "content": msg.content,
             })
 
-    truncated = api_messages[-MAX_MESSAGES_TO_SEND:]
+    truncated = api_messages[_anchored_window_start(api_messages):]
 
     # Validate tool_use / tool_result pairing after truncation. Repairs
     # orphaned tool messages anywhere in the window and guarantees the
@@ -617,33 +798,7 @@ def _build_api_messages(chat_messages):
     # violation 400s every subsequent request for the session).
     truncated = _validate_tool_pairs(truncated)
 
-    # Add cache breakpoints at regular intervals for long conversations.
-    # This prevents cache misses when the conversation exceeds the
-    # 20-block lookback window. Max 4 explicit breakpoints allowed.
-    if len(truncated) > CACHE_BREAKPOINT_INTERVAL:
-        breakpoints_added = 0
-        for i in range(CACHE_BREAKPOINT_INTERVAL - 1, len(truncated) - 1, CACHE_BREAKPOINT_INTERVAL):
-            if breakpoints_added >= 2:  # Max 4 total: 1 tool + 1 system + 2 messages
-                break
-            msg = truncated[i]
-            content = msg.get("content")
-            if isinstance(content, str):
-                # Plain text message — wrap in content block with cache control
-                truncated[i] = {
-                    "role": msg["role"],
-                    "content": [
-                        {"type": "text", "text": content, "cache_control": CACHE_CONTROL},
-                    ],
-                }
-                breakpoints_added += 1
-            elif isinstance(content, list) and content:
-                # Tool_use/tool_result blocks — add cache control to last block
-                last_block = content[-1]
-                if isinstance(last_block, dict):
-                    content[-1] = {**last_block, "cache_control": CACHE_CONTROL}
-                    breakpoints_added += 1
-
-    return truncated
+    return _apply_message_cache_marker(truncated)
 
 
 def _strip_empty(obj):
@@ -771,9 +926,27 @@ def _get_client_and_model():
     api_key = settings.get_effective_api_key()
     if not api_key:
         raise ValueError("No API key configured")
-    client = anthropic.Anthropic(api_key=api_key, max_retries=5)
+    client = _get_shared_client(api_key, max_retries=5)
     model_name = settings.model or DEFAULT_MODEL
     return client, model_name
+
+
+def _log_usage(path, response, model_name):
+    """Cache-hit log line — the standing regression signal for prompt
+    caching. cache_read stuck at 0 across consecutive calls means a silent
+    prefix invalidator crept back in (see Phase 3 LESSONS entry)."""
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return
+    logger.info(
+        "usage path=%s model=%s input=%s cache_read=%s cache_write=%s output=%s",
+        path,
+        getattr(response, "model", model_name),
+        getattr(usage, "input_tokens", None),
+        getattr(usage, "cache_read_input_tokens", None),
+        getattr(usage, "cache_creation_input_tokens", None),
+        getattr(usage, "output_tokens", None),
+    )
 
 
 def send_message(session, user_text, mode="fast", effort=""):
@@ -831,8 +1004,10 @@ def send_message(session, user_text, mode="fast", effort=""):
     # response that hits the cap gets the visible truncation notice.
     max_tokens = min(max_tokens, NONSTREAMING_MAX_TOKENS)
 
-    client = anthropic.Anthropic(api_key=api_key, max_retries=5)
+    # No manual retry loop on this path — keep the SDK's own retries.
+    client = _get_shared_client(api_key, max_retries=5)
     system_prompt = _build_system_prompt()
+    api_messages = _inject_turn_context(api_messages, _build_turn_context())
     effective_effort = mode_config.get("output_config", {}).get("effort", "")
     logger.info(f"send mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
 
@@ -843,7 +1018,11 @@ def send_message(session, user_text, mode="fast", effort=""):
                 max_tokens=max_tokens,
                 system=system_prompt,
                 tools=_get_active_tools(api_messages),
-                messages=api_messages,
+                messages=_apply_message_cache_marker(api_messages),
+                # Top-level breakpoint: the API auto-marks the tail of the
+                # final message, so every iteration's growing history is a
+                # cache hit for the next one (Defect A).
+                cache_control=CACHE_CONTROL,
             )
             if "thinking" in mode_config:
                 create_kwargs["thinking"] = mode_config["thinking"]
@@ -855,6 +1034,7 @@ def send_message(session, user_text, mode="fast", effort=""):
             if "output_config" in mode_config:
                 create_kwargs["output_config"] = mode_config["output_config"]
             response = client.messages.create(**create_kwargs)
+            _log_usage("send", response, model_name)
         except anthropic.APIError as e:
             logger.error(f"Anthropic API error: {e}")
             error_msg = ChatMessage.objects.create(
@@ -1245,11 +1425,17 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     if "max_tokens" in mode_config:
         max_tokens = mode_config["max_tokens"]
 
-    client = anthropic.Anthropic(api_key=api_key, max_retries=5)
+    # SDK retries stay at 1 here: the manual 5-attempt loop below owns
+    # status-code retries AND emits keepalives while waiting — stacking the
+    # SDK's 5 on top meant up to ~25 silent upstream attempts pinning a
+    # worker thread during an outage. One SDK retry is kept for transient
+    # connection errors, which the manual loop does not retry.
+    client = _get_shared_client(api_key, max_retries=1)
     system_prompt = _build_system_prompt()
 
     all_messages = session.messages.all()
     api_messages = _build_api_messages(all_messages)
+    api_messages = _inject_turn_context(api_messages, _build_turn_context())
 
     effective_effort = mode_config.get("output_config", {}).get("effort", "")
     logger.info(f"stream mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
@@ -1269,7 +1455,11 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                     max_tokens=max_tokens,
                     system=system_prompt,
                     tools=_get_active_tools(api_messages),
-                    messages=api_messages,
+                    messages=_apply_message_cache_marker(api_messages),
+                    # Top-level breakpoint: auto-marks the tail of the final
+                    # message so each loop iteration reads the previous
+                    # iteration's cache entry (Defect A).
+                    cache_control=CACHE_CONTROL,
                 )
                 if "thinking" in mode_config:
                     stream_kwargs["thinking"] = mode_config["thinking"]
@@ -1308,6 +1498,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
 
                 # Log request_id and actual model used
                 logger.info(f"OK model={response.model} request_id={req_id}")
+                _log_usage("stream", response, model_name)
 
                 break  # Success — exit retry loop
             except anthropic.APIStatusError as e:

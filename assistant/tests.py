@@ -992,27 +992,29 @@ class ReminderPolicyTests(TestCase):
         create_record(**tool_input)  # dry_run defaults to True
         json.dumps(tool_input)
 
-    def test_system_prompt_omits_auto_reminder_when_disabled(self):
+    def test_turn_context_omits_auto_reminder_when_disabled(self):
         # When default_reminder_minutes=0 the server writes no reminder, so
-        # the prompt must not claim "the server sets reminder_date to 0
+        # the context must not claim "the server sets reminder_date to 0
         # minutes before". The meeting bullet stays — that's unconditional.
-        from assistant.client import _build_system_prompt
+        # (Phase 3 moved the reminder policy from the system prompt into the
+        # per-turn context block — see _build_turn_context.)
+        from assistant.client import _build_turn_context
         from assistant.models import AssistantSettings
         s = AssistantSettings.load()
         s.default_reminder_minutes = 0
         s.save()
-        stats_text = _build_system_prompt()[1]["text"]
+        stats_text = _build_turn_context()
         self.assertNotIn("0 minutes before the due datetime", stats_text)
         self.assertNotIn("server sets", stats_text)
         self.assertIn("task_type='meeting'", stats_text)
 
-    def test_system_prompt_includes_auto_reminder_when_enabled(self):
-        from assistant.client import _build_system_prompt
+    def test_turn_context_includes_auto_reminder_when_enabled(self):
+        from assistant.client import _build_turn_context
         from assistant.models import AssistantSettings
         s = AssistantSettings.load()
         s.default_reminder_minutes = 1440
         s.save()
-        stats_text = _build_system_prompt()[1]["text"]
+        stats_text = _build_turn_context()
         self.assertIn("1440 minutes before the due datetime", stats_text)
 
 
@@ -1482,54 +1484,33 @@ class WarmCacheEndpointTests(TestCase):
 
 
 class CacheBreakpointTests(TestCase):
-    """A4: Verify cache breakpoints work on both text and tool_data messages."""
+    """Phase 3 defect A: message-level cache markers.
 
-    def _make_messages(self, count, tool_data=False):
-        """Create a list of alternating user/assistant API messages."""
-        msgs = []
-        for i in range(count):
-            role = "user" if i % 2 == 0 else "assistant"
-            if tool_data:
-                msgs.append({
-                    "role": role,
-                    "content": [{"type": "tool_result" if role == "user" else "tool_use",
-                                 "id": f"tool_{i}"}],
-                })
-            else:
-                msgs.append({"role": role, "content": f"Message {i}"})
-        return msgs
+    The tail breakpoint is now the top-level ``cache_control`` kwarg every
+    API call passes (asserted in Phase3RequestConstructionTests), so
+    _build_api_messages carries at most ONE message-level marker — on the
+    last block of the second-to-last message, when that message has
+    block-form content (the 20-block-lookback bridge for tool loops).
+    String content is never wrapped: wrapping would change a message's
+    bytes when the marker moves, invalidating the cached prefix.
+    """
 
-    def test_text_messages_get_breakpoints(self):
-        """Original behavior: plain text messages get cache breakpoints."""
-        from .client import CACHE_BREAKPOINT_INTERVAL, _build_api_messages
-        from .models import ChatMessage
-
-        session = ChatSession.objects.create()
-        # Create enough messages to trigger breakpoints
-        for i in range(20):
-            role = "user" if i % 2 == 0 else "assistant"
-            ChatMessage.objects.create(session=session, role=role, content=f"Msg {i}")
-
-        result = _build_api_messages(session.messages.all())
-
-        # Check that at least one breakpoint was added
-        has_breakpoint = False
-        for msg in result:
+    @staticmethod
+    def _count_markers(result):
+        markers = []
+        for idx, msg in enumerate(result):
             content = msg.get("content")
             if isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict) and "cache_control" in block:
-                        has_breakpoint = True
-                        break
-        self.assertTrue(has_breakpoint)
+                        markers.append(idx)
+        return markers
 
-    def test_tool_data_messages_get_breakpoints(self):
-        """New behavior: tool_data (list) messages also get cache breakpoints."""
-        from .client import CACHE_BREAKPOINT_INTERVAL, _build_api_messages
+    def test_penultimate_tool_message_gets_marker(self):
+        from .client import _build_api_messages
         from .models import ChatMessage
 
         session = ChatSession.objects.create()
-        # Create a mix: first a text msg, then lots of tool messages
         ChatMessage.objects.create(session=session, role="user", content="Start")
         for i in range(19):
             role = "assistant" if i % 2 == 0 else "user"
@@ -1541,38 +1522,72 @@ class CacheBreakpointTests(TestCase):
 
         result = _build_api_messages(session.messages.all())
 
-        # Find breakpoints on tool_data messages
-        tool_breakpoints = 0
-        for msg in result:
-            content = msg.get("content")
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and "cache_control" in block:
-                        # It's a breakpoint on a list-type message
-                        if block.get("type") in ("tool_use", "tool_result"):
-                            tool_breakpoints += 1
-        self.assertGreater(tool_breakpoints, 0, "No breakpoints found on tool_data messages")
+        markers = self._count_markers(result)
+        self.assertEqual(markers, [len(result) - 2])
+        marked_block = result[-2]["content"][-1]
+        self.assertIn(marked_block.get("type"), ("tool_use", "tool_result"))
 
-    def test_max_two_breakpoints_in_messages(self):
-        """Cache breakpoints are capped at 2 (+ 1 tool + 1 system = 4 total)."""
+    def test_text_conversation_marks_penultimate_as_wrapped_block(self):
+        """String messages carry the marker as an equivalent single text
+        block — the API hashes both forms identically (verified live), so
+        the wrap can't invalidate the prefix when the marker moves."""
         from .client import _build_api_messages
         from .models import ChatMessage
 
         session = ChatSession.objects.create()
-        for i in range(50):
+        for i in range(20):
             role = "user" if i % 2 == 0 else "assistant"
             ChatMessage.objects.create(session=session, role=role, content=f"Msg {i}")
 
         result = _build_api_messages(session.messages.all())
 
-        breakpoint_count = 0
-        for msg in result:
-            content = msg.get("content")
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and "cache_control" in block:
-                        breakpoint_count += 1
-        self.assertLessEqual(breakpoint_count, 2)
+        self.assertEqual(self._count_markers(result), [len(result) - 2])
+        wrapped = result[-2]["content"]
+        self.assertEqual(wrapped[0]["type"], "text")
+        self.assertEqual(wrapped[0]["text"], "Msg 18")
+        # Every other message keeps its plain-string shape.
+        self.assertTrue(all(
+            isinstance(m["content"], str) for m in result[:-2] + result[-1:]
+        ))
+
+    def test_at_most_one_message_marker(self):
+        """Breakpoint budget: tools + system + top-level tail + this one = 4."""
+        from .client import _apply_message_cache_marker
+
+        msgs = [{"role": "user", "content": "hi"}]
+        for i in range(24):
+            msgs.append({
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": f"tu_{i}", "name": "search", "input": {}}],
+            })
+            msgs.append({
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": f"tu_{i}", "content": "ok"}],
+            })
+
+        # Apply twice (simulating consecutive loop iterations after appends)
+        first = _apply_message_cache_marker(msgs)
+        first.append({"role": "assistant", "content": [
+            {"type": "tool_use", "id": "tu_x", "name": "search", "input": {}}]})
+        first.append({"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "tu_x", "content": "ok"}]})
+        second = _apply_message_cache_marker(first)
+
+        markers = self._count_markers(second)
+        self.assertEqual(markers, [len(second) - 2],
+                         "stale markers must be stripped on re-application")
+
+    def test_marker_application_does_not_mutate_input(self):
+        from .client import _apply_message_cache_marker
+
+        blocks = [{"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"}]
+        msgs = [
+            {"role": "user", "content": "hi"},
+            {"role": "user", "content": blocks},
+            {"role": "assistant", "content": "answer"},
+        ]
+        _apply_message_cache_marker(msgs)
+        self.assertNotIn("cache_control", blocks[-1])
 
 
 class SummarizeBatchTests(TestCase):
@@ -1888,11 +1903,12 @@ class DateTimeHandlingTests(TestCase):
         self.assertEqual(local.hour, 19)
         self.assertEqual(local.minute, 27)
 
-    def test_system_prompt_declares_timezone(self):
-        from .client import _build_system_prompt
+    def test_turn_context_declares_timezone(self):
+        # Phase 3 moved the timezone declaration from the (now frozen)
+        # system prompt into the per-turn context block.
+        from .client import _build_turn_context
 
-        blocks = _build_system_prompt()
-        stats_text = blocks[1]["text"]
+        stats_text = _build_turn_context()
         self.assertIn("Timezone:", stats_text)
         self.assertIn("America/Los_Angeles", stats_text)
         self.assertIn("ISO format", stats_text)
@@ -3739,3 +3755,457 @@ class MaxTokensToolSkipTests(TestCase):
                 send_message(self.session, "hi")
 
         mock_exec.assert_called_once()
+
+
+class FrozenSystemPromptTests(TestCase):
+    """Phase 3 defect B: the system prompt must be byte-identical across
+    requests — system renders before messages in the cache prefix, so any
+    volatile byte there invalidates every message-level cache entry."""
+
+    def test_single_static_block_with_1h_ttl(self):
+        from .client import _build_system_prompt
+
+        blocks = _build_system_prompt()
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(
+            blocks[0]["cache_control"], {"type": "ephemeral", "ttl": "1h"}
+        )
+
+    def test_byte_identical_across_stat_and_settings_changes(self):
+        """The spec test: two calls with different counts/settings produce a
+        byte-identical cached block."""
+        from django.utils import timezone
+        from tasks.models import Task
+        from .client import _build_system_prompt
+
+        first = _build_system_prompt()[0]["text"]
+
+        # Change record counts (what the assistant's own writes do)...
+        Task.objects.create(title="cache invalidator?", direction="personal")
+        # ...and settings-derived prompt inputs.
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 999
+        s.owner_name = "Changed Owner"
+        s.save()
+
+        second = _build_system_prompt()[0]["text"]
+        self.assertEqual(first, second)
+        # No date in the frozen prompt — the date lives in the turn context.
+        self.assertNotIn(timezone.localdate().isoformat(), first)
+
+    def test_schema_text_stable_across_calls(self):
+        """Phase 1 excluded models from the registry — confirm the schema
+        text is still deterministic between two calls in one process."""
+        from . import registry
+
+        self.assertEqual(registry.get_schema_text(), registry.get_schema_text())
+
+
+class TurnContextTests(TestCase):
+    """Phase 3 defect B: the volatile content moved out of `system` must
+    arrive appended to the newest user message, and only at request time."""
+
+    def setUp(self):
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+        self.session = ChatSession.objects.create(title="Existing chat")
+
+    def test_context_contains_dynamic_content(self):
+        from django.utils import timezone
+        from .client import _build_turn_context
+
+        s = AssistantSettings.load()
+        s.default_reminder_minutes = 1440
+        s.owner_name = "Test Owner"
+        s.save()
+
+        text = _build_turn_context()
+        self.assertIn(f"Today: {timezone.localdate().isoformat()}", text)
+        self.assertIn("Timezone:", text)
+        self.assertIn("Reminder policy:", text)
+        self.assertIn("Test Owner", text)
+        self.assertIn("## Current system state", text)
+
+    def test_send_message_injects_context_without_persisting_it(self):
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hi"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_response.stop_reason = "end_turn"
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(self.session, "what tasks are overdue?")
+
+            sent = mock_client.messages.create.call_args_list[0][1]["messages"]
+        # The context rides as its own trailing user message...
+        self.assertEqual(sent[-1]["role"], "user")
+        self.assertTrue(sent[-1]["content"].startswith("[System context"))
+        # ...after the user's message, which keeps its own text (wrapped
+        # into a marked text block — the cache anchor the next turn reads).
+        user_block = sent[-2]["content"][0]
+        self.assertEqual(user_block["text"], "what tasks are overdue?")
+        # The persisted row carries neither context nor wrapping.
+        saved = ChatMessage.objects.filter(
+            session=self.session, role="user"
+        ).latest("created_at")
+        self.assertEqual(saved.content, "what tasks are overdue?")
+
+    def test_stream_injects_context_into_newest_user_message_only(self):
+        from .client import _stream_message_impl
+
+        # Prior history — must NOT receive the context.
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="old question"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="old answer"
+        )
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            block = MagicMock()
+            block.type = "text"
+            block.text = "done"
+            resp = MagicMock()
+            resp.content = [block]
+            resp.stop_reason = "end_turn"
+            resp.model = "claude-sonnet-4-6"
+            MockClient.return_value.messages.stream.return_value = (
+                _FakePhase2Stream(resp)
+            )
+            list(_stream_message_impl(self.session, "new question"))
+
+            sent = MockClient.return_value.messages.stream.call_args[1]["messages"]
+        # History untouched, context trailing, exactly one context message.
+        self.assertEqual(sent[0]["content"], "old question")
+        self.assertTrue(sent[-1]["content"].startswith("[System context"))
+        self.assertEqual(sent[-2]["content"][0]["text"], "new question")
+        self.assertEqual(
+            sum("[System context" in m["content"] for m in sent
+                if isinstance(m["content"], str)),
+            1,
+        )
+
+    def test_inject_appends_trailing_message_without_mutating_input(self):
+        from .client import _inject_turn_context
+
+        msgs = [
+            {"role": "user", "content": "real question"},
+            {"role": "assistant", "content": [
+                {"type": "tool_use", "id": "tu_1", "name": "search", "input": {}}]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "tu_1", "content": "ok"}]},
+        ]
+        result = _inject_turn_context(msgs, "CTX")
+        self.assertEqual(len(result), 4)
+        self.assertEqual(result[-1], {"role": "user", "content": "CTX"})
+        # Every persisted message is byte-identical — that is what lets the
+        # history prefix cache-chain across turns.
+        self.assertEqual(result[:3], msgs)
+        self.assertEqual(len(msgs), 3)
+
+
+class Phase3RequestConstructionTests(TestCase):
+    """Phase 3 defect A: a tail cache breakpoint on EVERY request — the
+    top-level cache_control kwarg — including each tool-loop iteration,
+    plus the single mid-loop message marker for the 20-block lookback."""
+
+    def setUp(self):
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+        self.session = ChatSession.objects.create(title="Existing chat")
+
+    def _text_response(self, text="Hi"):
+        block = MagicMock()
+        block.type = "text"
+        block.text = text
+        resp = MagicMock()
+        resp.content = [block]
+        resp.stop_reason = "end_turn"
+        return resp
+
+    def _tool_response(self, block_id="tu_1"):
+        block = MagicMock()
+        block.type = "tool_use"
+        block.id = block_id
+        block.name = "nonexistent_tool"
+        block.input = {}
+        resp = MagicMock()
+        resp.content = [block]
+        resp.stop_reason = "tool_use"
+        return resp
+
+    def test_send_message_passes_tail_breakpoint_every_iteration(self):
+        from .client import CACHE_CONTROL, send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.side_effect = [
+                self._tool_response("tu_1"),
+                self._text_response("done"),
+            ]
+            send_message(self.session, "hi")
+
+            calls = mock_client.messages.create.call_args_list
+        self.assertEqual(len(calls), 2)
+        for call in calls:
+            self.assertEqual(call[1]["cache_control"], CACHE_CONTROL)
+
+        # Iteration 2: the second-to-last message (the assistant tool_use
+        # turn) carries the single message-level marker.
+        second_messages = calls[1][1]["messages"]
+        self.assertIn("cache_control", second_messages[-2]["content"][-1])
+        marker_count = sum(
+            1 for m in second_messages
+            if isinstance(m.get("content"), list)
+            for b in m["content"]
+            if isinstance(b, dict) and "cache_control" in b
+        )
+        self.assertEqual(marker_count, 1)
+
+    def test_short_and_long_conversations_get_tail_breakpoint(self):
+        from .client import CACHE_CONTROL, send_message
+
+        # Long history (>30 messages)
+        for i in range(34):
+            role = "user" if i % 2 == 0 else "assistant"
+            ChatMessage.objects.create(
+                session=self.session, role=role, content=f"m{i}"
+            )
+
+        short_session = ChatSession.objects.create(title="Short chat")
+
+        for session in (short_session, self.session):
+            with patch("assistant.client.anthropic.Anthropic") as MockClient:
+                mock_client = MockClient.return_value
+                mock_client.messages.create.return_value = self._text_response()
+                send_message(session, "hi")
+                kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertEqual(kwargs["cache_control"], CACHE_CONTROL)
+
+    def test_stream_passes_tail_breakpoint(self):
+        from .client import CACHE_CONTROL, _stream_message_impl
+
+        resp = self._text_response("done")
+        resp.model = "claude-sonnet-4-6"
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakePhase2Stream(resp)
+            )
+            list(_stream_message_impl(self.session, "hi"))
+            kwargs = MockClient.return_value.messages.stream.call_args[1]
+        self.assertEqual(kwargs["cache_control"], CACHE_CONTROL)
+
+
+class AnchoredTruncationTests(TestCase):
+    """Phase 3 defect D + the Phase 2 head-trim cascade: the truncation
+    window start must be stable across turns and land on a turn boundary."""
+
+    def _text_history(self, count):
+        return [
+            {"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"}
+            for i in range(count)
+        ]
+
+    def test_no_trim_below_high_water(self):
+        from .client import TRUNCATION_HIGH_WATER, _anchored_window_start
+
+        msgs = self._text_history(TRUNCATION_HIGH_WATER)
+        self.assertEqual(_anchored_window_start(msgs), 0)
+
+    def test_trim_lands_on_user_text_anchor(self):
+        from .client import (
+            MAX_MESSAGES_TO_SEND,
+            TRUNCATION_HIGH_WATER,
+            _anchored_window_start,
+        )
+
+        msgs = self._text_history(TRUNCATION_HIGH_WATER + 10)  # 90
+        start = _anchored_window_start(msgs)
+        self.assertGreater(start, 0)
+        anchored = msgs[start]
+        self.assertEqual(anchored["role"], "user")
+        self.assertIsInstance(anchored["content"], str)
+        # Window is cut back to ~the low-water mark, not the high-water mark.
+        self.assertLessEqual(len(msgs) - start, TRUNCATION_HIGH_WATER)
+        self.assertGreaterEqual(
+            len(msgs) - start, MAX_MESSAGES_TO_SEND - 2
+        )
+
+    def test_window_start_stable_as_history_grows(self):
+        """The fix itself: the same trim decision replays identically as the
+        conversation grows, so the retained prefix is byte-stable between
+        turns (the sliding window changed it EVERY turn)."""
+        from .client import TRUNCATION_HIGH_WATER, _anchored_window_start
+
+        msgs = self._text_history(TRUNCATION_HIGH_WATER + 5)
+        start_now = _anchored_window_start(msgs)
+        for extra in (2, 10, 24):
+            grown = msgs + self._text_history(extra)
+            self.assertEqual(
+                _anchored_window_start(grown), start_now,
+                f"window start moved after {extra} appended messages",
+            )
+
+    def test_second_trim_fires_after_another_thirty_messages(self):
+        from .client import TRUNCATION_HIGH_WATER, _anchored_window_start
+
+        msgs = self._text_history(2 * TRUNCATION_HIGH_WATER)
+        start = _anchored_window_start(msgs)
+        # Two trims replayed; window within bounds and anchored on user text.
+        self.assertLessEqual(len(msgs) - start, TRUNCATION_HIGH_WATER)
+        self.assertEqual(msgs[start]["role"], "user")
+
+    def test_tool_heavy_turn_does_not_shred_window(self):
+        """Head-trim cascade regression (Phase 2 bug-check finding): after a
+        25-pair tool turn, a raw positional cut opened the window mid-pair
+        with no leading user-text message, and the pairing repair trimmed
+        most of the window away. The anchor must skip to the turn boundary
+        BEFORE the tool block so every in-window pair survives."""
+        from .client import _build_api_messages
+
+        session = ChatSession.objects.create()
+        # 40 plain messages (20 old turns)
+        for i in range(40):
+            role = "user" if i % 2 == 0 else "assistant"
+            ChatMessage.objects.create(session=session, role=role, content=f"m{i}")
+        # One tool-heavy turn: user question + 25 tool pairs + final answer
+        ChatMessage.objects.create(
+            session=session, role="user", content="process this email"
+        )
+        for i in range(25):
+            ChatMessage.objects.create(
+                session=session, role="assistant", content="",
+                tool_data=[{"type": "tool_use", "id": f"tu_{i}",
+                            "name": "search", "input": {}}],
+            )
+            ChatMessage.objects.create(
+                session=session, role="user", content="",
+                tool_data=[{"type": "tool_result", "tool_use_id": f"tu_{i}",
+                            "content": "ok"}],
+            )
+        ChatMessage.objects.create(
+            session=session, role="assistant", content="done processing"
+        )
+        ChatMessage.objects.create(
+            session=session, role="user", content="thanks — next question"
+        )
+        # 94 messages total; the old [-50:] slice landed inside the tool block.
+
+        result = _build_api_messages(session.messages.all())
+
+        # Window head is a genuine user-text turn boundary...
+        self.assertEqual(result[0]["role"], "user")
+        self.assertIsInstance(result[0]["content"], str)
+        # ...and the repair dropped nothing: all 25 pairs survived.
+        blob = json.dumps(result)
+        for i in range(25):
+            self.assertIn(f"tu_{i}", blob, f"pair tu_{i} was trimmed away")
+        self.assertGreaterEqual(len(result), 60)
+
+
+class WarmCacheToolMatchTests(TestCase):
+    """Phase 3 defect C: warm_cache must warm the SAME prefix real requests
+    read — the active tool array, not raw TOOL_DEFINITIONS — and must use
+    the max_tokens=0 pre-warm form (no output tokens billed)."""
+
+    def test_warm_uses_active_tools_and_zero_max_tokens(self):
+        from .client import _get_active_tools
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_client.messages.create.return_value = MagicMock()
+
+            response = self.client.post(reverse("assistant:warm_cache"))
+            self.assertEqual(response.status_code, 200)
+
+            kwargs = mock_client.messages.create.call_args[1]
+        self.assertEqual(kwargs["max_tokens"], 0)
+        self.assertEqual(kwargs["tools"], _get_active_tools([]))
+        tool_names = [t["name"] for t in kwargs["tools"]]
+        self.assertNotIn("bulk_link_drive_files", tool_names)
+        # System prompt is the frozen static block real requests send.
+        self.assertEqual(len(kwargs["system"]), 1)
+
+
+class SharedClientTests(TestCase):
+    """Phase 3 defect E: one Anthropic client per process (per key/retries),
+    not one per turn; the streaming path stops stacking SDK retries on the
+    manual retry loop."""
+
+    def setUp(self):
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.save()
+        self.session = ChatSession.objects.create(title="Existing chat")
+
+    def _text_response(self):
+        block = MagicMock()
+        block.type = "text"
+        block.text = "Hi"
+        resp = MagicMock()
+        resp.content = [block]
+        resp.stop_reason = "end_turn"
+        return resp
+
+    def test_client_reused_across_turns(self):
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.create.return_value = (
+                self._text_response()
+            )
+            send_message(self.session, "first turn")
+            send_message(self.session, "second turn")
+            MockClient.assert_called_once_with(
+                api_key="sk-test-key", max_retries=5
+            )
+
+    def test_key_change_rebuilds_client(self):
+        from .client import _get_shared_client
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            a = _get_shared_client("key-one", max_retries=5)
+            b = _get_shared_client("key-one", max_retries=5)
+            self.assertIs(a, b)
+            _get_shared_client("key-two", max_retries=5)
+            self.assertEqual(MockClient.call_count, 2)
+
+    def test_stream_path_uses_single_sdk_retry(self):
+        """The manual 5-attempt loop owns status-code retries; SDK retries
+        drop from 5 to 1 so an outage can't pin a thread for ~25 attempts."""
+        from .client import _stream_message_impl
+
+        resp = self._text_response()
+        resp.model = "claude-sonnet-4-6"
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakePhase2Stream(resp)
+            )
+            list(_stream_message_impl(self.session, "hi"))
+            MockClient.assert_called_once_with(
+                api_key="sk-test-key", max_retries=1
+            )
+
+    def test_nonstreaming_path_keeps_sdk_retries(self):
+        """send_message has no manual retry loop — SDK retries stay at 5."""
+        from .client import send_message
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.create.return_value = (
+                self._text_response()
+            )
+            send_message(self.session, "hi")
+            MockClient.assert_called_once_with(
+                api_key="sk-test-key", max_retries=5
+            )
