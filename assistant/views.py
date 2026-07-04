@@ -112,7 +112,14 @@ def stream_message_view(request, session_id):
     try:
         with transaction.atomic():
             turn = AssistantTurn.objects.create(session=session)
-    except IntegrityError:
+    except IntegrityError as exc:
+        # Only the running-turn uniqueness violation means "busy". Any other
+        # integrity failure (e.g. an FK error because the session was deleted
+        # between get_object_or_404 and here) must not masquerade as "still
+        # working" — re-raise it.
+        if "unique" not in str(exc).lower():
+            raise
+
         def _busy():
             yield (
                 "event: error\ndata: "

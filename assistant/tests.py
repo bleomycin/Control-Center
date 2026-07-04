@@ -3717,6 +3717,93 @@ class TurnToucherTests(TransactionTestCase):
                 release.set()
                 consumer.join(timeout=5)
 
+    def test_toucher_stops_at_lifetime_cap(self):
+        """A worker wedged past TURN_TOUCH_MAX_SECONDS must stop being
+        touched — otherwise a hung no-timeout tool call keeps the session
+        busy-refusing sends and 409ing mutations until a container restart."""
+        import threading as _threading
+        import time as _time
+
+        from .client import _with_heartbeat
+        from .models import AssistantTurn
+
+        turn = self._make_turn()
+        release = _threading.Event()
+
+        def inner():
+            release.wait(10)
+            yield 'event: done\ndata: {}\n\n'
+
+        with patch("assistant.client.TURN_TOUCH_INTERVAL_SECONDS", 0.02), \
+                patch("assistant.client.TURN_TOUCH_MAX_SECONDS", 0.0):
+            gen = _with_heartbeat(inner(), interval=0.05, turn=turn)
+            consumer = _threading.Thread(
+                target=lambda: [None for _ in gen], daemon=True
+            )
+            consumer.start()
+            try:
+                # Cap of 0: the very first tick must break WITHOUT touching.
+                _time.sleep(0.3)
+                turn.refresh_from_db()
+                self.assertTrue(
+                    turn.is_stale,
+                    "toucher kept refreshing past its lifetime cap",
+                )
+            finally:
+                release.set()
+                consumer.join(timeout=5)
+
+    def test_superseded_worker_discards_writes(self):
+        """A worker whose turn was abandoned by the admission path (stale
+        false-positive: host sleep, clock step, toucher cap) must NOT persist
+        its answer — a newly admitted turn may already be writing into the
+        session, and interleaving corrupts tool pairing."""
+        from .models import AssistantSettings, AssistantTurn, ChatMessage, ChatSession
+
+        settings_obj = AssistantSettings.load()
+        settings_obj.api_key = "sk-test-key"
+        settings_obj.save()
+
+        session = ChatSession.objects.create(title="Existing chat")
+        turn = AssistantTurn.objects.create(
+            session=session, state=AssistantTurn.STATE_ABANDONED
+        )
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakeCompletingStream()
+            )
+            frames = list(
+                _stream_message_impl(session, "hello", turn=turn)
+            )
+
+        # The user message was saved (it predates the supersession check),
+        # but the answer was discarded and no terminal done was emitted.
+        self.assertFalse(
+            ChatMessage.objects.filter(session=session, role="assistant")
+            .exclude(content="")
+            .exists()
+        )
+        self.assertFalse(any(f.startswith("event: done") for f in frames))
+
+    def test_non_unique_integrity_error_is_not_busy(self):
+        """Only the running-turn uniqueness violation may read as 'busy'; an
+        FK failure (session deleted concurrently) must re-raise instead of
+        telling the user the assistant is still working."""
+        from django.db import IntegrityError
+
+        from .models import ChatSession
+
+        session = ChatSession.objects.create()
+        with patch(
+            "assistant.views.AssistantTurn.objects.create",
+            side_effect=IntegrityError("FOREIGN KEY constraint failed"),
+        ):
+            with self.assertRaises(IntegrityError):
+                self.client.post(
+                    reverse("assistant:stream", args=[session.pk]),
+                    {"message": "hello"},
+                )
+
     def test_touch_only_refreshes_running_turns(self):
         from datetime import timedelta
 

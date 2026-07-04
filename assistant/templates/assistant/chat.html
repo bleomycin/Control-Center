@@ -736,10 +736,15 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     e.preventDefault();
     var input = document.getElementById('chat-input');
     var text = input.value.trim();
+    if (!text) return;
     // Ignore submits while a stream is active (Enter bypasses the disabled
-    // send button) BEFORE clearing the input — the engine's own doSend guard
-    // would silently swallow the text otherwise.
-    if (!text || chatEngine.isStreaming()) return;
+    // send button; Process Email dispatches a synthetic submit) BEFORE
+    // clearing the input — the engine's own doSend guard would silently
+    // swallow the text otherwise. Say so, don't just no-op.
+    if (chatEngine.isStreaming()) {
+        showChatNotice('The assistant is still responding — wait for it to finish, then send again.');
+        return;
+    }
 
     // Prepend marker blocks. Final order in the message must be:
     //   [AttachedEmails]\n...\n[/AttachedEmails]\n
@@ -1236,35 +1241,24 @@ function bulkDeleteSessions() {
     if (count === 0) return;
     if (!confirm('Delete ' + count + ' conversation' + (count > 1 ? 's' : '') + '?')) return;
 
-    var form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '{% url "assistant:bulk_delete_sessions" %}';
-    form.style.display = 'none';
-
-    var csrf = document.createElement('input');
-    csrf.type = 'hidden';
-    csrf.name = 'csrfmiddlewaretoken';
-    csrf.value = CSRF_TOKEN;
-    form.appendChild(csrf);
-
-    var current = document.createElement('input');
-    current.type = 'hidden';
-    current.name = 'current';
-    current.value = SESSION_PK;
-    form.appendChild(current);
-
-    checked.forEach(function(cb) {
-        var h = document.createElement('input');
-        h.type = 'hidden';
-        h.name = 'selected';
-        h.value = cb.value;
-        form.appendChild(h);
+    // fetch (not a native form.submit) so the 409 busy refusal surfaces as
+    // an in-app toast instead of navigating to a bare plain-text page. The
+    // HX-Request header makes the view answer 200 + HX-Redirect.
+    var fd = new FormData();
+    fd.append('current', SESSION_PK);
+    checked.forEach(function(cb) { fd.append('selected', cb.value); });
+    fetch('{% url "assistant:bulk_delete_sessions" %}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': CSRF_TOKEN, 'HX-Request': 'true'},
+        body: fd,
+    }).then(function(resp) {
+        if (resp.status === 409) {
+            return resp.text().then(function(t) {
+                showChatNotice(t || 'The assistant is still working — wait for it to finish.');
+            });
+        }
+        window.location.href = resp.headers.get('HX-Redirect') || '/assistant/';
     });
-
-    // Use HTMX-style submission for proper redirect handling
-    form.setAttribute('hx-post', '{% url "assistant:bulk_delete_sessions" %}');
-    document.body.appendChild(form);
-    form.submit();
 }
 
 // Re-apply select mode after HTMX swaps

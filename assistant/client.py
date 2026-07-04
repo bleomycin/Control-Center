@@ -43,11 +43,20 @@ HEARTBEAT_INTERVAL_SECONDS = 5
 # high/max effort legitimately spends many minutes inside one turn.
 DETACHED_DRAIN_BUDGET_SECONDS = 20 * 60
 # Cadence of the dedicated toucher thread that refreshes
-# AssistantTurn.updated_at for the whole life of the stream worker (see
+# AssistantTurn.updated_at for the life of the stream worker (see
 # _with_heartbeat.keep_turn_fresh) — frequent enough that the staleness check
 # (AssistantTurn.STALE_AFTER_SECONDS) never false-positives on a live turn,
 # even one blocked in a single long tool call or a wedged upstream.
 TURN_TOUCH_INTERVAL_SECONDS = 30
+# ...but not forever: a worker wedged inside a tool call with no socket
+# timeout (Gmail/Drive clients) would otherwise keep its turn fresh
+# indefinitely — every send busy-refused, every retry/edit/prune 409'd,
+# until a container restart. After this cap the toucher stops, the turn goes
+# stale within STALE_AFTER_SECONDS, admission abandons it, and the
+# superseded worker discards any late writes (_turn_finalized_elsewhere).
+# Matches the detached drain budget — the design's own ceiling for useful
+# turn work.
+TURN_TOUCH_MAX_SECONDS = DETACHED_DRAIN_BUDGET_SECONDS
 CACHE_CONTROL = {"type": "ephemeral"}
 DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8192
@@ -1244,6 +1253,27 @@ def _touch_turn(turn):
         logger.exception("Failed to touch AssistantTurn %s", turn.pk)
 
 
+def _turn_finalized_elsewhere(turn):
+    """True when the turn row is no longer RUNNING — e.g. a >180s-stale turn
+    was abandoned by the admission path while this worker was in fact alive
+    (host slept mid-turn, clock step, or a tool call outliving the toucher
+    cap). A superseded worker must go SILENT: a new turn may already be
+    writing its own ChatMessages, so persisting ours would interleave the
+    two histories and corrupt tool pairing (the Phase 2 bug class). Never
+    raises; on a read failure returns False (don't discard work on a
+    transient hiccup)."""
+    if turn is None:
+        return False
+    from .models import AssistantTurn
+    try:
+        return not AssistantTurn.objects.filter(
+            pk=turn.pk, state=AssistantTurn.STATE_RUNNING
+        ).exists()
+    except Exception:
+        logger.exception("Failed to read state of AssistantTurn %s", turn.pk)
+        return False
+
+
 def _finalize_turn(turn, state, **fields):
     """Record the terminal state of a turn, never raising and never
     overwriting a state another path already finalized (conditional update)."""
@@ -1338,9 +1368,20 @@ def _with_heartbeat(inner_gen, interval=HEARTBEAT_INTERVAL_SECONDS, turn=None):
         blocking >STALE_AFTER_SECONDS made a LIVE turn read as stale, so the
         admission guard let a second turn interleave with the first. Runs for
         the WORKER's lifetime (not the consumer's), so detached drains stay
-        fresh too."""
+        fresh too. Capped at TURN_TOUCH_MAX_SECONDS so a wedged worker
+        (tool call with no socket timeout) can't hold the session busy
+        forever."""
+        started = time.monotonic()
         try:
             while not worker_done.wait(TURN_TOUCH_INTERVAL_SECONDS):
+                if time.monotonic() - started >= TURN_TOUCH_MAX_SECONDS:
+                    logger.error(
+                        "Assistant turn %s still running after %ss; letting "
+                        "it go stale so the session isn't locked out",
+                        getattr(turn, "pk", None),
+                        TURN_TOUCH_MAX_SECONDS,
+                    )
+                    break
                 _touch_turn(turn)
         finally:
             try:
@@ -1771,6 +1812,17 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                         output = result_obj
                     yield sse("tool_done", {"name": block.name, "result_summary": r_summary, "output": output})
 
+            # A superseded worker (turn abandoned by admission while this
+            # thread was alive) must not write — a new turn may be
+            # interleaving its own messages into this session.
+            if _turn_finalized_elsewhere(turn):
+                logger.warning(
+                    "Assistant turn %s was finalized elsewhere; discarding "
+                    "tool results without writing",
+                    turn.pk,
+                )
+                return
+
             # Save both messages atomically — a crash between the two
             # creates (or during either) persists neither, so history can
             # never hold a tool_use without its tool_result. Tools already
@@ -1804,6 +1856,15 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
             # Surface the stop live (text already streamed) and persist it.
             final_text += notice
             yield sse("token", {"text": notice})
+
+        # A superseded worker must not write (see the tool-pair check above).
+        if _turn_finalized_elsewhere(turn):
+            logger.warning(
+                "Assistant turn %s was finalized elsewhere; discarding the "
+                "final answer without writing",
+                turn.pk,
+            )
+            return
 
         # Save the final message
         try:
@@ -1840,6 +1901,13 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     # normal completion ("done") carrying the saved guidance message — the
     # client reloads and renders it — and fall back to "error" only if the
     # save itself failed (no message_id to show).
+    if _turn_finalized_elsewhere(turn):
+        logger.warning(
+            "Assistant turn %s was finalized elsewhere; discarding the "
+            "max-iterations notice without writing",
+            turn.pk,
+        )
+        return
     fallback_msg = _safe_create_message(
         session,
         "I reached the maximum number of tool calls for this message. Please try a more specific question.",

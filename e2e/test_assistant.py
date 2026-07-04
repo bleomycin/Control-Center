@@ -753,11 +753,13 @@ class AssistantConcurrencyGuardTests(PlaywrightTestCase):
         self.page.wait_for_timeout(300)
 
         # The second submit was ignored before doing anything: no second
-        # stream request, and the typed text was NOT cleared.
+        # stream request, and the typed text was NOT cleared — but not
+        # silently: a notice tells the user why.
         self.assertEqual(self.page.evaluate("window._streamCalls"), 1)
         self.assertEqual(
             self.page.input_value("#chat-input"), "second question"
         )
+        self.page.wait_for_selector("#chat-notice", timeout=2000)
 
         # The first stream still completes normally.
         self.page.wait_for_function(
@@ -804,4 +806,35 @@ class AssistantConcurrencyGuardTests(PlaywrightTestCase):
         self.assertTrue(self.page.locator("text=the answer").count() >= 1)
         self.assertEqual(
             ChatMessage.objects.filter(session=self.session).count(), 2
+        )
+
+    def test_bulk_delete_blocked_while_turn_running(self):
+        """Bulk delete goes through fetch (not a native form submit), so the
+        409 busy refusal must surface as an in-app toast — not a navigation
+        to a bare plain-text page — and delete nothing."""
+        from assistant.models import AssistantTurn
+
+        AssistantTurn.objects.create(
+            session=self.session, state=AssistantTurn.STATE_RUNNING
+        )
+        self._goto()
+        self.page.once("dialog", lambda d: d.accept())
+        self.page.evaluate(
+            "() => {"
+            " const cb = document.querySelector("
+            "   '#session-list input[name=\"session-select\"]');"
+            " if (!cb) throw new Error('no session checkbox');"
+            " cb.checked = true;"
+            " bulkDeleteSessions();"
+            "}"
+        )
+        self.page.wait_for_selector("#chat-notice", timeout=5000)
+        self.assertIn(
+            "still working",
+            self.page.locator("#chat-notice").text_content(),
+        )
+        # Still on the chat page, session intact.
+        self.assertGreaterEqual(self.page.locator("#chat-input").count(), 1)
+        self.assertTrue(
+            ChatSession.objects.filter(pk=self.session.pk).exists()
         )

@@ -421,7 +421,16 @@ function createChatEngine(config) {
         var body = new FormData();
         body.append('message', fullText);
         body.append('mode', currentMode);
-        var eff = config.getEffort ? config.getEffort(currentMode) : '';
+        // A throwing config callback here would leave streaming=true with no
+        // finish() ever scheduled — and the doSend guard would then brick
+        // every future send until reload (getDrawerEffort reads
+        // localStorage, which throws when site data is blocked).
+        var eff = '';
+        try {
+            eff = config.getEffort ? config.getEffort(currentMode) : '';
+        } catch (effErr) {
+            console.error('getEffort failed; sending without effort:', effErr);
+        }
         if (eff) body.append('effort', eff);
         resetWatchdog();
 
