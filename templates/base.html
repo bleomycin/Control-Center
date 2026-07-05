@@ -235,6 +235,10 @@
         });
 
         function initDrawer(query) {
+            // Discard the outgoing engine so a title poll (or queued render)
+            // still in flight from the previous drawer session can't write
+            // into the DOM this new engine is about to own.
+            if (drawerEngine && drawerEngine.teardown) drawerEngine.teardown();
             var url = '/assistant/drawer-session/' + (query || '');
             // POST: both branches of the endpoint can create a session, and
             // GET state changes bypass CSRF (Phase 5 Defect D).

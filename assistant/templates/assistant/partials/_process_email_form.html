@@ -336,7 +336,11 @@ function _sendToActiveChat(message) {
     if (chatInput && chatForm) {
         chatInput.value = message;
         chatInput.dispatchEvent(new Event('input', {bubbles: true}));
-        chatForm.dispatchEvent(new Event('submit'));
+        // Must be cancelable: #chat-form / #drawer-chat-form have no action,
+        // so their submit handlers' preventDefault() is a no-op on a
+        // non-cancelable event and the form does a native GET navigation that
+        // drops the message (same fix as chat.html / drawer / chat.js submits).
+        chatForm.dispatchEvent(new Event('submit', {cancelable: true}));
     }
 }
 

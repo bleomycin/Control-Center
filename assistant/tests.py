@@ -5485,3 +5485,54 @@ class ModelIdValidationTests(TestCase):
         form = self._form("  claude-sonnet-4-6  ")
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["model"], "claude-sonnet-4-6")
+
+
+class SyntheticSubmitCancelableTests(TestCase):
+    """Phase 6 bug-check follow-up: #chat-form / #drawer-chat-form have no
+    action, so their submit handlers' preventDefault() is a no-op unless the
+    dispatched submit event is cancelable — a non-cancelable synthetic submit
+    does a native GET navigation that drops the typed/generated message. Every
+    synthetic `dispatchEvent(new Event('submit'...))` in the assistant UI must
+    therefore pass `cancelable: true`. This guards the whole sweep against a
+    future call site being added without it (one was missed the first pass:
+    _process_email_form.html's send-to-active-chat)."""
+
+    def _sources(self):
+        import os
+
+        from django.conf import settings
+
+        base = settings.BASE_DIR
+        rel = [
+            "assistant/templates/assistant/chat.html",
+            "assistant/templates/assistant/partials/_process_email_form.html",
+            "templates/partials/_assistant_drawer.html",
+            "static/js/assistant-chat.js",
+        ]
+        for r in rel:
+            path = os.path.join(base, r)
+            with open(path, encoding="utf-8") as fh:
+                yield r, fh.read()
+
+    def test_every_synthetic_submit_is_cancelable(self):
+        import re
+
+        # Match a submit-event construction and capture up to its options.
+        pattern = re.compile(r"new Event\(\s*['\"]submit['\"]\s*(,[^)]*)?\)")
+        offenders = []
+        found_any = False
+        for name, text in self._sources():
+            for m in pattern.finditer(text):
+                found_any = True
+                opts = m.group(1) or ""
+                if "cancelable" not in opts:
+                    line = text[: m.start()].count("\n") + 1
+                    offenders.append(f"{name}:{line}")
+        # Sanity: the regex must actually be finding the dispatches, otherwise
+        # a rename would make this test silently vacuous.
+        self.assertTrue(found_any, "no synthetic submit events found — test is stale")
+        self.assertEqual(
+            offenders, [],
+            "non-cancelable synthetic submit(s) — these drop the message via a "
+            "native GET navigation: " + ", ".join(offenders),
+        )

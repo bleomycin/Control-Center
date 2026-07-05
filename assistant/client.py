@@ -1884,9 +1884,13 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
         # blocking Haiku call no longer sits between the answer and the
         # `done` event on a session's first exchange (Phase 6 Defect D).
         # `title_pending` tells the client to poll turn-status briefly after
-        # the stream ends and pick the title up from there. If the enqueue
-        # itself fails (broker down), fall back to the old inline path so a
-        # title is never silently skipped.
+        # the stream ends and pick the title up from there. The inline fallback
+        # below only covers the enqueue call itself throwing (e.g. the ORM
+        # broker's queue-table write fails). It does NOT cover a dead or wedged
+        # qcluster: async_task just writes a queue row and returns success, so a
+        # non-consuming worker leaves the title at "New Chat" (recovered
+        # cosmetically on a later exchange). Accepted — the title is cosmetic
+        # and qcluster liveness underpins all background work here anyway.
         if session.title == "New Chat" and final_text:
             try:
                 from django_q.tasks import async_task

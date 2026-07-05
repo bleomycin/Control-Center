@@ -141,6 +141,10 @@ function createChatEngine(config) {
     // Async title pickup (title_pending SSE → post-finish turn-status poll)
     var titlePending = false;
     var titlePollTimer = null;
+    // Set when this engine is replaced (drawer "new session" rebuilds the
+    // engine): a still-in-flight title poll must not write into the DOM the
+    // successor now owns.
+    var torndown = false;
     // Frame-batched streaming render: token events only append to
     // collectedText; the innerHTML rebuild runs at most once per animation
     // frame (re-parsing the whole accumulated markdown per token was O(n²)
@@ -425,6 +429,11 @@ function createChatEngine(config) {
                 return r.json();
             })
             .then(function(data) {
+                // A drawer "new session" can replace this engine while a poll
+                // is in flight; without this guard the resolving fetch would
+                // write the OLD session's title into the NEW session's title
+                // element (shared #drawer-session-title node).
+                if (torndown) return;
                 if (data.session_title && data.session_title !== 'New Chat') {
                     if (config.onTitle) config.onTitle(data.session_title);
                     return;
@@ -686,6 +695,18 @@ function createChatEngine(config) {
         return loadMessages();
     }
 
+    function teardown() {
+        // Called before an engine is discarded (drawer session swap) so its
+        // async work can't touch the successor's DOM: stop the title poll
+        // (timer + in-flight fetch via the torndown guard), drop any queued
+        // render frame, and clear the recovery/inactivity timers.
+        torndown = true;
+        if (titlePollTimer) { clearTimeout(titlePollTimer); titlePollTimer = null; }
+        cancelScheduledRender();
+        if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null; }
+        if (recoverTimer) { clearTimeout(recoverTimer); recoverTimer = null; }
+    }
+
     return {
         doSend: doSend,
         loadMessages: loadMessages,
@@ -694,5 +715,6 @@ function createChatEngine(config) {
         isStreaming: function() { return streaming; },
         setMode: function(m) { currentMode = m; },
         getMode: function() { return currentMode; },
+        teardown: teardown,
     };
 }
