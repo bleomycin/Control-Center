@@ -30,4 +30,9 @@ python manage.py qcluster &
 mkdir -p /app/backups
 
 echo "Starting Gunicorn..."
-exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 4 --worker-class gthread --timeout 300 --error-logfile - --capture-output
+# --threads 16: each streaming assistant turn holds a gthread slot for
+# minutes (SSE response + detached drains), so 2x4=8 slots starved the rest
+# of the app during 2-3 concurrent turns. gthread threads are cheap for
+# I/O-bound work; 2x16=32 slots. Workers stay at 2 — SQLite is
+# single-writer, so more processes only add lock contention.
+exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 16 --worker-class gthread --timeout 300 --error-logfile - --capture-output

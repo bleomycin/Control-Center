@@ -640,11 +640,14 @@ class ChoiceTemplateFilterTests(TestCase):
 
 
 class SQLitePragmaTests(TestCase):
-    """Test that SQLite pragmas are applied via the connection_created signal.
+    """Test that SQLite pragmas are applied via DATABASES OPTIONS
+    (init_command) — Phase 6 moved them out of the connection_created signal
+    that used to live in dashboard/apps.py (it fired after init_command and
+    overrode busy_timeout with a conflicting value).
 
     Note: Django test runner uses in-memory SQLite, so WAL mode returns
-    'memory' instead of 'wal'. We test that the signal fires and sets
-    the other pragmas correctly.
+    'memory' instead of 'wal'. We test that the other pragmas are applied
+    to every new connection correctly.
     """
 
     def test_wal_mode_requested(self):
@@ -660,7 +663,9 @@ class SQLitePragmaTests(TestCase):
         with connection.cursor() as cursor:
             cursor.execute('PRAGMA busy_timeout;')
             timeout = cursor.fetchone()[0]
-        self.assertEqual(timeout, 15000)
+        # Matches both OPTIONS['timeout'] (seconds) and the init_command
+        # pragma — keep the three in sync.
+        self.assertEqual(timeout, 20000)
 
     def test_foreign_keys_enabled(self):
         from django.db import connection

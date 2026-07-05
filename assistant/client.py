@@ -1540,6 +1540,9 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
       event: tool_start     — a tool is being called
       event: tool_done      — a tool finished
       event: token          — a text token from the final response
+      event: title_pending  — a background title task was enqueued; the
+                              client polls turn-status for the title after
+                              the stream ends
       event: done           — stream complete, message saved
       event: error          — an error occurred
 
@@ -1877,14 +1880,31 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
             yield sse("error", {"message": "Failed to save response. Try again."})
             return
 
-        # Update session title (AI-generated)
+        # Session title (AI-generated): offloaded to Django-Q2 so the ~1-2s
+        # blocking Haiku call no longer sits between the answer and the
+        # `done` event on a session's first exchange (Phase 6 Defect D).
+        # `title_pending` tells the client to poll turn-status briefly after
+        # the stream ends and pick the title up from there. If the enqueue
+        # itself fails (broker down), fall back to the old inline path so a
+        # title is never silently skipped.
         if session.title == "New Chat" and final_text:
             try:
-                session.title = _generate_title(client, user_text, final_text)
-                session.save(update_fields=["title", "updated_at"])
-                yield sse("title", {"title": session.title})
+                from django_q.tasks import async_task
+                async_task(
+                    "assistant.tasks.generate_session_title",
+                    session.pk, user_text, final_text,
+                )
+                yield sse("title_pending", {})
             except Exception:
-                logger.exception("Failed to generate/save session title")
+                logger.exception(
+                    "Failed to enqueue title task; generating inline"
+                )
+                try:
+                    session.title = _generate_title(client, user_text, final_text)
+                    session.save(update_fields=["title", "updated_at"])
+                    yield sse("title", {"title": session.title})
+                except Exception:
+                    logger.exception("Failed to generate/save session title")
 
         confirm_required = has_dry_run and not has_write_executed
         _finalize_turn(

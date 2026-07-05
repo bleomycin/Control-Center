@@ -694,6 +694,14 @@ def summarize():
     return stats
 
 
+# Cap on the joined thread text a single read_email call returns — same
+# budget rationale as documents.extract.MAX_CHARS: the tool_result is
+# re-sent on every later iteration/turn in the window, so an uncapped
+# 100-message thread inflates every subsequent request. There is no offset
+# pagination for emails; the truncation note tells the model what was cut.
+READ_EMAIL_MAX_CHARS = 40_000
+
+
 def read_email(id):
     """Fetch full email thread content for a linked EmailLink record."""
     from email_links.models import EmailLink
@@ -731,7 +739,21 @@ def read_email(id):
         parts.append(body)
         parts.append("")
 
-    return {"content": "\n".join(parts)}
+    content = "\n".join(parts)
+    if len(content) > READ_EMAIL_MAX_CHARS:
+        total_chars = len(content)
+        content = content[:READ_EMAIL_MAX_CHARS] + (
+            f"\n\n[Email thread truncated at char {READ_EMAIL_MAX_CHARS} of "
+            f"{total_chars} — the rest was NOT read. Do not cite or infer "
+            f"anything past this point; tell the user the thread was "
+            f"truncated if the answer may be in the cut portion.]"
+        )
+        return {
+            "content": content,
+            "truncated": True,
+            "total_chars": total_chars,
+        }
+    return {"content": content}
 
 
 def read_document(id, offset=0):

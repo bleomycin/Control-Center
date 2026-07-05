@@ -36,10 +36,12 @@ from io import BytesIO
 
 logger = logging.getLogger(__name__)
 
-# Per-call slice cap on extracted text — about 50k tokens. Sized against
-# Sonnet/Opus 200k context windows; models paginate via `offset` for docs
-# larger than this.
-MAX_CHARS = 200_000
+# Per-call slice cap on extracted text — about 10k tokens. A larger slice
+# isn't just a one-time cost: the tool_result is re-sent on every later
+# iteration and turn while it stays inside the truncation window, so one
+# 200k-char read used to inflate every subsequent request by ~50k tokens.
+# Models paginate via `offset` for docs larger than this.
+MAX_CHARS = 40_000
 
 # Per-sheet row cap for spreadsheets so a 50-sheet workbook doesn't blow up.
 MAX_XLSX_ROWS_PER_SHEET = 1000

@@ -1,0 +1,17 @@
+{% if labels %}
+<select name="label" id="attach-label-select"
+        class="bg-gray-700 border border-gray-600 rounded-lg px-2 py-2 text-sm text-gray-200 w-full sm:w-auto sm:max-w-36"
+        onchange="htmx.trigger(document.getElementById('attach-email-search'), 'attach-open')">
+    <option value="">All Mail</option>
+    <optgroup label="System">
+        {% for lbl in labels %}{% if lbl.type == "system" %}
+        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+        {% endif %}{% endfor %}
+    </optgroup>
+    <optgroup label="Labels">
+        {% for lbl in labels %}{% if lbl.type == "user" %}
+        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+        {% endif %}{% endfor %}
+    </optgroup>
+</select>
+{% endif %}

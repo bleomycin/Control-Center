@@ -20,6 +20,7 @@ urlpatterns = [
     path("sessions/reorder/", views.reorder_sessions, name="reorder_sessions"),
     path("sessions/bulk-delete/", views.bulk_delete_sessions, name="bulk_delete_sessions"),
     path("process-email/", views.process_email_form, name="process_email"),
+    path("gmail-labels/", views.gmail_labels, name="gmail_labels"),
     path("gmail-search/", views.gmail_thread_search, name="gmail_thread_search"),
     path("gmail-thread/", views.gmail_thread_fetch, name="gmail_thread_fetch"),
     path("drawer-session/", views.drawer_session, name="drawer_session"),

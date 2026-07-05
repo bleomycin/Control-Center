@@ -5172,3 +5172,316 @@ class TurnIdInStreamTests(TransactionTestCase):
         payload = json.loads(user_frames[0].split("data: ", 1)[1])
         turn = AssistantTurn.objects.get(session=session)
         self.assertEqual(payload["turn_id"], turn.pk)
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 — performance polish & infrastructure
+# ---------------------------------------------------------------------------
+
+
+class ToolResultCapTests(TestCase):
+    """Phase 6 Defect A: tool results must be size-capped — an uncapped slice
+    is re-sent on every later iteration/turn while it stays inside the
+    truncation window, inflating every subsequent request."""
+
+    def test_read_document_slice_cap_is_bounded(self):
+        """MAX_CHARS regression pin: the cap must stay in the ~30-50k range
+        (200k chars ≈ 50k tokens re-billed per request was the defect)."""
+        from documents import extract
+
+        self.assertLessEqual(extract.MAX_CHARS, 50_000)
+        self.assertGreaterEqual(extract.MAX_CHARS, 30_000)
+
+    def _giant_thread(self, chars):
+        return [{
+            "from_name": "Al", "from_email": "al@example.com",
+            "date": "2026-07-01", "body": "x" * chars,
+        }]
+
+    def test_read_email_truncates_giant_thread(self):
+        from email_links.models import EmailLink
+        from .tools import READ_EMAIL_MAX_CHARS, read_email
+
+        el = EmailLink.objects.create(message_id="t-big", subject="Big thread")
+        with patch("email_links.gmail.is_available", return_value=True), \
+             patch(
+                 "email_links.gmail.get_thread_messages",
+                 return_value=self._giant_thread(READ_EMAIL_MAX_CHARS * 3),
+             ):
+            result = read_email(el.pk)
+
+        self.assertTrue(result["truncated"])
+        self.assertGreater(result["total_chars"], READ_EMAIL_MAX_CHARS)
+        # Capped content + a bounded truncation note the model can act on.
+        self.assertLess(len(result["content"]), READ_EMAIL_MAX_CHARS + 500)
+        self.assertIn("truncated", result["content"])
+
+    def test_read_email_small_thread_not_truncated(self):
+        from email_links.models import EmailLink
+        from .tools import read_email
+
+        el = EmailLink.objects.create(message_id="t-small", subject="Small")
+        with patch("email_links.gmail.is_available", return_value=True), \
+             patch(
+                 "email_links.gmail.get_thread_messages",
+                 return_value=self._giant_thread(200),
+             ):
+            result = read_email(el.pk)
+
+        self.assertNotIn("truncated", result)
+        self.assertIn("x" * 200, result["content"])
+
+
+class SqliteOptionsTests(TestCase):
+    """Phase 6 Defect B: the DATABASES OPTIONS are load-bearing — IMMEDIATE
+    transactions serialize the history-mutation guards against turn
+    admission, and the busy timeout is what keeps lock waits from surfacing
+    as OperationalError 500s. Pin them."""
+
+    def test_sqlite_options_pinned(self):
+        from django.conf import settings as dj_settings
+
+        opts = dj_settings.DATABASES["default"]["OPTIONS"]
+        self.assertEqual(opts["transaction_mode"], "IMMEDIATE")
+        self.assertEqual(opts["timeout"], 20)
+        self.assertIn("busy_timeout=20000", opts["init_command"])
+        self.assertIn("journal_mode=WAL", opts["init_command"])
+        self.assertIn("synchronous=NORMAL", opts["init_command"])
+        # Carried over from the retired dashboard/apps.py signal handler.
+        self.assertIn("cache_size=-20000", opts["init_command"])
+
+    def test_no_conflicting_pragma_signal(self):
+        """The old connection_created signal in dashboard/apps.py fired
+        AFTER init_command and silently overrode busy_timeout (20000 →
+        15000). init_command is the single source of truth now — a live
+        connection must report the init_command value."""
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute("PRAGMA busy_timeout;")
+            self.assertEqual(cursor.fetchone()[0], 20000)
+
+
+class LazyGmailLabelsTests(TestCase):
+    """Phase 6 Defect C: the chat page must render without a Gmail network
+    round-trip; the label picker loads on-demand via the gmail_labels
+    partial."""
+
+    def setUp(self):
+        self.session = ChatSession.objects.create(title="Chat")
+
+    def test_chat_page_does_not_fetch_labels(self):
+        with patch("email_links.gmail.is_available", return_value=True), \
+             patch("email_links.gmail.get_labels") as mock_labels:
+            response = self.client.get(
+                reverse("assistant:chat_session", kwargs={"session_id": self.session.pk})
+            )
+        self.assertEqual(response.status_code, 200)
+        mock_labels.assert_not_called()
+        # The lazy wrapper is present so the picker still gets its labels.
+        self.assertContains(response, "gmail-labels")
+
+    def test_gmail_labels_view_renders_select(self):
+        labels = [
+            {"id": "INBOX", "name": "Inbox", "type": "system"},
+            {"id": "Label_1", "name": "Work", "type": "user"},
+        ]
+        with patch("email_links.gmail.is_available", return_value=True), \
+             patch("email_links.gmail.get_labels", return_value=labels):
+            response = self.client.get(reverse("assistant:gmail_labels"))
+        self.assertContains(response, "attach-label-select")
+        self.assertContains(response, "Inbox")
+        self.assertContains(response, "Work")
+
+    def test_gmail_labels_view_empty_when_unavailable(self):
+        with patch("email_links.gmail.is_available", return_value=False), \
+             patch("email_links.gmail.get_labels") as mock_labels:
+            response = self.client.get(reverse("assistant:gmail_labels"))
+        self.assertEqual(response.status_code, 200)
+        mock_labels.assert_not_called()
+        self.assertNotContains(response, "attach-label-select")
+
+
+class AsyncTitleTests(TestCase):
+    """Phase 6 Defect D: the first-exchange title is generated in the
+    background (Django-Q2) after `done`, not by a blocking Haiku call
+    before it."""
+
+    def setUp(self):
+        settings_obj = AssistantSettings.load()
+        settings_obj.api_key = "sk-test-key"
+        settings_obj.save()
+
+    def test_stream_enqueues_title_task_and_emits_title_pending(self):
+        session = ChatSession.objects.create()  # title defaults to "New Chat"
+        with patch("assistant.client.anthropic.Anthropic") as MockClient, \
+             patch("django_q.tasks.async_task") as mock_async:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakePhase2Stream(_api_response([_text_block("the answer")]))
+            )
+            frames = list(_stream_message_impl(session, "hi"))
+
+        mock_async.assert_called_once_with(
+            "assistant.tasks.generate_session_title",
+            session.pk, "hi", "the answer",
+        )
+        self.assertTrue(
+            any(f.startswith("event: title_pending") for f in frames), frames
+        )
+        # No inline title: no `title` SSE, no blocking Haiku call, title
+        # unchanged until the task runs.
+        self.assertFalse(any(f.startswith("event: title\n") for f in frames))
+        MockClient.return_value.messages.create.assert_not_called()
+        session.refresh_from_db()
+        self.assertEqual(session.title, "New Chat")
+        # done still arrives (title work no longer sits in front of it).
+        self.assertTrue(any(f.startswith("event: done") for f in frames))
+
+    def test_stream_does_not_enqueue_for_titled_session(self):
+        session = ChatSession.objects.create(title="Existing chat")
+        with patch("assistant.client.anthropic.Anthropic") as MockClient, \
+             patch("django_q.tasks.async_task") as mock_async:
+            MockClient.return_value.messages.stream.return_value = (
+                _FakePhase2Stream(_api_response([_text_block("answer")]))
+            )
+            frames = list(_stream_message_impl(session, "hi"))
+
+        mock_async.assert_not_called()
+        self.assertFalse(any(f.startswith("event: title_pending") for f in frames))
+
+    def test_stream_falls_back_inline_when_enqueue_fails(self):
+        """A broken broker must not silently skip the title — the old inline
+        path runs instead."""
+        session = ChatSession.objects.create()
+        with patch("assistant.client.anthropic.Anthropic") as MockClient, \
+             patch(
+                 "django_q.tasks.async_task",
+                 side_effect=RuntimeError("broker down"),
+             ):
+            MockClient.return_value.messages.stream.return_value = (
+                _FakePhase2Stream(_api_response([_text_block("the answer")]))
+            )
+            MockClient.return_value.messages.create.return_value = (
+                _api_response([_text_block("Fallback Title")])
+            )
+            frames = list(_stream_message_impl(session, "hi"))
+
+        session.refresh_from_db()
+        self.assertEqual(session.title, "Fallback Title")
+        self.assertTrue(any(f.startswith("event: title\n") for f in frames))
+
+    def test_title_task_sets_title(self):
+        from .tasks import generate_session_title
+
+        session = ChatSession.objects.create()
+        before = session.updated_at
+        with patch(
+            "assistant.client._get_client_and_model",
+            return_value=(MagicMock(), "m"),
+        ), patch(
+            "assistant.client._generate_title", return_value="Task Title"
+        ):
+            generate_session_title(session.pk, "hi", "answer")
+
+        session.refresh_from_db()
+        self.assertEqual(session.title, "Task Title")
+        self.assertGreaterEqual(session.updated_at, before)
+
+    def test_title_task_never_overwrites_existing_title(self):
+        from .tasks import generate_session_title
+
+        session = ChatSession.objects.create(title="My renamed chat")
+        with patch("assistant.client._get_client_and_model") as mock_gc:
+            generate_session_title(session.pk, "hi", "answer")
+
+        mock_gc.assert_not_called()
+        session.refresh_from_db()
+        self.assertEqual(session.title, "My renamed chat")
+
+    def test_title_task_survives_missing_session_and_client_errors(self):
+        from .tasks import generate_session_title
+
+        # Deleted session: returns quietly.
+        generate_session_title(999999, "hi", "answer")
+
+        # No API client available: title stays default, no exception.
+        session = ChatSession.objects.create()
+        with patch(
+            "assistant.client._get_client_and_model",
+            side_effect=ValueError("No API key configured"),
+        ):
+            generate_session_title(session.pk, "hi", "answer")
+        session.refresh_from_db()
+        self.assertEqual(session.title, "New Chat")
+
+    def test_turn_status_includes_session_title(self):
+        from .models import AssistantTurn
+
+        session = ChatSession.objects.create(title="Fresh Title")
+        AssistantTurn.objects.create(
+            session=session, state=AssistantTurn.STATE_COMPLETED
+        )
+        response = self.client.get(
+            reverse("assistant:turn_status", kwargs={"session_id": session.pk})
+        )
+        self.assertEqual(response.json()["session_title"], "Fresh Title")
+
+
+class DrawerSessionOrderingTests(TestCase):
+    """Phase 6 Defect F: drawer_session must return the most RECENT session.
+    A bare .first() follows Meta.ordering (-is_pinned first) and returned a
+    pinned old session instead."""
+
+    def test_pinned_old_session_not_preferred(self):
+        old_pinned = ChatSession.objects.create(title="Old pinned", is_pinned=True)
+        new_unpinned = ChatSession.objects.create(title="Newer")
+        # Guard the fixture: the pinned session really is older.
+        self.assertLess(old_pinned.updated_at, new_unpinned.updated_at)
+
+        response = self.client.post(reverse("assistant:drawer_session"))
+        self.assertEqual(response.json()["session_id"], new_unpinned.pk)
+
+
+class ModelIdValidationTests(TestCase):
+    """Phase 6 Defect F: a typo'd model id used to save fine and then fail
+    every send as a request-time 404 — reject it at save time instead."""
+
+    def _form(self, model_id):
+        from .forms import AssistantSettingsForm
+
+        return AssistantSettingsForm(data={
+            "owner_name": "",
+            "api_key": "sk-test",
+            "model": model_id,
+            "max_tokens": 8192,
+            "temperature": "0.0",
+            "default_reminder_minutes": 60,
+        })
+
+    def test_valid_ids_accepted(self):
+        for model_id in (
+            "claude-sonnet-4-6",
+            "claude-haiku-4-5-20251001",
+            "claude-opus-4-8",
+            "claude-sonnet-5",
+        ):
+            form = self._form(model_id)
+            self.assertTrue(form.is_valid(), (model_id, form.errors))
+
+    def test_invalid_ids_rejected(self):
+        for model_id in (
+            "gpt-4o",
+            "claude sonnet 4.6",
+            "Claude-Sonnet-4-6",
+            "sonnet-4-6",
+            "",
+        ):
+            form = self._form(model_id)
+            self.assertFalse(form.is_valid(), model_id)
+            if model_id:
+                self.assertIn("model", form.errors)
+
+    def test_surrounding_whitespace_stripped(self):
+        form = self._form("  claude-sonnet-4-6  ")
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data["model"], "claude-sonnet-4-6")

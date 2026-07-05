@@ -218,7 +218,21 @@
             if (fab) fab.classList.remove('hidden');
         }
 
-        var drawerFormWired = false;
+        // Wire the drawer form at page load, NOT inside initDrawer: the
+        // handler used to attach only after the drawer-session fetch
+        // resolved, so a fast Send click performed the form's native GET —
+        // a full-page navigation that lost the typed message. preventDefault
+        // always runs now; the engine guard below covers the not-ready gap.
+        document.getElementById('drawer-chat-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (!drawerEngine) return;  // still initializing (or init failed)
+            var input = document.getElementById('drawer-chat-input');
+            var text = input.value.trim();
+            if (!text || drawerEngine.isStreaming()) return;
+            input.value = '';
+            input.style.height = 'auto';
+            drawerEngine.doSend(text);
+        });
 
         function initDrawer(query) {
             var url = '/assistant/drawer-session/' + (query || '');
@@ -228,7 +242,10 @@
                 method: 'POST',
                 headers: {'X-CSRFToken': CSRF_TOKEN_GLOBAL}
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
             .then(function(data) {
                 drawerSessionPk = data.session_id;
                 // Show session title if it has one
@@ -267,21 +284,19 @@
                         }
                     },
                 });
-                // Wire up form submit once
-                if (!drawerFormWired) {
-                    drawerFormWired = true;
-                    document.getElementById('drawer-chat-form').addEventListener('submit', function(e) {
-                        e.preventDefault();
-                        var input = document.getElementById('drawer-chat-input');
-                        var text = input.value.trim();
-                        if (!text || drawerEngine.isStreaming()) return;
-                        input.value = '';
-                        input.style.height = 'auto';
-                        drawerEngine.doSend(text);
-                    });
-                }
                 // Load existing messages
                 drawerEngine.loadMessages();
+            })
+            .catch(function(err) {
+                // Session fetch failed: without this catch the drawer just
+                // sat on its empty state forever. Surface the failure; the
+                // submit handler above already no-ops while !drawerEngine.
+                console.error('Drawer init failed:', err);
+                var empty = document.getElementById('drawer-empty-state');
+                if (empty) {
+                    var msg = empty.querySelector('p');
+                    if (msg) msg.textContent = 'Could not reach the assistant — reload the page to retry.';
+                }
             });
         }
 

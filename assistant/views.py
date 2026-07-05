@@ -60,8 +60,11 @@ def chat_page(request, session_id=None):
 
     from documents.models import GoogleDriveSettings
     from email_links import gmail
+    # is_available() is a local credential/scope check; the label list is a
+    # Gmail network round-trip and used to block every full-page load. It now
+    # loads lazily via the gmail_labels HTMX partial when the email attach
+    # panel first opens (mirroring process_email_form's on-demand fetch).
     gmail_available = gmail.is_available()
-    labels = gmail.get_labels() if gmail_available else []
     drive_connected = GoogleDriveSettings.load().is_connected
 
     return render(request, "assistant/chat.html", {
@@ -72,7 +75,6 @@ def chat_page(request, session_id=None):
         "chat_messages": display_messages,
         "form": form,
         "gmail_available": gmail_available,
-        "labels": labels,
         "drive_connected": drive_connected,
     })
 
@@ -168,6 +170,9 @@ def turn_status(request, session_id):
         "client_disconnected": turn.client_disconnected,
         "confirm_required": turn.confirm_required,
         "final_message_id": turn.final_message_id,
+        # Lets the client pick up the async-generated title after `done`
+        # (the title task runs in qcluster; see the title_pending SSE event).
+        "session_title": session.title,
     })
 
 
@@ -185,16 +190,20 @@ def bulk_delete_sessions(request):
     ids = request.POST.getlist("selected")
     # Same race as delete_session: a session with a live running turn is
     # still being written by a detached worker — refuse the whole batch.
-    for busy_session in ChatSession.objects.filter(pk__in=ids):
-        if _live_running_turn(busy_session):
-            return HttpResponse(BUSY_MESSAGE, status=409)
-    if ids:
-        # Don't delete the current session if it's in the list
-        current_id = request.POST.get("current")
-        ChatSession.objects.filter(pk__in=ids).exclude(pk=current_id).delete()
-        # Also delete current if selected (handle redirect)
-        if current_id in ids:
-            ChatSession.objects.filter(pk=current_id).delete()
+    # atomic() + transaction_mode=IMMEDIATE takes the SQLite write lock at
+    # BEGIN, so the guard-then-delete pair is serialized against turn
+    # admission's INSERT (the ms-scale TOCTOU closed here in Phase 6).
+    with transaction.atomic():
+        for busy_session in ChatSession.objects.filter(pk__in=ids):
+            if _live_running_turn(busy_session):
+                return HttpResponse(BUSY_MESSAGE, status=409)
+        if ids:
+            # Don't delete the current session if it's in the list
+            current_id = request.POST.get("current")
+            ChatSession.objects.filter(pk__in=ids).exclude(pk=current_id).delete()
+            # Also delete current if selected (handle redirect)
+            if current_id in ids:
+                ChatSession.objects.filter(pk=current_id).delete()
 
     if request.headers.get("HX-Request"):
         remaining = ChatSession.objects.first()
@@ -214,9 +223,12 @@ def delete_session(request, session_id):
     session = get_object_or_404(ChatSession, pk=session_id)
     # Deleting cascades to the running turn's ChatMessages while a detached
     # worker may still be writing them — refuse until the turn finishes.
-    if _live_running_turn(session):
-        return HttpResponse(BUSY_MESSAGE, status=409)
-    session.delete()
+    # atomic() under transaction_mode=IMMEDIATE serializes guard+delete
+    # against admission's INSERT (write lock taken at BEGIN).
+    with transaction.atomic():
+        if _live_running_turn(session):
+            return HttpResponse(BUSY_MESSAGE, status=409)
+        session.delete()
 
     if request.headers.get("HX-Request"):
         remaining = ChatSession.objects.first()
@@ -262,31 +274,36 @@ def retry_message(request, session_id, message_id):
     if msg.role != "assistant":
         return JsonResponse({"error": "Can only retry assistant messages"}, status=400)
 
-    # A detached running turn may still be writing this history (Defect C).
-    if _live_running_turn(session):
-        return JsonResponse({"error": BUSY_MESSAGE}, status=409)
+    # atomic() under transaction_mode=IMMEDIATE serializes the busy guard and
+    # the range-delete against turn admission's INSERT — without it a send
+    # admitted between the check and the delete could have its just-saved
+    # user message swept by the range-delete (ms-scale TOCTOU).
+    with transaction.atomic():
+        # A detached running turn may still be writing this history (Defect C).
+        if _live_running_turn(session):
+            return JsonResponse({"error": BUSY_MESSAGE}, status=409)
 
-    # Find the REAL user message that started this turn. Tool-result rows are
-    # also role="user" with content="" — matching one of those returned empty
-    # text and made Retry silently destructive (deleted the answer, re-asked
-    # nothing).
-    user_msg = (
-        session.messages.filter(
-            role="user", tool_data__isnull=True, created_at__lt=msg.created_at
+        # Find the REAL user message that started this turn. Tool-result rows
+        # are also role="user" with content="" — matching one of those
+        # returned empty text and made Retry silently destructive (deleted
+        # the answer, re-asked nothing).
+        user_msg = (
+            session.messages.filter(
+                role="user", tool_data__isnull=True, created_at__lt=msg.created_at
+            )
+            .exclude(content="")
+            .order_by("-created_at")
+            .first()
         )
-        .exclude(content="")
-        .order_by("-created_at")
-        .first()
-    )
-    user_text = user_msg.content if user_msg else ""
+        user_text = user_msg.content if user_msg else ""
 
-    # Delete the whole turn being retried: everything after the user message
-    # that started it (its tool pairs included), so the resend regenerates
-    # from a clean boundary.
-    if user_msg is not None:
-        session.messages.filter(created_at__gt=user_msg.created_at).delete()
-    else:
-        session.messages.filter(created_at__gte=msg.created_at).delete()
+        # Delete the whole turn being retried: everything after the user
+        # message that started it (its tool pairs included), so the resend
+        # regenerates from a clean boundary.
+        if user_msg is not None:
+            session.messages.filter(created_at__gt=user_msg.created_at).delete()
+        else:
+            session.messages.filter(created_at__gte=msg.created_at).delete()
 
     return JsonResponse({"user_text": user_text, "action": "retry"})
 
@@ -300,14 +317,17 @@ def edit_message(request, session_id, message_id):
     if msg.role != "user":
         return JsonResponse({"error": "Can only edit user messages"}, status=400)
 
-    # A detached running turn may still be writing this history (Defect C).
-    if _live_running_turn(session):
-        return JsonResponse({"error": BUSY_MESSAGE}, status=409)
+    # Guard + range-delete in one IMMEDIATE transaction — same TOCTOU close
+    # as retry_message.
+    with transaction.atomic():
+        # A detached running turn may still be writing this history (Defect C).
+        if _live_running_turn(session):
+            return JsonResponse({"error": BUSY_MESSAGE}, status=409)
 
-    user_text = msg.content
+        user_text = msg.content
 
-    # Delete this message and everything after it
-    session.messages.filter(created_at__gte=msg.created_at).delete()
+        # Delete this message and everything after it
+        session.messages.filter(created_at__gte=msg.created_at).delete()
 
     return JsonResponse({"user_text": user_text, "action": "edit"})
 
@@ -323,9 +343,6 @@ def prune_history(request, session_id):
     that the pairing repair then re-trims on every request.
     """
     session = get_object_or_404(ChatSession, pk=session_id)
-    # A detached running turn may still be appending to this history.
-    if _live_running_turn(session):
-        return HttpResponse(BUSY_MESSAGE, status=409)
 
     try:
         keep = int(request.POST.get("keep", 20))
@@ -333,21 +350,29 @@ def prune_history(request, session_id):
         keep = 20
     keep = max(2, min(keep, 500))
 
-    msgs = list(session.messages.order_by("created_at", "pk"))
-    if len(msgs) > keep:
-        cut = len(msgs) - keep
-        while cut < len(msgs) and not (
-            msgs[cut].role == "user"
-            and not msgs[cut].tool_data
-            and (msgs[cut].content or "").strip()
-        ):
-            cut += 1
-        # No clean boundary in the tail (pathological history) → prune
-        # nothing rather than create orphans.
-        if cut < len(msgs):
-            ChatMessage.objects.filter(
-                pk__in=[m.pk for m in msgs[:cut]]
-            ).delete()
+    # Guard + boundary scan + delete in one IMMEDIATE transaction — same
+    # TOCTOU close as retry_message (a send admitted mid-prune could
+    # otherwise write between the scan and the delete).
+    with transaction.atomic():
+        # A detached running turn may still be appending to this history.
+        if _live_running_turn(session):
+            return HttpResponse(BUSY_MESSAGE, status=409)
+
+        msgs = list(session.messages.order_by("created_at", "pk"))
+        if len(msgs) > keep:
+            cut = len(msgs) - keep
+            while cut < len(msgs) and not (
+                msgs[cut].role == "user"
+                and not msgs[cut].tool_data
+                and (msgs[cut].content or "").strip()
+            ):
+                cut += 1
+            # No clean boundary in the tail (pathological history) → prune
+            # nothing rather than create orphans.
+            if cut < len(msgs):
+                ChatMessage.objects.filter(
+                    pk__in=[m.pk for m in msgs[:cut]]
+                ).delete()
 
     messages = session.messages.all()
     display_messages = [m for m in messages if m.content]
@@ -440,6 +465,19 @@ def process_email_form(request):
         "labels": labels,
         "drive_connected": drive_connected,
         "drive_settings": drive_settings,
+    })
+
+
+def gmail_labels(request):
+    """HTMX endpoint: the label filter <select> for the email attach panel.
+
+    Loaded on-demand when the panel first opens so the chat page render is
+    never blocked on a Gmail network round-trip (Phase 6 Defect C).
+    """
+    from email_links import gmail
+    labels = gmail.get_labels() if gmail.is_available() else []
+    return render(request, "assistant/partials/_gmail_label_select.html", {
+        "labels": labels,
     })
 
 
@@ -643,7 +681,10 @@ def drawer_session(request):
     if request.GET.get("new"):
         session = ChatSession.objects.create()
     else:
-        session = ChatSession.objects.first()
+        # Explicit ordering: .first() alone follows Meta.ordering
+        # (-is_pinned first), which returned a pinned OLD session instead of
+        # the most recently active one this docstring promises.
+        session = ChatSession.objects.order_by("-updated_at").first()
         if not session:
             session = ChatSession.objects.create()
     return JsonResponse({"session_id": session.pk, "title": session.title})
@@ -705,4 +746,5 @@ def assistant_settings(request):
     return render(request, "assistant/settings.html", {
         "form": form,
         "settings_obj": instance,
+        "model_choices": AssistantSettings.MODEL_CHOICES,
     })

@@ -838,3 +838,296 @@ class AssistantConcurrencyGuardTests(PlaywrightTestCase):
         self.assertTrue(
             ChatSession.objects.filter(pk=self.session.pk).exists()
         )
+
+
+class AssistantPhase6RenderScrollTests(PlaywrightTestCase):
+    """Phase 6 Defect E: frame-batched streaming render and gated autoscroll
+    — the user can scroll up mid-stream and stay there, and the final render
+    is complete despite batching."""
+
+    def setUp(self):
+        super().setUp()
+        self.session = ChatSession.objects.create(title="Scroll Chat")
+
+    def _goto(self):
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+
+    def _send(self, text):
+        self.page.fill("#chat-input", text)
+        self.page.click("#send-btn")
+
+    def _mock_three_phase_stream(self):
+        """Chunk 1: enough tokens to overflow the scroll container.
+        Chunk 2 (t+1200ms): more tokens — arrives AFTER the test scrolls up.
+        Chunk 3 (t+3000ms): the done frame."""
+        self.page.evaluate(
+            """() => {
+                const enc = new TextEncoder();
+                const tokenFrame = (t) =>
+                    'event: token\\ndata: ' + JSON.stringify({text: t}) + '\\n\\n';
+                let chunk1 = 'event: user_message\\n'
+                    + 'data: {"id": 1, "content": "q", "turn_id": 77}\\n\\n';
+                for (let i = 0; i < 80; i++) {
+                    chunk1 += tokenFrame('line ' + i + '\\n\\n');
+                }
+                let chunk2 = '';
+                for (let i = 80; i < 120; i++) {
+                    chunk2 += tokenFrame('line ' + i + '\\n\\n');
+                }
+                chunk2 += tokenFrame('LASTLINE');
+                const orig = window.fetch;
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(chunk1));
+                                setTimeout(() => ctrl.enqueue(enc.encode(chunk2)), 1200);
+                                setTimeout(() => {
+                                    ctrl.enqueue(enc.encode(
+                                        'event: done\\ndata: {"message_id": 1}\\n\\n'
+                                    ));
+                                    ctrl.close();
+                                }, 3000);
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+
+    def test_scroll_up_preserved_mid_stream(self):
+        # Seed the same final answer so the post-done reload is stable.
+        ChatMessage.objects.create(session=self.session, role="user", content="q")
+        ChatMessage.objects.create(
+            session=self.session, role="assistant",
+            content="".join(f"line {i}\n\n" for i in range(120)) + "LASTLINE",
+        )
+        self._goto()
+        self._mock_three_phase_stream()
+        self._send("q")
+
+        # Chunk 1 rendered (batched via rAF) and the container overflows.
+        # Scope to the streaming bubble — the seeded history already contains
+        # the same text in the server-rendered page.
+        self.page.wait_for_selector(
+            ".engine-stream-content >> text=line 79", timeout=5000
+        )
+        overflows = self.page.evaluate(
+            "() => { const el = document.getElementById('message-scroll');"
+            " return el.scrollHeight > el.clientHeight + 100; }"
+        )
+        self.assertTrue(overflows, "fixture must overflow the scroll container")
+
+        # User scrolls up to read.
+        self.page.evaluate(
+            "document.getElementById('message-scroll').scrollTop = 0"
+        )
+        # Chunk 2 arrives at t+1200ms and renders — wait for its content.
+        self.page.wait_for_selector(
+            ".engine-stream-content >> text=LASTLINE", timeout=5000
+        )
+        self.page.wait_for_timeout(200)  # let any (wrong) scroll settle
+        scroll_top = self.page.evaluate(
+            "document.getElementById('message-scroll').scrollTop"
+        )
+        self.assertLess(
+            scroll_top, 100,
+            "mid-stream tokens must not yank a scrolled-up reader to the bottom",
+        )
+
+        # Stream still finishes cleanly (batched frames all flushed).
+        self.page.wait_for_function(
+            "document.getElementById('send-btn')"
+            " && !document.getElementById('send-btn').disabled",
+            timeout=10000,
+        )
+        self.assertEqual(self.page.locator("text=resend").count(), 0)
+
+    def test_batched_render_is_complete_when_following(self):
+        """At the bottom (the normal case) the stream still follows and the
+        final client-side render contains the last token — rAF batching must
+        flush the tail, not drop it."""
+        ChatMessage.objects.create(session=self.session, role="user", content="q")
+        ChatMessage.objects.create(
+            session=self.session, role="assistant",
+            content="".join(f"line {i}\n\n" for i in range(120)) + "LASTLINE",
+        )
+        self._goto()
+        self._mock_three_phase_stream()
+        self._send("q")
+
+        self.page.wait_for_selector(
+            ".engine-stream-content >> text=LASTLINE", timeout=8000
+        )
+        # Still following: the container is scrolled to (near) the bottom.
+        near_bottom = self.page.evaluate(
+            "() => { const el = document.getElementById('message-scroll');"
+            " return el.scrollHeight - el.scrollTop - el.clientHeight < 150; }"
+        )
+        self.assertTrue(near_bottom, "stream must keep following at the bottom")
+        self.page.wait_for_function(
+            "document.getElementById('send-btn')"
+            " && !document.getElementById('send-btn').disabled",
+            timeout=10000,
+        )
+
+
+class AssistantPhase6TitleAndDrawerTests(PlaywrightTestCase):
+    """Phase 6 Defects D/F client side: the async title lands via the
+    post-finish turn-status poll, and the drawer renders shared message
+    partials without dead buttons."""
+
+    def setUp(self):
+        super().setUp()
+        self.session = ChatSession.objects.create()  # "New Chat"
+
+    def _goto(self):
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+
+    def test_async_title_arrives_after_done(self):
+        """title_pending → done → post-finish poll of turn-status → the h1
+        updates once the background task has saved the title."""
+        ChatMessage.objects.create(session=self.session, role="user", content="q")
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="the answer"
+        )
+        self._goto()
+        # Mock the stream (title_pending before done) and the turn-status
+        # poll (first poll: title still pending; second: saved title).
+        self.page.evaluate(
+            """() => {
+                window._titlePolls = 0;
+                const enc = new TextEncoder();
+                const orig = window.fetch;
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        const body = 'event: user_message\\n'
+                            + 'data: {"id": 1, "content": "q", "turn_id": 5}\\n\\n'
+                            + 'event: token\\ndata: {"text": "the answer"}\\n\\n'
+                            + 'event: title_pending\\ndata: {}\\n\\n'
+                            + 'event: done\\ndata: {"message_id": 1}\\n\\n';
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(body));
+                                ctrl.close();
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    if (typeof url === 'string' && url.includes('/turn-status/')) {
+                        window._titlePolls += 1;
+                        const title = window._titlePolls >= 2
+                            ? 'Background Title' : 'New Chat';
+                        return Promise.resolve(new Response(JSON.stringify({
+                            state: 'completed', turn_id: 5,
+                            session_title: title,
+                        }), {
+                            status: 200,
+                            headers: {'Content-Type': 'application/json'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+        self.page.fill("#chat-input", "q")
+        self.page.click("#send-btn")
+
+        # done arrives immediately — send re-enables without waiting on the
+        # title (the old blocking behavior).
+        self.page.wait_for_function(
+            "document.getElementById('send-btn')"
+            " && !document.getElementById('send-btn').disabled",
+            timeout=10000,
+        )
+        # The polled title lands in the header a few seconds later.
+        self.page.wait_for_function(
+            "document.querySelector('h1.truncate')"
+            " && document.querySelector('h1.truncate').textContent"
+            "     === 'Background Title'",
+            timeout=15000,
+        )
+        self.assertGreaterEqual(self.page.evaluate("window._titlePolls"), 2)
+
+    def test_drawer_hides_retry_edit_but_copy_works(self):
+        """The shared _message.html partial renders Retry/Edit/Copy in the
+        drawer too. Retry/Edit handlers only exist on the full page —
+        clicking them in the drawer threw ReferenceError — so they are
+        hidden there; Copy's handler lives in the shared engine file and
+        stays."""
+        ChatMessage.objects.create(
+            session=self.session, role="user", content="drawer question"
+        )
+        ChatMessage.objects.create(
+            session=self.session, role="assistant", content="drawer answer"
+        )
+        # Any page with the drawer works; the dashboard avoids chat.html's
+        # own message list confusing the selectors.
+        self.page.goto(self.url("/"))
+        self.page.wait_for_selector("#assistant-drawer", state="attached")
+        self.page.evaluate("openDrawer()")
+        self.page.wait_for_selector(
+            "#drawer-message-list >> text=drawer answer", timeout=5000
+        )
+
+        # copyMessage is defined globally (shared engine file)...
+        self.assertTrue(
+            self.page.evaluate("typeof copyMessage === 'function'")
+        )
+        # ...retry/edit buttons are display:none inside the drawer...
+        hidden = self.page.evaluate(
+            """() => {
+                const q = (sel) => Array.from(
+                    document.querySelectorAll('#assistant-drawer ' + sel));
+                const btns = q('button[onclick^="retryMessage("]')
+                    .concat(q('button[onclick^="editMessage("]'));
+                return btns.length > 0 && btns.every(
+                    (b) => getComputedStyle(b).display === 'none');
+            }"""
+        )
+        self.assertTrue(hidden, "drawer Retry/Edit must be hidden")
+        # ...and the Copy button is not.
+        copy_visible = self.page.evaluate(
+            """() => {
+                const b = document.querySelector(
+                    '#assistant-drawer button[onclick^="copyMessage("]');
+                return !!b && getComputedStyle(b).display !== 'none';
+            }"""
+        )
+        self.assertTrue(copy_visible, "drawer Copy must stay usable")
+
+    def test_chat_page_renders_with_gmail_available(self):
+        """Regression: the gmail-only attach-panel markup only renders when
+        Gmail is connected — which the e2e DB normally isn't, so a template
+        bug there (a multi-line {# #} pseudo-comment emitting a literal
+        <select> that mangled the DOM and hid #chat-input) sailed through
+        the suite. Render the page with Gmail available and prove the
+        composer is usable and the lazy label wrapper is present."""
+        from unittest.mock import patch
+
+        with patch("email_links.gmail.is_available", return_value=True), \
+             patch("email_links.gmail.get_labels", return_value=[
+                 {"id": "INBOX", "name": "Inbox", "type": "system"},
+             ]):
+            self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+            # The composer must be VISIBLE (not swallowed into the hidden
+            # attach panel by broken markup).
+            self.page.wait_for_selector("#chat-input", state="visible", timeout=5000)
+            self.assertTrue(
+                self.page.evaluate(
+                    "document.getElementById('attach-label-wrap') !== null"
+                )
+            )
+            # Opening the picker lazily loads the label select.
+            self.page.evaluate("toggleEmailPicker()")
+            self.page.wait_for_selector("#attach-label-select", timeout=5000)

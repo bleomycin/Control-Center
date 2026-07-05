@@ -73,21 +73,24 @@
                     {% if form.model.errors %}<p class="mt-1 text-sm text-red-400">{{ form.model.errors.0 }}</p>{% endif %}
                     <p class="mt-1 text-xs text-gray-500">{{ form.model.help_text }}</p>
 
-                    <!-- datalist for autocomplete -->
+                    <!-- datalist for autocomplete (kept in sync with
+                         AssistantSettings.MODEL_CHOICES) -->
                     <datalist id="model-choices">
-                        <option value="claude-sonnet-4-6">Sonnet 4.6 — recommended balance of speed, capability, and cost</option>
-                        <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest and cheapest, good for simple queries</option>
-                        <option value="claude-opus-4-6">Opus 4.6 — most capable, best for complex reasoning</option>
+                        {% for value, label in model_choices %}
+                        <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
                     </datalist>
 
                     <!-- Quick pick buttons -->
                     <div class="flex flex-wrap gap-2 mt-2">
                         <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-sonnet-4-6'"
                                 class="text-xs px-2 py-1 rounded bg-blue-900/30 text-blue-400 border border-blue-800 hover:bg-blue-900/50 transition-colors">Sonnet 4.6</button>
+                        <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-sonnet-5'"
+                                class="text-xs px-2 py-1 rounded bg-teal-900/30 text-teal-400 border border-teal-800 hover:bg-teal-900/50 transition-colors">Sonnet 5</button>
                         <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-haiku-4-5-20251001'"
                                 class="text-xs px-2 py-1 rounded bg-green-900/30 text-green-400 border border-green-800 hover:bg-green-900/50 transition-colors">Haiku 4.5</button>
-                        <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-opus-4-6'"
-                                class="text-xs px-2 py-1 rounded bg-purple-900/30 text-purple-400 border border-purple-800 hover:bg-purple-900/50 transition-colors">Opus 4.6</button>
+                        <button type="button" onclick="document.getElementById('{{ form.model.id_for_label }}').value='claude-opus-4-8'"
+                                class="text-xs px-2 py-1 rounded bg-purple-900/30 text-purple-400 border border-purple-800 hover:bg-purple-900/50 transition-colors">Opus 4.8</button>
                     </div>
                 </div>
             </div>

@@ -1,8 +1,16 @@
+import re
+
 from django import forms
 
 from config.forms import TailwindFormMixin
 
 from .models import AssistantSettings
+
+# Anthropic model ids: "claude-" followed by lowercase alphanumerics/hyphens
+# (aliases like claude-sonnet-4-6 and dated ids like
+# claude-haiku-4-5-20251001 both match). A typo'd or non-Anthropic id used to
+# save fine and then fail every send as a confusing request-time 404.
+_MODEL_ID_RE = re.compile(r"^claude-[a-z0-9][a-z0-9-]*$")
 
 
 class ChatInputForm(TailwindFormMixin, forms.Form):
@@ -37,6 +45,17 @@ class AssistantSettingsForm(TailwindFormMixin, forms.ModelForm):
         if not key and self.instance and self.instance.pk:
             return self.instance.api_key
         return key
+
+    def clean_model(self):
+        """Reject ids that can't be an Anthropic model at save time."""
+        model = (self.cleaned_data.get("model") or "").strip()
+        if not _MODEL_ID_RE.match(model):
+            raise forms.ValidationError(
+                "That doesn't look like an Anthropic model ID — expected "
+                "something like 'claude-sonnet-4-6'. Pick one from the list "
+                "or check the ID."
+            )
+        return model
 
     class Meta:
         model = AssistantSettings

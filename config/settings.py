@@ -99,10 +99,37 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# SQLite concurrency: gunicorn gthread workers, the assistant's stream worker
+# + toucher threads, and qcluster all write to one file. The stock 5s busy
+# timeout produced intermittent "database is locked" under overlap, and
+# DEFERRED transactions upgrade read→write mid-transaction, which is where
+# SQLite deadlocks instead of waiting. IMMEDIATE takes the write lock at
+# BEGIN, so transaction.atomic() blocks (bounded by the busy timeout) rather
+# than erroring — and it serializes the assistant's check-then-mutate guards
+# (views._live_running_turn + delete) against turn admission's INSERT.
+# journal_mode=WAL is already persisted in the DB file; re-asserting it here
+# is idempotent and covers fresh databases. The in-memory TEST database
+# ignores WAL (returns 'memory') — harmless.
+#
+# init_command is the SINGLE source of truth for per-connection pragmas.
+# These used to be set by a connection_created signal in dashboard/apps.py,
+# which fired after init_command and silently overrode busy_timeout with a
+# conflicting value — that handler is gone; add pragmas HERE, not in a
+# signal. (foreign_keys=ON is set by Django's sqlite3 backend itself.)
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': Path(os.environ.get('DATABASE_PATH', BASE_DIR / 'db.sqlite3')),
+        'OPTIONS': {
+            'timeout': 20,
+            'transaction_mode': 'IMMEDIATE',
+            'init_command': (
+                'PRAGMA journal_mode=WAL; '
+                'PRAGMA busy_timeout=20000; '
+                'PRAGMA synchronous=NORMAL; '
+                'PRAGMA cache_size=-20000;'
+            ),
+        },
     }
 }
 

@@ -6,10 +6,16 @@ from django.db import models
 class AssistantSettings(models.Model):
     """Singleton settings for the AI assistant (pk=1)."""
 
+    # Suggested model ids for the settings datalist (a free-text field — any
+    # valid Anthropic model id can be typed). Not a field `choices=` kwarg,
+    # so editing this list never needs a migration. Current ids confirmed
+    # 2026-07-04; think/max modes pin their own models in client.MODE_CONFIGS
+    # regardless of this setting.
     MODEL_CHOICES = [
         ("claude-sonnet-4-6", "Claude Sonnet 4.6 (recommended)"),
+        ("claude-sonnet-5", "Claude Sonnet 5 (newest Sonnet)"),
         ("claude-haiku-4-5-20251001", "Claude Haiku 4.5 (fastest, cheapest)"),
-        ("claude-opus-4-6", "Claude Opus 4.6 (most capable)"),
+        ("claude-opus-4-8", "Claude Opus 4.8 (most capable)"),
     ]
 
     owner_name = models.CharField(
