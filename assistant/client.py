@@ -87,6 +87,14 @@ REFUSAL_NOTICE = (
     "\n\n_[The model declined to generate this response. "
     "Try rephrasing your request.]_"
 )
+EMPTY_RESPONSE_NOTICE = "_[The assistant returned an empty response. Please try again.]_"
+# Client-facing message emitted as a terminal SSE `error` when a worker finds
+# its turn was finalized elsewhere (abandoned by admission) and bails without
+# writing. Emitting a terminal frame (rather than a bare return → silent EOF)
+# gives the client a defined end state instead of relying on recovery polling.
+SUPERSEDED_NOTICE = (
+    "This response was interrupted and did not finish. Please resend your message."
+)
 
 
 def _stop_reason_notice(response):
@@ -1727,10 +1735,19 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                 yield sse("error", {"message": error_msg})
                 return
             except anthropic.APIError as e:
-                # Catch-all: also retry overloaded errors that arrive as generic APIError
-                if "overloaded" in str(e).lower() and attempt < 4:
+                # Catch-all: retry transient failures — overloaded errors that
+                # arrive as a generic APIError, plus connection drops/timeouts.
+                # APIConnectionError (and its APITimeoutError subclass) are
+                # APIError but NOT APIStatusError, so they never reached the
+                # status branch above; a single network blip mid-turn was
+                # killing the whole turn instead of retrying.
+                is_transient = (
+                    "overloaded" in str(e).lower()
+                    or isinstance(e, anthropic.APIConnectionError)
+                )
+                if is_transient and attempt < 4:
                     wait = 2 ** attempt
-                    logger.warning(f"Anthropic overloaded (attempt {attempt + 1}/5), retrying in {wait}s")
+                    logger.warning(f"Anthropic transient error {type(e).__name__} (attempt {attempt + 1}/5), retrying in {wait}s")
                     # Same as above: reset any partially streamed text
                     # before the retry re-streams the full answer.
                     yield sse("clear", {})
@@ -1785,6 +1802,21 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                         "name": block.name, "input": block.input,
                     })
 
+            # A superseded worker (turn abandoned by admission while this
+            # thread was alive — e.g. the host slept, the turn went stale, and
+            # a new request abandoned it) must not execute side-effecting
+            # tools: a dry_run=false create/update/delete would double-write
+            # into a session a NEW turn is now handling. Check BEFORE running
+            # tools, not only before persisting (below), so no write escapes.
+            if _turn_finalized_elsewhere(turn):
+                logger.warning(
+                    "Assistant turn %s was finalized elsewhere before tool "
+                    "execution; discarding without running tools",
+                    turn.pk,
+                )
+                yield sse("error", {"message": SUPERSEDED_NOTICE})
+                return
+
             # Execute tools (SSE events stream live to client)
             tool_results = []
             for block in response.content:
@@ -1824,6 +1856,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                     "tool results without writing",
                     turn.pk,
                 )
+                yield sse("error", {"message": SUPERSEDED_NOTICE})
                 return
 
             # Save both messages atomically — a crash between the two
@@ -1860,6 +1893,15 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
             final_text += notice
             yield sse("token", {"text": notice})
 
+        if not final_text.strip():
+            # A genuinely empty completion — end_turn with no text, no tool_use,
+            # no stop-reason notice (e.g. a thinking-only response) — would save
+            # content="", render a blank bubble, and then be silently dropped by
+            # _validate_tool_pairs on the next turn. Substitute a visible
+            # placeholder so it's informative and survives replay.
+            final_text = EMPTY_RESPONSE_NOTICE
+            yield sse("token", {"text": final_text})
+
         # A superseded worker must not write (see the tool-pair check above).
         if _turn_finalized_elsewhere(turn):
             logger.warning(
@@ -1867,6 +1909,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                 "final answer without writing",
                 turn.pk,
             )
+            yield sse("error", {"message": SUPERSEDED_NOTICE})
             return
 
         # Save the final message
@@ -1931,6 +1974,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
             "max-iterations notice without writing",
             turn.pk,
         )
+        yield sse("error", {"message": SUPERSEDED_NOTICE})
         return
     fallback_msg = _safe_create_message(
         session,

@@ -697,10 +697,18 @@ function createChatEngine(config) {
 
     function teardown() {
         // Called before an engine is discarded (drawer session swap) so its
-        // async work can't touch the successor's DOM: stop the title poll
-        // (timer + in-flight fetch via the torndown guard), drop any queued
-        // render frame, and clear the recovery/inactivity timers.
+        // async work can't touch the SUCCESSOR engine's DOM/shared inputs.
+        // Mark finished FIRST: every surviving path — finish(), recover(),
+        // pollTurnStatus() (both its .then and .catch), and the read loop's
+        // finish()/recover() calls — already short-circuits on `finished`, so
+        // this single flag neutralizes all of them. Then abort the in-flight
+        // SSE fetch so the reader stops (its AbortError branch no-ops), stop
+        // the title poll, drop any queued render frame, and clear timers.
+        // Without this, clicking drawer "New chat" mid-stream left engine A
+        // alive to complete and wipe session B's streaming bubble.
         torndown = true;
+        finished = true;
+        if (abortController) abortController.abort();
         if (titlePollTimer) { clearTimeout(titlePollTimer); titlePollTimer = null; }
         cancelScheduledRender();
         if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null; }

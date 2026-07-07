@@ -5143,6 +5143,171 @@ class MidStreamRetryTests(TestCase):
         )
 
 
+class _FakeConnErrorStream:
+    """Stream that yields one token then dies with a transient
+    APIConnectionError (a network blip / timeout). Unlike a 529 it is NOT an
+    APIStatusError, so it lands in the generic APIError catch-all — which must
+    now retry it instead of killing the turn."""
+
+    request_id = "req_conn_err"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def __iter__(self):
+        import anthropic as anthropic_sdk
+        import httpx
+
+        delta = MagicMock()
+        delta.type = "text_delta"
+        delta.text = "partial before the blip"
+        event = MagicMock()
+        event.type = "content_block_delta"
+        event.delta = delta
+        yield event
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        raise anthropic_sdk.APIConnectionError(message="connection dropped", request=request)
+
+    def get_final_message(self):  # pragma: no cover — never reached
+        raise AssertionError("get_final_message called on a failing stream")
+
+
+def _fake_tool_use_response():
+    """A canned final response containing a single tool_use block."""
+    tblock = MagicMock()
+    tblock.type = "tool_use"
+    tblock.id = "tu_superseded"
+    tblock.name = "search"
+    tblock.input = {"model": "Note", "query": "x"}
+    resp = MagicMock()
+    resp.model = "claude-sonnet-4-6"
+    resp.content = [tblock]
+    resp.stop_reason = "tool_use"
+    return resp
+
+
+class TransientConnectionRetryTests(TestCase):
+    """L3: a single APIConnectionError/APITimeoutError mid-turn must be retried
+    (it is an APIError but not an APIStatusError, so it previously fell through
+    the status-retry branch and aborted the whole turn)."""
+
+    def setUp(self):
+        self.session = ChatSession.objects.create(title="Existing chat")
+        s = AssistantSettings.load()
+        s.api_key = "sk-test-key"
+        s.save()
+
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_connection_error_is_retried_then_completes(self, MockClient):
+        from .models import AssistantTurn
+
+        MockClient.return_value.messages.stream.side_effect = [
+            _FakeConnErrorStream(),
+            _FakeCompletingStream(text="recovered after the blip"),
+        ]
+        turn = AssistantTurn.objects.create(session=self.session)
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        # The transient error was retried, not fatal: the stream was reopened
+        # and the second attempt completed to a terminal done.
+        self.assertEqual(MockClient.return_value.messages.stream.call_count, 2)
+        self.assertTrue(any(f.startswith("event: done") for f in frames), frames)
+        # A partial-then-retry resets the client bubble first.
+        self.assertTrue(any(f.startswith("event: clear") for f in frames), frames)
+        # The recovered answer (delivered via get_final_message, not deltas) is
+        # what actually persisted.
+        saved = (
+            ChatMessage.objects.filter(session=self.session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved.content, "recovered after the blip")
+
+
+class EmptyResponseNoticeTests(TestCase):
+    """L2: a genuinely empty completion must save a visible placeholder rather
+    than a blank bubble that _validate_tool_pairs then silently drops."""
+
+    def setUp(self):
+        self.session = ChatSession.objects.create(title="Existing chat")
+        s = AssistantSettings.load()
+        s.api_key = "sk-test-key"
+        s.save()
+
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_empty_completion_saves_placeholder(self, MockClient):
+        from .client import EMPTY_RESPONSE_NOTICE
+        from .models import AssistantTurn
+
+        MockClient.return_value.messages.stream.return_value = _FakeCompletingStream(text="")
+        turn = AssistantTurn.objects.create(session=self.session)
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        self.assertIn(EMPTY_RESPONSE_NOTICE, "".join(frames))
+        self.assertTrue(frames[-1].startswith("event: done"), frames[-1])
+        saved = (
+            ChatMessage.objects.filter(session=self.session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved.content, EMPTY_RESPONSE_NOTICE)
+
+
+class SupersededWorkerTests(TestCase):
+    """M3/L1: a worker whose turn was abandoned by admission must (a) emit a
+    terminal error frame instead of a silent EOF, (b) write nothing, and
+    (c) crucially, NOT execute side-effecting tools — the finalized check now
+    runs BEFORE tool execution, not only before the DB write."""
+
+    def setUp(self):
+        self.session = ChatSession.objects.create(title="Existing chat")
+        s = AssistantSettings.load()
+        s.api_key = "sk-test-key"
+        s.save()
+
+    @patch("assistant.client._turn_finalized_elsewhere", return_value=True)
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_final_answer_path_emits_error_and_writes_nothing(self, MockClient, _mock_final):
+        from .client import SUPERSEDED_NOTICE
+        from .models import AssistantTurn
+
+        MockClient.return_value.messages.stream.return_value = _FakeCompletingStream(text="answer")
+        turn = AssistantTurn.objects.create(session=self.session)
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        self.assertTrue(any(f.startswith("event: error") for f in frames), frames)
+        self.assertIn(SUPERSEDED_NOTICE, "".join(frames))
+        # No non-empty assistant message persisted by the superseded worker.
+        self.assertFalse(
+            ChatMessage.objects.filter(session=self.session, role="assistant")
+            .exclude(content="")
+            .exists()
+        )
+
+    @patch("assistant.client._execute_tool")
+    @patch("assistant.client._turn_finalized_elsewhere", return_value=True)
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_tool_side_effects_skipped_when_superseded(self, MockClient, _mock_final, mock_exec):
+        from .client import SUPERSEDED_NOTICE
+        from .models import AssistantTurn
+
+        MockClient.return_value.messages.stream.return_value = _FakePhase2Stream(
+            _fake_tool_use_response()
+        )
+        turn = AssistantTurn.objects.create(session=self.session)
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        # The guard fires before the tool loop — no write side-effect escapes.
+        mock_exec.assert_not_called()
+        self.assertTrue(any(f.startswith("event: error") for f in frames), frames)
+        self.assertIn(SUPERSEDED_NOTICE, "".join(frames))
+
+
 class TurnIdInStreamTests(TransactionTestCase):
     """Phase 4 Defect B (server half): the first SSE frame carries the
     AssistantTurn pk so the client can correlate turn-status polls with THIS
