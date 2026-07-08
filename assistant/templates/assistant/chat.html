@@ -221,9 +221,15 @@
                     opens, so labels and the first result fetch load
                     concurrently.
                     {% endcomment %}
+                    {% comment %}
+                    No `once` modifier: the one-shot is the JS
+                    _emailPickerLoaded flag, which resets on a failed load so
+                    the next panel open retries — an htmx `once` would be
+                    consumed by the failure and never fire again (Wave 2 F5-3).
+                    {% endcomment %}
                     <div id="attach-label-wrap" class="contents"
                          hx-get="{% url 'assistant:gmail_labels' %}"
-                         hx-trigger="attach-open once from:#attach-email-search"
+                         hx-trigger="attach-open from:#attach-email-search"
                          hx-swap="innerHTML"></div>
                 </div>
                 <div id="attach-gmail-results">
@@ -722,6 +728,13 @@ var chatEngine = createChatEngine({
     },
 });
 
+// Boot-time recovery (Wave 2 F2-1): a reload/back-navigation mid-turn used
+// to show the user's message with no reply and no indicator, even though the
+// server finishes the detached turn and persists the answer. Probe once and,
+// if a turn is live, adopt it (send disabled + "still working" bubble +
+// turn-status polling until it lands).
+chatEngine.resumeIfRunning();
+
 // Auto-scroll on page load and HTMX swaps
 document.addEventListener('DOMContentLoaded', function() { chatEngine.autoScroll(); });
 document.body.addEventListener('htmx:afterSwap', function(e) {
@@ -755,13 +768,20 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     // Each prepend is "text = block + text", so the LAST prepend ends up at
     // the very front. We therefore prepend Drive first, then Email last so
     // Email lands on top.
-    if (typeof _attachedDriveFiles !== 'undefined' && _attachedDriveFiles.length > 0) {
-        text = _buildAttachedDriveFilesBlock() + text;
-        _clearDriveFiles();
-    }
-    if (_readyAttachedEmails().length > 0) {
-        text = _buildAttachedEmailsBlock() + text;
-        _clearAttachedEmails();
+    //
+    // Staging is consumed only by ORGANIC sends: a synthetic resubmit
+    // (retry, quick-reply confirm/deny, Process Email — all set e._synthetic)
+    // must not glue staged-but-unsent attachments onto its own message; they
+    // belong to the user's next typed send, so they stay staged (Wave 2 F4-3).
+    if (e._synthetic !== true) {
+        if (typeof _attachedDriveFiles !== 'undefined' && _attachedDriveFiles.length > 0) {
+            text = _buildAttachedDriveFilesBlock() + text;
+            _clearDriveFiles();
+        }
+        if (_readyAttachedEmails().length > 0) {
+            text = _buildAttachedEmailsBlock() + text;
+            _clearAttachedEmails();
+        }
     }
 
     var sendBtn = document.getElementById('send-btn');
@@ -790,9 +810,27 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
                     showChatNotice(data.error || 'Could not edit the message. Try again.');
                 });
             }
-            return refreshMessages().then(function() {
-                chatEngine.doSend(text);
+            return r.json().catch(function() { return {}; }).then(function(data) {
+                // Re-carry the original message's attachment blocks: the
+                // input was populated from display_content (markers
+                // stripped) and the edit just deleted the original row —
+                // without this, attached email/file content silently
+                // vanishes from the resent message (Wave 2 F4-2). The edit
+                // view returns the raw content for exactly this.
+                var sendText = _extractMarkerPrefix(data.user_text || '') + text;
+                return refreshMessages().then(function() {
+                    chatEngine.doSend(sendText);
+                });
             });
+        }).catch(function(err) {
+            // Network failure mid-chain: the delete may or may not have
+            // committed, and `text` lives only in this closure — restore it
+            // so nothing is lost. Deliberately NOT re-arming the edit state:
+            // if the delete committed, a re-armed resubmit would 404 against
+            // the deleted message id (Wave 2 F5-1).
+            console.error('Edit failed:', err);
+            if (!input.value.trim()) input.value = text;
+            showChatNotice('Editing failed — your text was restored to the input. Check the conversation and resend.');
         });
         return;
     }
@@ -800,25 +838,39 @@ document.getElementById('chat-form').addEventListener('submit', function(e) {
     chatEngine.doSend(text);
 });
 
+// Leading attachment marker blocks of a raw message ([AttachedEmails],
+// legacy [AttachedEmail:], [AttachedDriveFiles]) — the exact prefix
+// ChatMessage.display_content strips, reconstructed so an edited resend
+// keeps its attachments.
+function _extractMarkerPrefix(raw) {
+    var prefix = '';
+    var rest = raw || '';
+    var pairs = [
+        ['[AttachedEmails]', '[/AttachedEmails]'],
+        ['[AttachedEmail:', '[/AttachedEmail]'],
+        ['[AttachedDriveFiles]', '[/AttachedDriveFiles]'],
+    ];
+    for (var i = 0; i < pairs.length; i++) {
+        if (rest.indexOf(pairs[i][0]) === 0) {
+            var end = rest.indexOf(pairs[i][1]);
+            if (end === -1) break;
+            var cut = end + pairs[i][1].length;
+            // Keep the newline(s) separating the block from what follows.
+            while (rest.charAt(cut) === '\n') cut++;
+            prefix += rest.slice(0, cut);
+            rest = rest.slice(cut);
+        }
+    }
+    return prefix;
+}
+
 // Message actions: retry, edit. (copyMessage lives in assistant-chat.js —
 // the _message.html partial renders in the drawer too, where chat.html's
 // scripts don't exist.)
 
-// Transient notice for refused actions (409 while a turn is running, etc.) —
-// non-blocking, so it never wedges automation the way alert() would.
-function showChatNotice(msg) {
-    var existing = document.getElementById('chat-notice');
-    if (existing) existing.remove();
-    var el = document.createElement('div');
-    el.id = 'chat-notice';
-    el.className = 'fixed bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto '
-        + 'sm:-translate-x-1/2 sm:max-w-md z-50 px-4 py-2 '
-        + 'bg-gray-800 border border-amber-600/50 rounded-lg shadow-lg '
-        + 'text-sm text-amber-300 text-center';
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(function() { el.remove(); }, 5000);
-}
+// showChatNotice (transient toast for refused/failed actions) lives in
+// assistant-chat.js — the drawer needs it on pages where this script
+// doesn't exist (Wave 2 F1-1).
 
 // Surface 409 "assistant is still working" refusals from HTMX-driven forms
 // (prune, session delete) — HTMX swaps nothing on an error status, so
@@ -829,6 +881,18 @@ document.body.addEventListener('htmx:responseError', function(e) {
     }
 });
 
+// A failed Gmail-label load must not permanently eat the lazy-load one-shot:
+// reset the flag so the next attach-panel open re-fires attach-open and
+// retries (Wave 2 F5-3). Covers both a network-level failure (sendError)
+// and a non-2xx response (responseError).
+['htmx:sendError', 'htmx:responseError'].forEach(function(evt) {
+    document.body.addEventListener(evt, function(e) {
+        if (e.detail.elt && e.detail.elt.id === 'attach-label-wrap') {
+            _emailPickerLoaded = false;
+        }
+    });
+});
+
 function retryMessage(messageId) {
     fetch('/assistant/' + SESSION_PK + '/retry/' + messageId + '/', {
         method: 'POST',
@@ -836,13 +900,26 @@ function retryMessage(messageId) {
     }).then(function(r) { return r.json(); })
     .then(function(data) {
         if (data.error) { showChatNotice(data.error); return; }
-        refreshMessages().then(function() {
+        return refreshMessages().then(function() {
             var input = document.getElementById('chat-input');
             input.value = data.user_text;
             input.style.height = 'auto';
             input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-            document.getElementById('chat-form').dispatchEvent(new Event('submit', {cancelable: true}));
+            // _synthetic: the resend must not consume attachments staged
+            // for the user's NEXT message (Wave 2 F4-3) — data.user_text
+            // already carries the original message's own marker blocks.
+            var ev = new Event('submit', {cancelable: true});
+            ev._synthetic = true;
+            document.getElementById('chat-form').dispatchEvent(ev);
         });
+    })
+    .catch(function(err) {
+        // The retry delete may have committed (the originating user message
+        // survives it) — resync and say so instead of failing silently
+        // (Wave 2 F5-1).
+        console.error('Retry failed:', err);
+        showChatNotice('Retry failed — check the conversation and try again.');
+        refreshMessages().catch(function() {});
     });
 }
 
@@ -875,7 +952,12 @@ function cancelEdit() {
 
 function refreshMessages() {
     return fetch("{% url 'assistant:chat_session' session.pk %}", {headers: {'HX-Request': 'true'}})
-        .then(function(r) { return r.text(); })
+        .then(function(r) {
+            // Mirror loadMessages(): a 500 must reject, not inject the
+            // Django error page into the message list (Wave 2 F5-1).
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.text();
+        })
         .then(function(html) {
             var parser = new DOMParser();
             var doc = parser.parseFromString(html, 'text/html');

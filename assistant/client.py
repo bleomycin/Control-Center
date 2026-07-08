@@ -196,7 +196,7 @@ def _get_shared_client(api_key, max_retries):
 _GATED_TOOL_NAMES = {"bulk_link_drive_files"}
 
 
-def _get_active_tools(messages):
+def _get_active_tools(messages, session=None):
     """Return TOOL_DEFINITIONS, with marker-gated tools included when their
     trigger marker appears anywhere in the conversation's user-authored text.
 
@@ -205,13 +205,22 @@ def _get_active_tools(messages):
     the user types "yes confirm" in a separate turn, the dry_run=False execute
     step must still see bulk_link_drive_files in the active tool set.
 
+    ``messages`` is the request window, which is TRUNCATED (anchored window,
+    Phase 3) — pass ``session`` from the chat paths so the gate also sees
+    history the trim dropped. Without it, the marker message scrolling past
+    the truncation anchor silently removed the tool for the rest of the
+    session (a pending "yes confirm" lost its execute step), and the tools-
+    array byte change at prefix position 0 invalidated every message-tier
+    cache entry. Session-wide gating means the array can only ever GROW once
+    mid-session (at the attach turn) — byte-stable from then on.
+
     User messages whose content is purely tool_result blocks (Anthropic's
     tool-use protocol writes those as role=user) contribute no text and are
     skipped naturally by the text-block extraction.
 
     Currently gated:
       - bulk_link_drive_files: included while [AttachedDriveFiles] appears in
-        any prior user message of the active conversation.
+        any user message of the active conversation (windowed or not).
     """
     drive_marker_present = False
     for m in messages or []:
@@ -231,6 +240,16 @@ def _get_active_tools(messages):
         if "[AttachedDriveFiles]" in text:
             drive_marker_present = True
             break
+
+    if not drive_marker_present and session is not None:
+        # Persisted user rows are plain strings (the wrapped single-text-block
+        # form is request-scoped only), so a content scan is complete. The
+        # current turn's user message is saved before the request is built on
+        # both chat paths, so it is covered too.
+        drive_marker_present = session.messages.filter(
+            role="user", tool_data__isnull=True,
+            content__contains="[AttachedDriveFiles]",
+        ).exists()
 
     active = []
     for tool in TOOL_DEFINITIONS:
@@ -1090,6 +1109,10 @@ def send_message(session, user_text, mode="fast", effort=""):
     client = _get_shared_client(api_key, max_retries=5)
     system_prompt = _build_system_prompt()
     api_messages = _inject_turn_context(api_messages, _build_turn_context())
+    # Computed once per turn: no user text is appended inside the tool loop,
+    # so the array cannot change between iterations — and the tools bytes sit
+    # at position 0 of the cache prefix, where any change is a full miss.
+    active_tools = _get_active_tools(api_messages, session=session)
     effective_effort = mode_config.get("output_config", {}).get("effort", "")
     logger.info(f"send mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
 
@@ -1099,7 +1122,7 @@ def send_message(session, user_text, mode="fast", effort=""):
                 model=model_name,
                 max_tokens=max_tokens,
                 system=system_prompt,
-                tools=_get_active_tools(api_messages),
+                tools=active_tools,
                 messages=_apply_message_cache_marker(api_messages),
                 # Top-level breakpoint: the API auto-marks the tail of the
                 # final message, so every iteration's growing history is a
@@ -1624,6 +1647,9 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     all_messages = session.messages.all()
     api_messages = _build_api_messages(all_messages)
     api_messages = _inject_turn_context(api_messages, _build_turn_context())
+    # Once per turn — see send_message: the array can't change between
+    # iterations, and its bytes are position 0 of the cache prefix.
+    active_tools = _get_active_tools(api_messages, session=session)
 
     effective_effort = mode_config.get("output_config", {}).get("effort", "")
     logger.info(f"stream mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
@@ -1642,7 +1668,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                     model=model_name,
                     max_tokens=max_tokens,
                     system=system_prompt,
-                    tools=_get_active_tools(api_messages),
+                    tools=active_tools,
                     messages=_apply_message_cache_marker(api_messages),
                     # Top-level breakpoint: auto-marks the tail of the final
                     # message so each loop iteration reads the previous

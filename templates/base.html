@@ -228,7 +228,16 @@
             if (!drawerEngine) return;  // still initializing (or init failed)
             var input = document.getElementById('drawer-chat-input');
             var text = input.value.trim();
-            if (!text || drawerEngine.isStreaming()) return;
+            if (!text) return;
+            // Say so, don't just no-op (matches chat.html's guard): Enter
+            // mid-stream and Process Email's synthetic submit both land here,
+            // and a silent return reads as "sent" — the text stays in the
+            // input, but nothing tells the user why nothing happened
+            // (Wave 2 F1-1). showChatNotice lives in assistant-chat.js.
+            if (drawerEngine.isStreaming()) {
+                showChatNotice('The assistant is still responding — wait for it to finish, then send again.');
+                return;
+            }
             input.value = '';
             input.style.height = 'auto';
             drawerEngine.doSend(text);
@@ -288,8 +297,16 @@
                         }
                     },
                 });
-                // Load existing messages
-                drawerEngine.loadMessages();
+                // Load existing messages, THEN probe for a still-running
+                // turn (Wave 2 F2-1) — resumeIfRunning appends a "still
+                // working" bubble, and loadMessages' innerHTML replace would
+                // wipe it if the two raced. Captured reference: if a session
+                // swap tears this engine down before the load resolves, its
+                // `finished` flag makes resumeIfRunning a no-op.
+                var engineForResume = drawerEngine;
+                drawerEngine.loadMessages().then(function() {
+                    engineForResume.resumeIfRunning();
+                });
             })
             .catch(function(err) {
                 // Session fetch failed: without this catch the drawer just

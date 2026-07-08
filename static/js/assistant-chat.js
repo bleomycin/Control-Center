@@ -62,6 +62,25 @@ function renderMarkdown(text) {
     return DOMPurify.sanitize(html);
 }
 
+// Transient notice for refused/failed actions (409 while a turn is running,
+// resend failures, etc.) — non-blocking, so it never wedges automation the
+// way alert() would. Lives here (not chat.html) because the drawer renders
+// on EVERY page: a busy-guard refusal in the drawer needs this toast where
+// chat.html's scripts don't exist.
+function showChatNotice(msg) {
+    var existing = document.getElementById('chat-notice');
+    if (existing) existing.remove();
+    var el = document.createElement('div');
+    el.id = 'chat-notice';
+    el.className = 'fixed bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto '
+        + 'sm:-translate-x-1/2 sm:max-w-md z-50 px-4 py-2 '
+        + 'bg-gray-800 border border-amber-600/50 rounded-lg shadow-lg '
+        + 'text-sm text-amber-300 text-center';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function() { el.remove(); }, 5000);
+}
+
 // Message copy button (used by partials/_message.html, which renders in BOTH
 // the full chat page and the drawer — so the handler must live in this
 // shared file, not chat.html, or drawer clicks throw ReferenceError).
@@ -240,6 +259,15 @@ function createChatEngine(config) {
                 }
                 if (data.state === 'completed') {
                     if (data.confirm_required) pendingQuickReply = true;
+                    // A recovered stream never saw the title_pending/title SSE
+                    // events, so pick the async-generated title up from the
+                    // status payload — or, if the background task hasn't
+                    // landed it yet, let finish() run the normal title poll.
+                    if (data.session_title && data.session_title !== 'New Chat') {
+                        if (config.onTitle) config.onTitle(data.session_title);
+                    } else {
+                        titlePending = true;
+                    }
                     recovering = false;
                     finish();  // onFinish reloads messages — the answer is saved
                     return;
@@ -422,7 +450,12 @@ function createChatEngine(config) {
                 config.inputEl.value = reply;
                 config.inputEl.focus();
                 document.querySelectorAll('.quick-reply-buttons').forEach(function(el) { el.remove(); });
-                config.inputEl.form.dispatchEvent(new Event('submit', {cancelable: true}));
+                // _synthetic: chat.html's submit handler must not glue
+                // staged-but-unsent attachments onto a programmatic
+                // confirm/deny (they belong to the user's NEXT message).
+                var ev = new Event('submit', {cancelable: true});
+                ev._synthetic = true;
+                config.inputEl.form.dispatchEvent(ev);
             });
         });
     }
@@ -701,6 +734,50 @@ function createChatEngine(config) {
         return loadMessages();
     }
 
+    function resumeIfRunning() {
+        // Boot-time recovery: a hard navigation (reload, back/forward) mid-
+        // turn destroys the engine that was streaming, but the server
+        // finishes the detached turn and persists the answer. Without this
+        // probe the reloaded page shows the user's message with no reply, no
+        // indicator, and never updates — the recovery machinery only engaged
+        // for the engine instance that started the stream. One turn-status
+        // fetch on init: if a live turn is running, adopt it and enter the
+        // same polling recovery a severed stream uses.
+        fetch(config.turnStatusUrl)
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                if (finished || streaming || recovering) return;
+                if (data.state !== 'running' || !data.turn_id) return;
+                activeTurnId = data.turn_id;
+                streaming = true;
+                config.sendBtnEl.disabled = true;
+                config.sendBtnEl.textContent = '...';
+                if (config.emptyStateEl) config.emptyStateEl.style.display = 'none';
+                // Same placeholder structure doSend builds, with the
+                // recovery message recover() shows.
+                var assistantBubble = document.createElement('div');
+                assistantBubble.innerHTML = '<div class="overflow-hidden">'
+                    + '<div class="engine-stream-tools text-xs text-gray-500 mb-1"></div>'
+                    + '<div class="bg-gray-700 rounded-lg px-4 py-2">'
+                    + '<div class="engine-stream-content prose-markdown text-sm text-gray-300 break-words"></div>'
+                    + '</div></div>';
+                config.messageListEl.appendChild(assistantBubble);
+                currentStreamContent = assistantBubble.querySelector('.engine-stream-content');
+                currentStreamTools = assistantBubble.querySelector('.engine-stream-tools');
+                currentStreamContent.innerHTML = '<span class="text-amber-400 flex items-center gap-2">'
+                    + SPINNER_SVG
+                    + 'The assistant is still working on your last message…</span>';
+                autoScroll();
+                recovering = true;
+                recoverDeadline = Date.now() + RECOVERY_BUDGET_MS;
+                recoverTimer = setTimeout(pollTurnStatus, RECOVERY_POLL_MS);
+            })
+            .catch(function() { /* best-effort probe — a failure just skips resume */ });
+    }
+
     function teardown() {
         // Called before an engine is discarded (drawer session swap) so its
         // async work can't touch the SUCCESSOR engine's DOM/shared inputs.
@@ -738,6 +815,7 @@ function createChatEngine(config) {
         isStreaming: function() { return streaming; },
         setMode: function(m) { currentMode = m; },
         getMode: function() { return currentMode; },
+        resumeIfRunning: resumeIfRunning,
         teardown: teardown,
     };
 }

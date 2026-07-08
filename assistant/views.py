@@ -23,17 +23,40 @@ BUSY_MESSAGE = (
 )
 
 
+def _abandon_stale_turns(session):
+    """Finalize RUNNING turns whose worker stopped touching them (one
+    conditional UPDATE, race-free).
+
+    A stale row usually means the worker process died mid-turn — but the
+    worker can also still be ALIVE past the toucher's lifetime cap
+    (TURN_TOUCH_MAX_SECONDS) or after a host sleep. Flipping the row out of
+    RUNNING is what arms client._turn_finalized_elsewhere: a surviving
+    worker discards its writes instead of racing whatever this caller is
+    about to do (admit a new turn, or mutate history).
+    """
+    stale_cutoff = timezone.now() - timedelta(
+        seconds=AssistantTurn.STALE_AFTER_SECONDS
+    )
+    session.turns.filter(
+        state=AssistantTurn.STATE_RUNNING, updated_at__lt=stale_cutoff
+    ).update(state=AssistantTurn.STATE_ABANDONED, updated_at=timezone.now())
+
+
 def _live_running_turn(session):
     """The session's RUNNING turn if it is live (not stale), else None.
 
     A detached turn (client disconnected, still draining in background) is
     still writing ChatMessage rows — history-mutating views must not race it.
-    Stale rows (worker process died mid-turn) don't count.
+    Stale rows don't block, but they are ABANDONED here first, not just
+    ignored: a stale-but-alive worker (toucher lifetime cap elapsed, host
+    sleep) would otherwise keep writing tool pairs into the history this
+    caller is about to rewrite — its superseded-worker guard only trips once
+    the row leaves RUNNING. Callers hold the IMMEDIATE write lock
+    (transaction.atomic()), so the abandon-then-check pair is serialized
+    against turn admission.
     """
-    turn = session.turns.filter(state=AssistantTurn.STATE_RUNNING).first()
-    if turn and not turn.is_stale:
-        return turn
-    return None
+    _abandon_stale_turns(session)
+    return session.turns.filter(state=AssistantTurn.STATE_RUNNING).first()
 
 
 def chat_page(request, session_id=None):
@@ -105,12 +128,7 @@ def stream_message_view(request, session_id):
     # hits IntegrityError and gets the busy refusal. A stale running row
     # (worker process died mid-turn) must not block forever, so it is
     # finalized as abandoned first — one conditional UPDATE, also race-free.
-    stale_cutoff = timezone.now() - timedelta(
-        seconds=AssistantTurn.STALE_AFTER_SECONDS
-    )
-    session.turns.filter(
-        state=AssistantTurn.STATE_RUNNING, updated_at__lt=stale_cutoff
-    ).update(state=AssistantTurn.STATE_ABANDONED, updated_at=timezone.now())
+    _abandon_stale_turns(session)
     try:
         with transaction.atomic():
             turn = AssistantTurn.objects.create(session=session)

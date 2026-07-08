@@ -656,12 +656,19 @@ class AssistantStreamRecoveryTests(PlaywrightTestCase):
         in a moment."""
         from assistant.models import AssistantTurn
 
+        self._goto()
+        # Let the boot-resume probe settle on "no running turn" before
+        # seeding one — otherwise the probe could adopt it and lock the
+        # send button.
+        self.page.wait_for_load_state("networkidle")
         # A fresh (non-stale) running turn makes the real send view refuse
-        # with the busy-guard SSE error — no route mocking needed.
+        # with the busy-guard SSE error — no route mocking needed. Created
+        # AFTER the page load (the two-tab shape: another tab admitted it),
+        # because a pre-load running turn now triggers Wave 2 boot-resume,
+        # which locks the send button instead of letting this send happen.
         AssistantTurn.objects.create(
             session=self.session, state=AssistantTurn.STATE_RUNNING
         )
-        self._goto()
         self._send("second question")
 
         self.page.wait_for_selector("text=still working", timeout=5000)
@@ -1207,5 +1214,311 @@ class AssistantPhase6TitleAndDrawerTests(PlaywrightTestCase):
                 )
             )
             # Opening the picker lazily loads the label select.
+            self.page.evaluate("toggleEmailPicker()")
+            self.page.wait_for_selector("#attach-label-select", timeout=5000)
+
+
+class AssistantWave2IntegrationTests(PlaywrightTestCase):
+    """Wave 2 pre-deploy integration review fixes: boot-time resume of a
+    running turn (+ title pickup via turn-status), drawer busy-guard notice,
+    edit re-carrying attachment blocks, and synthetic resends leaving staged
+    attachments alone."""
+
+    def _capture_stream_posts(self):
+        """Patch window.fetch so /stream/ POSTs are captured (message text on
+        window.__capturedMessages) and answered with a minimal healthy SSE
+        stream; every other fetch passes through to the real server."""
+        self.page.evaluate(
+            """() => {
+                const orig = window.fetch;
+                const enc = new TextEncoder();
+                window.__capturedMessages = [];
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        window.__capturedMessages.push(
+                            opts.body.get('message'));
+                        const body =
+                            'event: user_message\\n'
+                            + 'data: {"id": 1, "content": "q", "turn_id": 777}\\n\\n'
+                            + 'event: token\\ndata: {"text": "ok"}\\n\\n'
+                            + 'event: done\\ndata: {"message_id": 1}\\n\\n';
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(body));
+                                ctrl.close();
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+
+    def test_reload_mid_turn_resumes_and_renders_answer_and_title(self):
+        """F2-1 + F1-2: loading a session whose turn is still RUNNING must
+        adopt it (send locked, 'still working' bubble) and, when the turn
+        completes server-side, render the persisted answer and pick the
+        async-generated title up from the turn-status payload."""
+        from assistant.models import AssistantTurn
+
+        session = ChatSession.objects.create()  # title "New Chat"
+        ChatMessage.objects.create(
+            session=session, role="user", content="a very long question"
+        )
+        turn = AssistantTurn.objects.create(
+            session=session, state=AssistantTurn.STATE_RUNNING
+        )
+        self.page.goto(self.url(f"/assistant/{session.pk}/"))
+
+        # Boot-resume adopts the live turn.
+        self.page.wait_for_selector(
+            "text=still working on your last message", timeout=5000
+        )
+        self.page.wait_for_function(
+            "document.getElementById('send-btn').disabled", timeout=5000
+        )
+
+        # The turn finishes in the background (what the detached drain does):
+        # answer persisted, title generated, turn completed.
+        answer = ChatMessage.objects.create(
+            session=session, role="assistant", content="the finished answer"
+        )
+        session.title = "Generated Title"
+        session.save(update_fields=["title"])
+        AssistantTurn.objects.filter(pk=turn.pk).update(
+            state=AssistantTurn.STATE_COMPLETED, final_message=answer
+        )
+
+        # The 4s status poll lands on completed: messages reload, send
+        # unlocks, and the title reaches the header from the status payload.
+        self.page.wait_for_selector("text=the finished answer", timeout=15000)
+        self.page.wait_for_function(
+            "!document.getElementById('send-btn').disabled", timeout=10000
+        )
+        self.page.wait_for_function(
+            "document.querySelector('h1.truncate')"
+            " && document.querySelector('h1.truncate').textContent"
+            "        .includes('Generated Title')",
+            timeout=10000,
+        )
+
+    def test_drawer_busy_guard_shows_notice(self):
+        """F1-1: a submit into a streaming drawer engine must surface the
+        shared toast, not silently no-op (Process Email's synthetic submit
+        lands on exactly this path)."""
+        self.page.goto(self.url("/"))
+        self.page.wait_for_selector("#assistant-drawer", state="attached")
+        self.page.evaluate("openDrawer()")
+        self.page.wait_for_function(
+            "typeof drawerEngine !== 'undefined' && drawerEngine !== null"
+        )
+        # Hold a stream open so the engine stays streaming.
+        self.page.evaluate(
+            """() => {
+                const orig = window.fetch;
+                const enc = new TextEncoder();
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(
+                                    'event: user_message\\n'
+                                    + 'data: {"id": 1, "content": "q", "turn_id": 555}\\n\\n'
+                                    + 'event: token\\ndata: {"text": "partial"}\\n\\n'
+                                ));
+                                window.__holdCtrl = ctrl;  // never closed
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+        self.page.fill("#drawer-chat-input", "first message")
+        self.page.click("#drawer-send-btn")
+        self.page.wait_for_selector(
+            "#drawer-message-list >> text=partial", timeout=5000
+        )
+        # A second submit mid-stream (typed or synthetic) → visible notice.
+        self.page.evaluate(
+            """() => {
+                document.getElementById('drawer-chat-input').value = 'second';
+                document.getElementById('drawer-chat-form').dispatchEvent(
+                    new Event('submit', {cancelable: true}));
+            }"""
+        )
+        self.page.wait_for_selector("#chat-notice", timeout=5000)
+        self.assertIn(
+            "still responding",
+            self.page.locator("#chat-notice").text_content(),
+        )
+        # The refused text stays in the input — nothing was swallowed.
+        self.assertEqual(
+            self.page.input_value("#drawer-chat-input"), "second"
+        )
+
+    def test_edit_resend_keeps_attachment_blocks(self):
+        """F4-2: editing a message that carried [AttachedEmails] must re-carry
+        the marker block on the resend — the input is populated from the
+        marker-stripped display text and the edit deletes the original row."""
+        session = ChatSession.objects.create(title="Attach Chat")
+        raw = (
+            '[AttachedEmails]\n'
+            '[{"thread_id": "t1", "subject": "Deal", "thread_text": "body"}]\n'
+            '[/AttachedEmails]\n'
+            'summarize this'
+        )
+        user_msg = ChatMessage.objects.create(
+            session=session, role="user", content=raw
+        )
+        ChatMessage.objects.create(
+            session=session, role="assistant", content="summary here"
+        )
+        self.page.goto(self.url(f"/assistant/{session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+        self._capture_stream_posts()
+
+        self.page.evaluate(f"editMessage({user_msg.pk})")
+        # The input holds only the typed text (markers stripped for display).
+        self.assertEqual(
+            self.page.input_value("#chat-input"), "summarize this"
+        )
+        self.page.fill("#chat-input", "summarize this edited")
+        # Organic submit (the user pressing Send).
+        self.page.evaluate(
+            "document.getElementById('chat-form').dispatchEvent("
+            "new Event('submit', {cancelable: true}))"
+        )
+        self.page.wait_for_function(
+            "window.__capturedMessages && window.__capturedMessages.length === 1",
+            timeout=10000,
+        )
+        sent = self.page.evaluate("window.__capturedMessages[0]")
+        self.assertTrue(
+            sent.startswith("[AttachedEmails]"),
+            f"attachment block dropped from edited resend: {sent[:80]!r}",
+        )
+        self.assertIn('"thread_text": "body"', sent)
+        self.assertTrue(sent.endswith("summarize this edited"))
+
+    def test_retry_leaves_staged_attachments_alone(self):
+        """F4-3: a Retry resend must not consume attachments staged for the
+        user's NEXT message — the staged block must not ride on the retried
+        text, and the staging must survive."""
+        session = ChatSession.objects.create(title="Retry Chat")
+        ChatMessage.objects.create(
+            session=session, role="user", content="the question"
+        )
+        answer = ChatMessage.objects.create(
+            session=session, role="assistant", content="the answer"
+        )
+        self.page.goto(self.url(f"/assistant/{session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+        self._capture_stream_posts()
+
+        # Stage an email for the user's next message (ready to send).
+        self.page.evaluate(
+            """() => {
+                _attachedEmails.push({
+                    threadId: 't9', subject: 'For my next message',
+                    fromName: 'A', fromEmail: 'a@example.com', date: '',
+                    messageCount: 1, threadText: 'staged body',
+                    loading: false, error: '',
+                });
+                _renderEmailSummary();
+            }"""
+        )
+        self.page.evaluate(f"retryMessage({answer.pk})")
+        self.page.wait_for_function(
+            "window.__capturedMessages && window.__capturedMessages.length === 1",
+            timeout=10000,
+        )
+        sent = self.page.evaluate("window.__capturedMessages[0]")
+        self.assertNotIn("[AttachedEmails]", sent)
+        self.assertEqual(sent, "the question")
+        # The staging survived for the user's next organic send.
+        self.assertEqual(self.page.evaluate("_attachedEmails.length"), 1)
+
+    def test_edit_network_failure_restores_text(self):
+        """F5-1: a network failure in the edit chain must restore the typed
+        text and show a notice — the text lived only in a local variable and
+        the input was already cleared (silent loss pre-fix)."""
+        session = ChatSession.objects.create(title="Edit Fail Chat")
+        user_msg = ChatMessage.objects.create(
+            session=session, role="user", content="original question"
+        )
+        ChatMessage.objects.create(
+            session=session, role="assistant", content="original answer"
+        )
+        self.page.goto(self.url(f"/assistant/{session.pk}/"))
+        self.page.wait_for_selector("#chat-input")
+        # Reject the edit POST at the network level (blip mid-round-trip).
+        self.page.evaluate(
+            """() => {
+                const orig = window.fetch;
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/edit/')) {
+                        return Promise.reject(new TypeError('network down'));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+        self.page.evaluate(f"editMessage({user_msg.pk})")
+        self.page.fill("#chat-input", "edited question")
+        self.page.evaluate(
+            "document.getElementById('chat-form').dispatchEvent("
+            "new Event('submit', {cancelable: true}))"
+        )
+        self.page.wait_for_selector("#chat-notice", timeout=5000)
+        self.assertIn(
+            "restored",
+            self.page.locator("#chat-notice").text_content(),
+        )
+        self.page.wait_for_function(
+            "document.getElementById('chat-input').value === 'edited question'",
+            timeout=5000,
+        )
+
+    def test_gmail_label_load_retries_after_failure(self):
+        """F5-3: a failed label load must not permanently consume the lazy
+        one-shot — closing and reopening the attach panel retries."""
+        from unittest.mock import patch
+
+        with patch("email_links.gmail.is_available", return_value=True), \
+             patch("email_links.gmail.get_labels", return_value=[
+                 {"id": "INBOX", "name": "Inbox", "type": "system"},
+             ]):
+            session = ChatSession.objects.create(title="Labels Chat")
+            self.page.goto(self.url(f"/assistant/{session.pk}/"))
+            self.page.wait_for_selector("#chat-input", state="visible")
+            # First label request dies at the network level.
+            state = {"first": True}
+
+            def handle(route):
+                if state["first"]:
+                    state["first"] = False
+                    route.abort()
+                else:
+                    route.continue_()
+
+            self.page.route("**/gmail-labels/", handle)
+            self.page.evaluate("toggleEmailPicker()")
+            self.page.wait_for_timeout(600)
+            self.assertEqual(
+                self.page.locator("#attach-label-select").count(), 0,
+                "test setup: first load should have failed",
+            )
+            # Close and reopen: the reset flag re-fires the load, which now
+            # succeeds.
+            self.page.evaluate("toggleEmailPicker()")
             self.page.evaluate("toggleEmailPicker()")
             self.page.wait_for_selector("#attach-label-select", timeout=5000)

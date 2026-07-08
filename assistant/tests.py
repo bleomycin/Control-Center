@@ -2398,6 +2398,107 @@ class ConditionalToolRegistrationTest(TestCase):
             json.dumps(actual, sort_keys=True),
         )
 
+    def test_session_scan_covers_history_outside_window(self):
+        """Wave 2 F3-1: the request window is truncated (anchored window,
+        Phase 3), so gating on the window alone dropped the tool for the
+        rest of the session once the marker message scrolled past the
+        anchor — and the tools-array byte change invalidated every
+        message-tier cache entry. With ``session`` passed, the gate sees
+        the full persisted history."""
+        from assistant.client import _get_active_tools
+        from assistant.models import ChatMessage, ChatSession
+
+        session = ChatSession.objects.create()
+        ChatMessage.objects.create(
+            session=session, role="user",
+            content="[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nattach these",
+        )
+        # A window that no longer contains the marker (post-truncation shape).
+        window = [{"role": "user", "content": "yes confirm"}]
+        names = [t["name"] for t in _get_active_tools(window, session=session)]
+        self.assertIn("bulk_link_drive_files", names)
+
+    def test_session_scan_no_marker_stays_excluded(self):
+        """No false positive from tool_result rows (content="") or
+        assistant-quoted markers."""
+        from assistant.client import _get_active_tools
+        from assistant.models import ChatMessage, ChatSession
+
+        session = ChatSession.objects.create()
+        ChatMessage.objects.create(
+            session=session, role="user", content="plain question"
+        )
+        ChatMessage.objects.create(
+            session=session, role="assistant",
+            content="[AttachedDriveFiles] is a marker...",
+        )
+        ChatMessage.objects.create(
+            session=session, role="user", content="",
+            tool_data=[{"type": "tool_result", "tool_use_id": "t1",
+                        "content": "[AttachedDriveFiles] quoted in a result"}],
+        )
+        names = [t["name"] for t in _get_active_tools(
+            [{"role": "user", "content": "hi"}], session=session
+        )]
+        self.assertNotIn("bulk_link_drive_files", names)
+
+    def test_send_path_tools_include_gated_tool_beyond_window(self):
+        """End-to-end: a request whose truncation window has lost the marker
+        message still sends bulk_link_drive_files in ``tools``. (The
+        non-streaming path runs inline — no worker thread — and shares the
+        hoisted ``_get_active_tools(api_messages, session=session)`` call
+        with the streaming path.)"""
+        from unittest.mock import MagicMock, patch
+
+        from assistant.client import TRUNCATION_HIGH_WATER, send_message
+        from assistant.models import AssistantSettings, ChatMessage, ChatSession
+
+        session = ChatSession.objects.create(title="Gated")  # skip title gen
+        ChatMessage.objects.create(
+            session=session, role="user",
+            content="[AttachedDriveFiles]\n[]\n[/AttachedDriveFiles]\nattach these",
+        )
+        ChatMessage.objects.create(
+            session=session, role="assistant", content="preview ready",
+        )
+        # Enough turns that the anchored window jumps past the marker.
+        for i in range(TRUNCATION_HIGH_WATER + 10):
+            role = "user" if i % 2 == 0 else "assistant"
+            ChatMessage.objects.create(
+                session=session, role=role, content=f"filler {i}"
+            )
+
+        captured = {}
+
+        def fake_create(**kwargs):
+            captured.update(kwargs)
+            resp = MagicMock()
+            resp.content = [MagicMock(type="text", text="ok")]
+            resp.stop_reason = "end_turn"
+            resp.usage = None
+            return resp
+
+        s = AssistantSettings.load()
+        s.api_key = "sk-test"
+        s.save()
+        with patch("assistant.client.anthropic.Anthropic") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.messages.create = fake_create
+            mock_cls.return_value = mock_client
+            send_message(session, "yes confirm")
+
+        names = [t["name"] for t in captured.get("tools", [])]
+        self.assertIn("bulk_link_drive_files", names)
+        # Sanity: the marker message really was outside the sent window.
+        sent_texts = [
+            m["content"] for m in captured.get("messages", [])
+            if isinstance(m.get("content"), str)
+        ]
+        self.assertFalse(
+            any("[AttachedDriveFiles]" in t for t in sent_texts),
+            "test setup: marker should have been truncated out of the window",
+        )
+
     def test_empty_messages_returns_baseline_tools(self):
         from assistant.client import _get_active_tools
         names = [t["name"] for t in _get_active_tools([])]
@@ -3493,6 +3594,45 @@ class HistoryMutationGuardTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["user_text"], "Question")
+
+    def test_mutation_guard_abandons_stale_turn(self):
+        """Wave 2 F4-1: a stale RUNNING turn is ABANDONED by the guard, not
+        just ignored. Its worker can still be alive (toucher lifetime cap,
+        host sleep) — flipping the row out of RUNNING is what makes
+        client._turn_finalized_elsewhere true, so the surviving worker
+        discards its writes instead of racing the range-delete."""
+        from .models import AssistantTurn
+
+        turn = self._stale_turn()
+        resp = self.client.post(
+            reverse("assistant:retry_message", kwargs={
+                "session_id": self.session.pk,
+                "message_id": self.asst_msg.pk,
+            })
+        )
+        self.assertEqual(resp.status_code, 200)
+        turn.refresh_from_db()
+        self.assertEqual(turn.state, AssistantTurn.STATE_ABANDONED)
+        # The armed superseded-worker guard is the point of the abandon.
+        from assistant.client import _turn_finalized_elsewhere
+        self.assertTrue(_turn_finalized_elsewhere(turn))
+
+    def test_prune_abandons_stale_turn(self):
+        """Same guarantee via a second mutating view (shared helper)."""
+        from .models import AssistantTurn, ChatMessage
+
+        for i in range(3):
+            ChatMessage.objects.create(
+                session=self.session, role="user", content=f"filler {i}"
+            )
+        turn = self._stale_turn()
+        resp = self.client.post(
+            reverse("assistant:prune", kwargs={"session_id": self.session.pk}),
+            {"keep": 2},
+        )
+        self.assertEqual(resp.status_code, 200)
+        turn.refresh_from_db()
+        self.assertEqual(turn.state, AssistantTurn.STATE_ABANDONED)
 
 
 class MutatingGetRejectionTests(TestCase):
@@ -5830,3 +5970,71 @@ class SyntheticSubmitCancelableTests(TestCase):
             "non-cancelable synthetic submit(s) — these drop the message via a "
             "native GET navigation: " + ", ".join(offenders),
         )
+
+
+class SyntheticSubmitStagingGuardTests(TestCase):
+    """Wave 2 F4-3: programmatic resends (retry, quick-reply confirm/deny,
+    Process Email) must mark their dispatched submit with `_synthetic = true`,
+    and chat.html's submit handler must gate attachment-staging consumption on
+    it — otherwise attachments staged for the user's NEXT message get glued
+    onto the programmatic resend and the staging is silently cleared. The
+    Enter-key trampolines (chat.html textarea, drawer textarea) are ORGANIC
+    sends and must stay unmarked."""
+
+    def _read(self, rel):
+        import os
+
+        from django.conf import settings
+
+        with open(os.path.join(settings.BASE_DIR, rel), encoding="utf-8") as fh:
+            return fh.read()
+
+    def _function_body(self, text, marker):
+        """Crude but stable slice: from the marker to ~40 lines later."""
+        idx = text.index(marker)
+        return "\n".join(text[idx:].split("\n")[:40])
+
+    def test_programmatic_resend_sites_are_marked_synthetic(self):
+        chat_html = self._read("assistant/templates/assistant/chat.html")
+        chat_js = self._read("static/js/assistant-chat.js")
+        process_email = self._read(
+            "assistant/templates/assistant/partials/_process_email_form.html"
+        )
+        self.assertIn(
+            "_synthetic",
+            self._function_body(chat_html, "function retryMessage("),
+            "retryMessage must dispatch a _synthetic submit",
+        )
+        self.assertIn(
+            "_synthetic",
+            self._function_body(chat_js, "function _injectQuickReplyButtons("),
+            "quick-reply buttons must dispatch a _synthetic submit",
+        )
+        self.assertIn(
+            "_synthetic",
+            self._function_body(process_email, "function _sendToActiveChat("),
+            "_sendToActiveChat must dispatch a _synthetic submit",
+        )
+
+    def test_submit_handler_gates_staging_on_synthetic(self):
+        chat_html = self._read("assistant/templates/assistant/chat.html")
+        self.assertIn(
+            "e._synthetic !== true",
+            chat_html,
+            "chat-form submit handler must skip staged-attachment consumption "
+            "for synthetic submits",
+        )
+
+    def test_enter_trampolines_stay_organic(self):
+        """The textarea Enter dispatches ARE the user's send — marking them
+        _synthetic would stop Enter-sends from carrying staged attachments."""
+        import re
+
+        chat_html = self._read("assistant/templates/assistant/chat.html")
+        drawer = self._read("templates/partials/_assistant_drawer.html")
+        for name, text in (("chat.html", chat_html), ("_assistant_drawer.html", drawer)):
+            for m in re.finditer(r'onkeydown="[^"]*new Event\([^)]*\)[^"]*"', text):
+                self.assertNotIn(
+                    "_synthetic", m.group(0),
+                    f"{name}: Enter trampoline must stay organic",
+                )
