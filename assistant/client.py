@@ -1613,8 +1613,11 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     # SDK retries stay at 1 here: the manual 5-attempt loop below owns
     # status-code retries AND emits keepalives while waiting — stacking the
     # SDK's 5 on top meant up to ~25 silent upstream attempts pinning a
-    # worker thread during an outage. One SDK retry is kept for transient
-    # connection errors, which the manual loop does not retry.
+    # worker thread during an outage. One SDK retry is kept as a fast,
+    # keepalive-free first recovery for connection blips; the manual loop
+    # also retries APIConnectionError (with keepalives between attempts), so
+    # the worst case is 5 manual x 2 upstream attempts — bounded, and the
+    # ~15s total manual backoff stays well under the client's 90s watchdog.
     client = _get_shared_client(api_key, max_retries=1)
     system_prompt = _build_system_prompt()
 
@@ -1802,25 +1805,28 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                         "name": block.name, "input": block.input,
                     })
 
-            # A superseded worker (turn abandoned by admission while this
-            # thread was alive — e.g. the host slept, the turn went stale, and
-            # a new request abandoned it) must not execute side-effecting
-            # tools: a dry_run=false create/update/delete would double-write
-            # into a session a NEW turn is now handling. Check BEFORE running
-            # tools, not only before persisting (below), so no write escapes.
-            if _turn_finalized_elsewhere(turn):
-                logger.warning(
-                    "Assistant turn %s was finalized elsewhere before tool "
-                    "execution; discarding without running tools",
-                    turn.pk,
-                )
-                yield sse("error", {"message": SUPERSEDED_NOTICE})
-                return
-
             # Execute tools (SSE events stream live to client)
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    # A superseded worker (turn abandoned by admission while
+                    # this thread was alive — e.g. the host slept, the turn
+                    # went stale, and a new request abandoned it) must not
+                    # execute side-effecting tools: a dry_run=false
+                    # create/update/delete would double-write into a session
+                    # a NEW turn is now handling. Re-check per block, not
+                    # once per response: the model batches many tool calls,
+                    # and abandonment can land while an earlier block's slow
+                    # tool is still running.
+                    if _turn_finalized_elsewhere(turn):
+                        logger.warning(
+                            "Assistant turn %s was finalized elsewhere before "
+                            "tool execution; discarding without running "
+                            "further tools",
+                            turn.pk,
+                        )
+                        yield sse("error", {"message": SUPERSEDED_NOTICE})
+                        return
                     summary = _tool_summary(block.name, block.input)
                     yield sse("tool_start", {"name": block.name, "summary": summary})
                     result_str = _execute_tool(block.name, block.input)
@@ -1898,8 +1904,13 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
             # no stop-reason notice (e.g. a thinking-only response) — would save
             # content="", render a blank bubble, and then be silently dropped by
             # _validate_tool_pairs on the next turn. Substitute a visible
-            # placeholder so it's informative and survives replay.
+            # placeholder so it's informative and survives replay. The clear
+            # frame first: a whitespace-only completion DID stream deltas, and
+            # the client's token handler appends — without the reset the live
+            # bubble would show the streamed whitespace + notice while the
+            # persisted message is the notice alone.
             final_text = EMPTY_RESPONSE_NOTICE
+            yield sse("clear", {})
             yield sse("token", {"text": final_text})
 
         # A superseded worker must not write (see the tool-pair check above).
@@ -1934,7 +1945,10 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
         # non-consuming worker leaves the title at "New Chat" (recovered
         # cosmetically on a later exchange). Accepted — the title is cosmetic
         # and qcluster liveness underpins all background work here anyway.
-        if session.title == "New Chat" and final_text:
+        # The placeholder check keeps an empty first exchange from titling
+        # the session off the notice text — before the substitution above,
+        # empty final_text skipped this block entirely.
+        if session.title == "New Chat" and final_text and final_text != EMPTY_RESPONSE_NOTICE:
             try:
                 from django_q.tasks import async_task
                 async_task(

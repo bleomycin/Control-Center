@@ -297,6 +297,12 @@ function createChatEngine(config) {
     }
 
     function handleEvent(event, data) {
+        // A chunk whose read() promise resolved before teardown()/finish()
+        // still dispatches here afterwards — abort() can't retract a queued
+        // microtask. Without this gate a stray error/title frame from a
+        // dead drawer engine writes into the shared input/title nodes the
+        // successor engine now owns.
+        if (finished) return;
         if (event === 'user_message') {
             // First frame of every stream — records which AssistantTurn this
             // stream belongs to, so recovery polls can be correlated.
@@ -713,6 +719,15 @@ function createChatEngine(config) {
         cancelScheduledRender();
         if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null; }
         if (recoverTimer) { clearTimeout(recoverTimer); recoverTimer = null; }
+        // Reset the shared send-button state doSend set: finish() will never
+        // run on this engine, and the successor engine wraps the SAME button
+        // node — without this a mid-stream swap left it stuck on '...'
+        // (disabled), soft-locking the drawer until reload.
+        streaming = false;
+        if (config.sendBtnEl) {
+            config.sendBtnEl.disabled = false;
+            config.sendBtnEl.textContent = 'Send';
+        }
     }
 
     return {

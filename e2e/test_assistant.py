@@ -1059,6 +1059,84 @@ class AssistantPhase6TitleAndDrawerTests(PlaywrightTestCase):
         )
         self.assertGreaterEqual(self.page.evaluate("window._titlePolls"), 2)
 
+    def test_drawer_new_chat_mid_stream_no_bleed_and_usable(self):
+        """Bug-check of 266ab76: 'New chat' during a live drawer stream must
+        fully neutralize the old engine. Three failure modes covered:
+        (a) a late SSE error frame — already decoded when teardown ran, so
+        abort() can't retract it — must not restore the OLD session's text
+        into the shared drawer input (handleEvent gates on `finished`);
+        (b) its error text must not surface in the new session's view;
+        (c) the shared send button doSend disabled must be re-enabled by
+        teardown(), or the new session soft-locks until reload."""
+        self.page.goto(self.url("/"))
+        self.page.wait_for_selector("#assistant-drawer", state="attached")
+        self.page.evaluate("openDrawer()")
+        self.page.wait_for_function(
+            "typeof drawerEngine !== 'undefined' && drawerEngine !== null"
+        )
+        # Controlled stream: the first chunk starts the turn; the terminal
+        # error frame is held until after "New chat" tears the engine down.
+        # The fake stream ignores abort() — like a chunk already in flight.
+        self.page.evaluate(
+            """() => {
+                const orig = window.fetch;
+                const enc = new TextEncoder();
+                window.__releaseStream = null;
+                window.fetch = function(url, opts) {
+                    if (typeof url === 'string' && url.includes('/stream/')) {
+                        const stream = new ReadableStream({
+                            start(ctrl) {
+                                ctrl.enqueue(enc.encode(
+                                    'event: user_message\\n'
+                                    + 'data: {"id": 1, "content": "q", "turn_id": 424242}\\n\\n'
+                                    + 'event: token\\ndata: {"text": "partial answer"}\\n\\n'
+                                ));
+                                window.__releaseStream = () => {
+                                    ctrl.enqueue(enc.encode(
+                                        'event: error\\ndata: {"message": "boom from old turn"}\\n\\n'
+                                    ));
+                                    ctrl.close();
+                                };
+                            }
+                        });
+                        return Promise.resolve(new Response(stream, {
+                            status: 200,
+                            headers: {'Content-Type': 'text/event-stream'},
+                        }));
+                    }
+                    return orig.apply(this, arguments);
+                };
+            }"""
+        )
+        self.page.fill("#drawer-chat-input", "old session question")
+        self.page.click("#drawer-send-btn")
+        self.page.wait_for_selector(
+            "#drawer-message-list >> text=partial answer", timeout=5000
+        )
+        # Mid-stream: new chat (real endpoint; only /stream/ is patched).
+        self.page.evaluate("drawerNewSession()")
+        # Now deliver the old stream's held terminal error frame.
+        self.page.wait_for_function("typeof window.__releaseStream === 'function'")
+        self.page.evaluate("window.__releaseStream()")
+        self.page.wait_for_timeout(300)  # let the stray frame dispatch
+
+        # (a) no restore bleed into the shared input...
+        self.assertEqual(self.page.input_value("#drawer-chat-input"), "")
+        # (b) ...no old-turn error text in the new session's view...
+        self.assertEqual(
+            self.page.locator(
+                "#drawer-message-list >> text=boom from old turn"
+            ).count(),
+            0,
+        )
+        # (c) ...and the new session is usable: shared send button re-enabled.
+        self.page.wait_for_function(
+            "!document.getElementById('drawer-send-btn').disabled", timeout=5000
+        )
+        self.assertEqual(
+            self.page.text_content("#drawer-send-btn").strip(), "Send"
+        )
+
     def test_drawer_hides_retry_edit_but_copy_works(self):
         """The shared _message.html partial renders Retry/Edit/Copy in the
         drawer too. Retry/Edit handlers only exist on the full page —

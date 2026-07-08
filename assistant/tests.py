@@ -5257,6 +5257,44 @@ class EmptyResponseNoticeTests(TestCase):
         self.assertIsNotNone(saved)
         self.assertEqual(saved.content, EMPTY_RESPONSE_NOTICE)
 
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_empty_completion_skips_title_and_clears_before_notice(self, MockClient):
+        """Bug-check of 266ab76: (a) the placeholder made final_text truthy,
+        so a session's empty first exchange started generating a title out of
+        the notice text; (b) a whitespace-only completion left the streamed
+        whitespace + notice in the live bubble while persisting the notice
+        alone — a clear frame must precede the notice token."""
+        from .client import EMPTY_RESPONSE_NOTICE
+        from .models import AssistantTurn
+
+        session = ChatSession.objects.create(title="New Chat")
+        MockClient.return_value.messages.stream.return_value = _FakeCompletingStream(text=" ")
+        turn = AssistantTurn.objects.create(session=session)
+        frames = list(_stream_message_impl(session, "hello", mode="fast", turn=turn))
+
+        # No title work off placeholder text: neither title_pending (async
+        # enqueue) nor an inline title frame, and the DB title is untouched.
+        self.assertNotIn("event: title", "".join(frames))
+        session.refresh_from_db()
+        self.assertEqual(session.title, "New Chat")
+        # clear precedes the notice token.
+        clear_idx = next(
+            (i for i, f in enumerate(frames) if f.startswith("event: clear")), None
+        )
+        notice_idx = next(
+            (i for i, f in enumerate(frames) if EMPTY_RESPONSE_NOTICE in f), None
+        )
+        self.assertIsNotNone(clear_idx, frames)
+        self.assertIsNotNone(notice_idx, frames)
+        self.assertLess(clear_idx, notice_idx)
+        saved = (
+            ChatMessage.objects.filter(session=session, role="assistant")
+            .exclude(content="")
+            .last()
+        )
+        self.assertIsNotNone(saved)
+        self.assertEqual(saved.content, EMPTY_RESPONSE_NOTICE)
+
 
 class SupersededWorkerTests(TestCase):
     """M3/L1: a worker whose turn was abandoned by admission must (a) emit a
@@ -5306,6 +5344,97 @@ class SupersededWorkerTests(TestCase):
         mock_exec.assert_not_called()
         self.assertTrue(any(f.startswith("event: error") for f in frames), frames)
         self.assertIn(SUPERSEDED_NOTICE, "".join(frames))
+
+    @patch("assistant.client._execute_tool", return_value='{"action": "created"}')
+    @patch("assistant.client._turn_finalized_elsewhere", side_effect=[False, True])
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_mid_batch_abandonment_stops_remaining_tools(self, MockClient, _mock_final, mock_exec):
+        """Bug-check of 266ab76: the superseded check must run per tool
+        block, not once per response — abandonment landing while block 1's
+        (slow) tool runs must stop block 2's side effects."""
+        from .client import SUPERSEDED_NOTICE
+        from .models import AssistantTurn
+
+        blocks = []
+        for i in range(2):
+            b = MagicMock()
+            b.type = "tool_use"
+            b.id = f"tu_batch_{i}"
+            b.name = "create_record"
+            b.input = {"model": "Note", "dry_run": False}
+            blocks.append(b)
+        resp = MagicMock()
+        resp.model = "claude-sonnet-4-6"
+        resp.content = blocks
+        resp.stop_reason = "tool_use"
+        MockClient.return_value.messages.stream.return_value = _FakePhase2Stream(resp)
+        turn = AssistantTurn.objects.create(session=self.session)
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        # Block 1 ran (its check saw a live turn); block 2 must not have.
+        self.assertEqual(mock_exec.call_count, 1)
+        self.assertTrue(frames[-1].startswith("event: error"), frames[-1])
+        self.assertIn(SUPERSEDED_NOTICE, "".join(frames))
+        # The half-executed batch was discarded before the tool-pair save.
+        self.assertFalse(
+            ChatMessage.objects.filter(session=self.session, role="assistant").exists()
+        )
+
+    @patch("assistant.client._execute_tool", return_value='{"action": "created"}')
+    @patch("assistant.client._turn_finalized_elsewhere", side_effect=[False, True])
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_post_tool_abandonment_emits_terminal_frame(self, MockClient, _mock_final, mock_exec):
+        """Bug-check of 266ab76: the after-tool-execution bail-out (turn
+        abandoned while the only tool ran) had no covering test — it must
+        emit a terminal error frame, not a silent EOF, and persist nothing."""
+        from .client import SUPERSEDED_NOTICE
+        from .models import AssistantTurn
+
+        MockClient.return_value.messages.stream.return_value = _FakePhase2Stream(
+            _fake_tool_use_response()
+        )
+        turn = AssistantTurn.objects.create(session=self.session)
+        frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        self.assertEqual(mock_exec.call_count, 1)
+        self.assertTrue(frames[-1].startswith("event: error"), frames[-1])
+        self.assertIn(SUPERSEDED_NOTICE, "".join(frames))
+        self.assertFalse(
+            ChatMessage.objects.filter(session=self.session, role="assistant").exists()
+        )
+
+    @patch("assistant.client.MAX_TOOL_ITERATIONS", 2)
+    @patch("assistant.client._execute_tool", return_value='{"ok": true}')
+    @patch("assistant.client.anthropic.Anthropic")
+    def test_max_iterations_superseded_emits_terminal_frame(self, MockClient, _mock_exec):
+        """Bug-check of 266ab76: the for-else (max-iterations) bail-out had
+        no covering test — a superseded worker exhausting its budget must
+        emit the terminal error frame and must NOT persist the guidance
+        message or finalize the turn."""
+        from .client import SUPERSEDED_NOTICE
+        from .models import AssistantTurn
+
+        # 2 iterations x (per-block + post-loop) checks stay False; the
+        # for-else check is the 5th call and reports the turn superseded.
+        with patch(
+            "assistant.client._turn_finalized_elsewhere",
+            side_effect=[False, False, False, False, True],
+        ):
+            MockClient.return_value.messages.stream.return_value = _FakeStream()
+            turn = AssistantTurn.objects.create(session=self.session)
+            frames = list(_stream_message_impl(self.session, "hello", mode="fast", turn=turn))
+
+        self.assertTrue(frames[-1].startswith("event: error"), frames[-1])
+        self.assertIn(SUPERSEDED_NOTICE, "".join(frames))
+        self.assertFalse(
+            ChatMessage.objects.filter(
+                session=self.session,
+                role="assistant",
+                content__icontains="maximum number of tool calls",
+            ).exists()
+        )
+        turn.refresh_from_db()
+        self.assertEqual(turn.state, AssistantTurn.STATE_RUNNING)
 
 
 class TurnIdInStreamTests(TransactionTestCase):

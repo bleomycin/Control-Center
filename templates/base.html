@@ -295,6 +295,10 @@
                 // Session fetch failed: without this catch the drawer just
                 // sat on its empty state forever. Surface the failure; the
                 // submit handler above already no-ops while !drawerEngine.
+                // Drop the torn-down predecessor engine too — after a
+                // mid-stream "new chat" its isStreaming() is stuck true, and
+                // keeping the reference would soft-lock the send form.
+                drawerEngine = null;
                 console.error('Drawer init failed:', err);
                 var empty = document.getElementById('drawer-empty-state');
                 if (empty) {

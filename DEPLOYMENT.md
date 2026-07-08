@@ -14,9 +14,10 @@ Status legend: `[x]` verified this cycle · `[ ]` operator action required on th
 These were checked on the local Docker instance with `DEBUG=False`. Re-run after any code change.
 
 - [x] **Migrations are complete** — `manage.py makemigrations --check --dry-run` → *No changes detected*.
-- [x] **Full unit suite green** — `make test-unit` → **Ran 1857 tests … OK** (33 s, 0 failures). (see §5).
-- [x] **Full e2e suite green** — `make test-e2e` → **Ran 223 tests … OK** (103 s, 0 failures).
-- [x] **Adversarial bug-review pass** — 5-agent review of the Phase 5-6 overhaul; 5 real functional defects fixed with regression tests (commit 266ab76); prompt-injection/attack-surface findings deferred by owner decision.
+- [x] **Full unit suite green** — `make test-unit` → **Ran 1861 tests … OK** (0 failures). (see §5).
+- [x] **Full e2e suite green** — `make test-e2e` → **Ran 224 tests … OK** (102 s, 0 failures).
+- [x] **Adversarial bug-review pass** — 5-agent review of the Phase 5-6 overhaul; 5 real functional defects fixed with regression tests (commit 266ab76); prompt-injection/attack-surface findings deferred by owner decision (⚠️ not recorded in-repo — reconstruct before shipping, see pre-deploy Wave 3).
+- [x] **Bug-check of the bug-review (2026-07-08)** — 3-lens adversarial review of 266ab76 itself; 7 defects fixed with regression tests (2 proven failing pre-fix), including a drawer soft-lock (send button stuck disabled after mid-stream "New chat") and a stray-frame input-bleed race; the previously uncovered drawer teardown flow now has e2e + live two-profile/headed/iPhone-16e verification with real API turns.
 - [x] **Credential allowlist enforced** — all 6 credential models (`GoogleDriveSettings`,
       `EmailSettings`, `CalendarFeedSettings`, `BackupSettings`, `AssistantSettings`,
       `SampleDataStatus`) are blocked from the assistant tool registry, and secret-bearing
