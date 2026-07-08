@@ -21,10 +21,10 @@ These were checked on the local Docker instance with `DEBUG=False`. Re-run after
       266ab76 review's deferred security findings are now written up in
       `.claude/docs/assistant-remediation/WAVE-3-SECURITY-FINDINGS.md` (11 findings + PASS list).
       3 fixed this wave (PI-3 client-sanitizer exfil beacon, PI-4 `update_record` PK
-      mass-assignment overwrite, PI-8 bulk-link fail-open default). ⚠️ **2 HIGH items remain an
-      owner go/no-go before prod:** PI-1 (write confirmation is prompt-only, not code-enforced)
-      and PI-2 (spoofable `[AttachedDriveFiles]` tool-gate). Decide: accept for v1 (single
-      trusted user + backups) or run a dedicated confirmation-gate phase first. See §4.
+      mass-assignment overwrite, PI-8 bulk-link fail-open default). PI-1 (write confirmation is
+      prompt-only, not code-enforced) and PI-2 (spoofable `[AttachedDriveFiles]` tool-gate) were
+      **reviewed and ACCEPTED by the owner for v1 (2026-07-08)** — defensible for a single
+      trusted user behind the VPN with backups; not shipping-blockers. See §4.
 - [x] **Bug-check of the bug-review (2026-07-08)** — 3-lens adversarial review of 266ab76 itself; 7 defects fixed with regression tests (2 proven failing pre-fix), including a drawer soft-lock (send button stuck disabled after mid-stream "New chat") and a stray-frame input-bleed race; the previously uncovered drawer teardown flow now has e2e + live two-profile/headed/iPhone-16e verification with real API turns.
 - [x] **Credential allowlist enforced** — all 6 credential models (`GoogleDriveSettings`,
       `EmailSettings`, `CalendarFeedSettings`, `BackupSettings`, `AssistantSettings`,
@@ -100,11 +100,13 @@ The running container is only as safe as its `.env`. Confirm every line:
       gunicorn/qcluster stdout (`--error-logfile -`); a third-party sink would ship
       personal-affairs context off-host for a single-user app. Revisit only if the app gains
       more users or leaves the VPN.
-- [ ] **⚠️ Prompt-injection write surface (owner decision — see §0 and
-      `WAVE-3-SECURITY-FINDINGS.md`).** Write-tool confirmation is enforced only by the system
-      prompt (PI-1), and the `[AttachedDriveFiles]` tool-gate is spoofable from untrusted email
-      content (PI-2). For a single trusted user with backups this is a defensible accepted
-      risk; if not accepting, run the code-enforced confirmation-gate phase before shipping.
+- [x] **Prompt-injection write surface — ACCEPTED for v1 (owner, 2026-07-08).** Write-tool
+      confirmation is enforced only by the system prompt (PI-1) and the `[AttachedDriveFiles]`
+      tool-gate is spoofable from untrusted email content (PI-2). Accepted as-is for a single
+      trusted user behind the VPN with backups — not a shipping blocker. The durable fix (a
+      code-enforced preview→approve→execute contract + non-spoofable attachment signal) is
+      recorded in `WAVE-3-SECURITY-FINDINGS.md` as a future phase if the trust model ever
+      changes (more users / off-VPN).
 
 ## 5. Commands
 
