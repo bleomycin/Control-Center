@@ -73,7 +73,7 @@ def _normalize_file(f):
     }
 
 
-def bulk_link_drive_files(entity_type, entity_id, files, dry_run=False):
+def bulk_link_drive_files(entity_type, entity_id, files, dry_run=True):
     """Create Document records for each Drive file and link them to the target entity.
 
     Args:

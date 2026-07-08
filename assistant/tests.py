@@ -335,6 +335,92 @@ class ToolTests(TestCase):
         self.assertIn("Task_count", result)
 
 
+class WritePkMassAssignmentTests(TestCase):
+    """Wave 3 (PI: mass-assignment): a PK inside the write payload must never
+    reassign the target row. Without the _strip_pk_fields guard, an injected
+    {"id": <other_pk>} on update_record silently overwrites an UNRELATED record
+    (setattr(obj, 'id', other) → save() UPDATEs the other row; validate_unique
+    excludes self, so full_clean misses it)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from notes.models import Note
+        from django.utils import timezone
+
+        cls.victim = Note.objects.create(
+            title="Victim note", content="original victim content",
+            date=timezone.now(),
+        )
+        cls.target = Note.objects.create(
+            title="Target note", content="original target content",
+            date=timezone.now(),
+        )
+
+    def test_update_record_ignores_injected_id_and_edits_only_target(self):
+        from assistant.tools import update_record
+        from notes.models import Note
+
+        result = update_record(
+            "Note", self.target.pk,
+            {"id": self.victim.pk, "title": "HIJACKED", "content": "overwritten"},
+            dry_run=False,
+        )
+        self.assertEqual(result.get("action"), "updated")
+        # The victim row is untouched...
+        self.victim.refresh_from_db()
+        self.assertEqual(self.victim.title, "Victim note")
+        self.assertEqual(self.victim.content, "original victim content")
+        # ...and the addressed target row is what actually changed.
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.title, "HIJACKED")
+        self.assertEqual(self.target.pk, result["record"]["__pk__"])
+
+    def test_update_record_ignores_injected_pk_alias(self):
+        from assistant.tools import update_record
+        from notes.models import Note
+
+        update_record(
+            "Note", self.target.pk,
+            {"pk": self.victim.pk, "title": "via pk alias"},
+            dry_run=False,
+        )
+        self.victim.refresh_from_db()
+        self.assertEqual(self.victim.title, "Victim note")
+        self.target.refresh_from_db()
+        self.assertEqual(self.target.title, "via pk alias")
+
+    def test_update_record_dry_run_preview_drops_injected_id(self):
+        from assistant.tools import update_record
+
+        result = update_record(
+            "Note", self.target.pk,
+            {"id": self.victim.pk, "title": "preview only"},
+            dry_run=True,
+        )
+        self.assertTrue(result["dry_run"])
+        # The preview must not advertise a pk change.
+        self.assertNotIn("id", result["changes"])
+        self.assertNotIn("pk", result["changes"])
+        self.assertIn("title", result["changes"])
+
+    def test_create_record_ignores_injected_id(self):
+        from notes.models import Note
+
+        result = create_record_helper(
+            "Note",
+            {"id": self.victim.pk, "title": "fresh note", "content": "body",
+             "date": "2026-07-08T12:00:00-07:00"},
+            dry_run=False,
+        )
+        self.assertEqual(result["action"], "created")
+        # The victim (whose pk was injected) is untouched and a NEW row exists.
+        self.victim.refresh_from_db()
+        self.assertEqual(self.victim.title, "Victim note")
+        created_pk = result["record"]["__pk__"]
+        self.assertNotEqual(created_pk, self.victim.pk)
+        self.assertTrue(Note.objects.filter(pk=created_pk, title="fresh note").exists())
+
+
 class SearchWordSplitTests(TestCase):
     """Tests for word-splitting and primary/secondary field prioritization."""
 

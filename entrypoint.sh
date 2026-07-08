@@ -24,8 +24,11 @@ if [ "$LOAD_SAMPLE_DATA" = "true" ]; then
     python manage.py load_sample_data || echo "WARNING: load_sample_data failed (non-fatal)"
 fi
 
-echo "Starting qcluster in background..."
-python manage.py qcluster &
+# NOTE: the Django-Q2 cluster is no longer launched here. It runs as its own
+# `qcluster` compose service (restart: unless-stopped) so a worker crash is
+# supervised and auto-restarted instead of silently dying inside this
+# container while gunicorn stays up (async chat-title generation would
+# otherwise stop with no signal). See docker-compose.yml.
 
 mkdir -p /app/backups
 

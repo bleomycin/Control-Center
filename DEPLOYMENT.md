@@ -16,7 +16,15 @@ These were checked on the local Docker instance with `DEBUG=False`. Re-run after
 - [x] **Migrations are complete** — `manage.py makemigrations --check --dry-run` → *No changes detected*.
 - [x] **Full unit suite green** — `make test-unit` → **Ran 1861 tests … OK** (0 failures). (see §5).
 - [x] **Full e2e suite green** — `make test-e2e` → **Ran 224 tests … OK** (102 s, 0 failures).
-- [x] **Adversarial bug-review pass** — 5-agent review of the Phase 5-6 overhaul; 5 real functional defects fixed with regression tests (commit 266ab76); prompt-injection/attack-surface findings deferred by owner decision (⚠️ not recorded in-repo — reconstruct before shipping, see pre-deploy Wave 3).
+- [x] **Adversarial bug-review pass** — 5-agent review of the Phase 5-6 overhaul; 5 real functional defects fixed with regression tests (commit 266ab76).
+- [x] **Prompt-injection / attack-surface findings reconstructed (Wave 3, 2026-07-08)** — the
+      266ab76 review's deferred security findings are now written up in
+      `.claude/docs/assistant-remediation/WAVE-3-SECURITY-FINDINGS.md` (11 findings + PASS list).
+      3 fixed this wave (PI-3 client-sanitizer exfil beacon, PI-4 `update_record` PK
+      mass-assignment overwrite, PI-8 bulk-link fail-open default). ⚠️ **2 HIGH items remain an
+      owner go/no-go before prod:** PI-1 (write confirmation is prompt-only, not code-enforced)
+      and PI-2 (spoofable `[AttachedDriveFiles]` tool-gate). Decide: accept for v1 (single
+      trusted user + backups) or run a dedicated confirmation-gate phase first. See §4.
 - [x] **Bug-check of the bug-review (2026-07-08)** — 3-lens adversarial review of 266ab76 itself; 7 defects fixed with regression tests (2 proven failing pre-fix), including a drawer soft-lock (send button stuck disabled after mid-stream "New chat") and a stray-frame input-bleed race; the previously uncovered drawer teardown flow now has e2e + live two-profile/headed/iPhone-16e verification with real API turns.
 - [x] **Credential allowlist enforced** — all 6 credential models (`GoogleDriveSettings`,
       `EmailSettings`, `CalendarFeedSettings`, `BackupSettings`, `AssistantSettings`,
@@ -81,13 +89,22 @@ The running container is only as safe as its `.env`. Confirm every line:
 
 - [x] **`.env.example` was missing `ENABLE_SSL`** — fixed this cycle: added a commented
       `#ENABLE_SSL=true` block documenting the secure-cookie/HSTS/SSL-redirect switch.
-- [ ] **qcluster runs backgrounded inside the web container** (`python manage.py qcluster &`). If it
-      dies, gunicorn stays up and the container looks healthy, but async work (auto-generated chat
-      titles) silently stops. Impact is **low** — titles degrade gracefully and nothing else depends on
-      the worker — but there is no supervisor auto-restart. Decide: accept, or add a healthcheck /
-      split qcluster into its own `restart: unless-stopped` service.
-- [ ] **No error tracking** (Sentry/rollbar). Errors currently surface only in gunicorn/qcluster stdout
-      (`--error-logfile -`). Optional for a single-user app; add if you want alerting on 500s.
+- [x] **qcluster supervision — RESOLVED (Wave 3, 2026-07-08).** qcluster is now its own
+      Compose service (`docker-compose.yml`): same image, `command: python manage.py qcluster`,
+      shared `.env` + SQLite volume, `restart: unless-stopped`, `depends_on: web
+      (service_healthy)`. A dead worker is now auto-restarted by Docker instead of silently
+      orphaning under gunicorn. (Blast radius was broader than first thought — it also carried
+      the `setup_schedules` notifications, not just chat titles.) Verified live: the separate
+      service processes both scheduled notifications and async title tasks across containers.
+- [x] **Error tracking (Sentry/rollbar) — DECIDED: SKIP (Wave 3).** Errors surface in
+      gunicorn/qcluster stdout (`--error-logfile -`); a third-party sink would ship
+      personal-affairs context off-host for a single-user app. Revisit only if the app gains
+      more users or leaves the VPN.
+- [ ] **⚠️ Prompt-injection write surface (owner decision — see §0 and
+      `WAVE-3-SECURITY-FINDINGS.md`).** Write-tool confirmation is enforced only by the system
+      prompt (PI-1), and the `[AttachedDriveFiles]` tool-gate is spoofable from untrusted email
+      content (PI-2). For a single trusted user with backups this is a defensible accepted
+      risk; if not accepting, run the code-enforced confirmation-gate phase before shipping.
 
 ## 5. Commands
 

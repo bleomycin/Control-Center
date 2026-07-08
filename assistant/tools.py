@@ -5,12 +5,41 @@ Each function is called by the Anthropic API tool-use loop.
 TOOL_DEFINITIONS contains the JSON schemas for tool registration.
 """
 
+import logging
+
 from django.db.models import Q
 from django.utils import timezone
 
 from documents.services import bulk_link_drive_files as _service_bulk_link_drive_files
 
 from . import registry
+
+logger = logging.getLogger(__name__)
+
+
+def _strip_pk_fields(model_cls, data):
+    """Remove any primary-key-identifying keys from a write payload in place.
+
+    The generic write tools apply every key in ``data`` to the record
+    (``setattr(obj, key, value)`` / ``model_cls(**data)``). Left unfiltered, an
+    injected ``{"id": <other_pk>}`` reassigns the loaded instance's PK before
+    ``save()`` — on ``update_record`` that becomes an
+    ``UPDATE ... WHERE id=<other_pk>``, a SILENT overwrite of an unrelated
+    record (Django's ``validate_unique`` excludes ``self``, so ``full_clean``
+    does not catch it). The PK is never settable via these tools: the target of
+    an update/delete is addressed by the ``id`` argument, and a create's PK is
+    assigned by the database. Returns the list of keys removed (for logging).
+    """
+    pk_names = {"pk", "id", model_cls._meta.pk.name, model_cls._meta.pk.attname}
+    removed = [k for k in list(data) if k in pk_names]
+    for key in removed:
+        data.pop(key, None)
+    if removed:
+        logger.warning(
+            "Stripped primary-key field(s) %s from a %s write payload",
+            removed, model_cls.__name__,
+        )
+    return removed
 
 
 def _apply_reminder_policy(model_cls, data, existing_obj=None):
@@ -428,6 +457,10 @@ def create_record(model, data, dry_run=True):
     """Create a new record. dry_run=True returns a preview without saving."""
     model_cls = registry.get_model(model)
 
+    # A PK is never settable via this tool — drop it before it can be
+    # mass-assigned (a create with an injected id could squat a chosen pk).
+    _strip_pk_fields(model_cls, data)
+
     # Normalize choice field values (label→value, case-insensitive)
     _normalize_choice_fields(model_cls, data)
     _apply_reminder_policy(model_cls, data)
@@ -482,6 +515,12 @@ def update_record(model, id, data, dry_run=True):
         obj = model_cls.objects.get(pk=id)
     except model_cls.DoesNotExist:
         return {"error": f"{model} with id={id} not found"}
+
+    # Drop any PK key from the payload: reassigning obj.pk here turns save()
+    # into an UPDATE of a DIFFERENT row (silent cross-record overwrite —
+    # validate_unique excludes self, so full_clean misses it). The row to
+    # update is fixed by the `id` argument above, never by `data`.
+    _strip_pk_fields(model_cls, data)
 
     # Normalize choice field values (label→value, case-insensitive)
     _normalize_choice_fields(model_cls, data)

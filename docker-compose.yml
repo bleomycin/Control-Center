@@ -1,6 +1,7 @@
 services:
   web:
     build: .
+    image: controlcenter-app
     ports:
       - "8000:8000"
     env_file:
@@ -10,3 +11,38 @@ services:
       - ./persist/media:/app/media
       - ./persist/backups:/app/backups
     restart: unless-stopped
+    healthcheck:
+      # gunicorn binds :8000 only AFTER entrypoint.sh finishes migrations, so
+      # an open port is a sufficient "DB migrated + app serving" signal for the
+      # qcluster service to depend on. A raw socket connect (not an HTTP GET)
+      # avoids an ALLOWED_HOSTS 400 in prod, and python is already in the image
+      # (the slim base has no curl/wget).
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # Django-Q2 background worker (async chat-title generation + scheduled
+  # notifications). Split out of the web container so a crash is supervised
+  # and auto-restarted rather than silently ending background work while
+  # gunicorn stays up. Shares the web image and the SQLite volume (Django-Q2
+  # uses the ORM broker, so it must read/write the same db.sqlite3). The
+  # `command` override makes entrypoint.sh `exec` qcluster directly, skipping
+  # the web-only startup (migrations/collectstatic/gunicorn) — the web
+  # service owns those. Waits for web to be healthy so it never queries the
+  # django_q tables before migrations create them.
+  qcluster:
+    build: .
+    image: controlcenter-app
+    command: ["python", "manage.py", "qcluster"]
+    env_file:
+      - .env
+    volumes:
+      - ./persist/data:/app/data
+      - ./persist/media:/app/media
+      - ./persist/backups:/app/backups
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
