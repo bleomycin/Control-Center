@@ -13,9 +13,10 @@ Status legend: `[x]` verified this cycle · `[ ]` operator action required on th
 
 These were checked on the local Docker instance with `DEBUG=False`. Re-run after any code change.
 
-- [x] **Migrations are complete** — `manage.py makemigrations --check --dry-run` → *No changes detected*.
-- [x] **Full unit suite green** — `make test-unit` → **Ran 1861 tests … OK** (0 failures). (see §5).
-- [x] **Full e2e suite green** — `make test-e2e` → **Ran 224 tests … OK** (102 s, 0 failures).
+- [x] **Migrations are complete** — `manage.py makemigrations --check --dry-run` → *No changes detected*. (Re-verified Wave 4, 2026-07-08, under the prod-shaped env.)
+- [x] **Full unit suite green** — `make test-unit` → **Ran 1873 tests … OK** (0 failures). (see §5).
+      ⚠️ Run against a freshly rebuilt image — code is baked in; a stale image tests the previous build.
+- [x] **Full e2e suite green** — `make test-e2e` → **Ran 232 tests … OK** (114 s, 0 failures).
 - [x] **Adversarial bug-review pass** — 5-agent review of the Phase 5-6 overhaul; 5 real functional defects fixed with regression tests (commit 266ab76).
 - [x] **Prompt-injection / attack-surface findings reconstructed (Wave 3, 2026-07-08)** — the
       266ab76 review's deferred security findings are now written up in
@@ -38,9 +39,17 @@ These were checked on the local Docker instance with `DEBUG=False`. Re-run after
       **0 `database is locked`, 0 failures, 0 stalls > 5 s** (tail latency peaked ~3–4 s, far under
       the 20 s `busy_timeout` ceiling). Admission constraint serializes exactly one turn per session,
       the rest cleanly refused as busy — 0 `OperationalError`.
-- [x] **`manage.py check --deploy`** — the 5 warnings it reports (SSL redirect, HSTS, cookie-secure
-      flags, SECRET_KEY strength) are **all gated behind `ENABLE_SSL` and the prod `.env`**, not code
-      defects. Setting the prod env below clears every one. See §2.
+- [x] **`manage.py check --deploy`** — **verified clean (0 issues, 0 silenced) under a prod-shaped
+      `.env`** (Wave 4 dress rehearsal, 2026-07-08: strong SECRET_KEY + `ENABLE_SSL=true` + real
+      `ALLOWED_HOSTS`). Also live-verified in that config: plain HTTP → 301 https;
+      `X-Forwarded-Proto: https` (what Caddy sends) → 200 with full HSTS/nosniff/DENY headers;
+      WhiteNoise hashed assets `immutable` + gzip; plain 404 page; bad `Host:` → 400 with no
+      traceback leakage. See §2.
+- [x] **qcluster self-healing verified (Wave 4)** — in-container process kill → Docker restarted the
+      service in ~26 s; async probe task, session-title generation, and the scheduled notification
+      batch all resumed unaided. ⚠️ Note: `docker kill`/`docker stop` are user-initiated and do NOT
+      trigger `restart: unless-stopped` — a manually killed qcluster stays down until
+      `docker compose up -d`.
 
 ---
 
