@@ -1278,6 +1278,9 @@ class TemperaturePassthroughTests(TestCase):
 
         settings = AssistantSettings.load()
         settings.api_key = "sk-test-key"
+        # Pass-through only happens on a temperature-capable model — the
+        # default (claude-sonnet-5) rejects sampling params, so pin one.
+        settings.model = "claude-sonnet-4-6"
         settings.temperature = 0.3
         settings.save()
 
@@ -1306,6 +1309,8 @@ class TemperaturePassthroughTests(TestCase):
 
         settings = AssistantSettings.load()
         settings.api_key = "sk-test-key"
+        # Pin a temperature-capable model (default claude-sonnet-5 omits it).
+        settings.model = "claude-sonnet-4-6"
         settings.temperature = 0.0
         settings.save()
 
@@ -1379,6 +1384,10 @@ class Opus48MigrationTests(TestCase):
         for mode_name, config in MODE_CONFIGS.items():
             if "thinking" not in config:
                 continue
+            if config["thinking"].get("type") == "disabled":
+                # fast pins thinking OFF (Sonnet 5 defaults it on) — no
+                # display needed when nothing streams thinking deltas.
+                continue
             with self.subTest(mode=mode_name):
                 self.assertEqual(
                     config["thinking"].get("display"), "summarized"
@@ -1424,9 +1433,11 @@ class Opus48MigrationTests(TestCase):
         self.assertTrue(_model_accepts_temperature("claude-sonnet-4-6"))
         self.assertTrue(_model_accepts_temperature("claude-haiku-4-5-20251001"))
         self.assertTrue(_model_accepts_temperature("claude-opus-4-6"))
-        # Opus 4.7+ removed sampling params -> must fail safe (no temperature).
+        # Opus 4.7+ and Sonnet 5 removed sampling params -> must fail safe
+        # (no temperature).
         self.assertFalse(_model_accepts_temperature("claude-opus-4-8"))
         self.assertFalse(_model_accepts_temperature("claude-opus-4-7"))
+        self.assertFalse(_model_accepts_temperature("claude-sonnet-5"))
         # Unknown / empty -> fail safe.
         self.assertFalse(_model_accepts_temperature("claude-future-9"))
         self.assertFalse(_model_accepts_temperature(""))
@@ -1458,6 +1469,93 @@ class Opus48MigrationTests(TestCase):
 
             first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
             self.assertNotIn("temperature", first_call_kwargs)
+
+    def test_think_mode_targets_sonnet_5(self):
+        """'think' mode is pinned to claude-sonnet-5 with adaptive thinking
+        and the summarized display (see test_max_mode_targets_opus_4_8 for
+        why display must stay pinned)."""
+        from .client import MODE_CONFIGS
+
+        self.assertEqual(MODE_CONFIGS["think"]["model"], "claude-sonnet-5")
+        self.assertEqual(
+            MODE_CONFIGS["think"]["thinking"],
+            {"type": "adaptive", "display": "summarized"},
+        )
+
+    def test_fast_mode_pins_thinking_disabled(self):
+        """'fast' must explicitly disable thinking: Sonnet 5 turns adaptive
+        thinking ON by default with display "omitted", which streams no
+        thinking_delta events — silently inheriting that default would starve
+        the SSE keepalive during a long think and trip the client watchdog."""
+        from .client import MODE_CONFIGS
+
+        self.assertEqual(
+            MODE_CONFIGS["fast"]["thinking"], {"type": "disabled"}
+        )
+
+    def test_fast_mode_sends_disabled_thinking_with_temperature(self):
+        """The pinned thinking={"type": "disabled"} goes on the wire AND does
+        not suppress temperature for a temperature-capable model."""
+        from .client import send_message
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.model = "claude-sonnet-4-6"
+        settings.temperature = 0.3
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hi"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_response.stop_reason = "end_turn"
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(session, "Hi")  # default mode="fast"
+
+            first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertEqual(
+                first_call_kwargs["thinking"], {"type": "disabled"}
+            )
+            self.assertEqual(first_call_kwargs["temperature"], 0.3)
+
+    def test_fast_mode_omits_temperature_for_sonnet_5(self):
+        """Fast mode on Sonnet 5 (sampling params removed) must NOT send
+        temperature, but must still pin thinking off."""
+        from .client import send_message
+        from .models import AssistantSettings
+
+        settings = AssistantSettings.load()
+        settings.api_key = "sk-test-key"
+        settings.model = "claude-sonnet-5"
+        settings.temperature = 0.3
+        settings.save()
+
+        session = ChatSession.objects.create()
+
+        with patch("assistant.client.anthropic.Anthropic") as MockClient:
+            mock_client = MockClient.return_value
+            mock_block = MagicMock()
+            mock_block.type = "text"
+            mock_block.text = "Hi"
+            mock_response = MagicMock()
+            mock_response.content = [mock_block]
+            mock_response.stop_reason = "end_turn"
+            mock_client.messages.create.return_value = mock_response
+
+            send_message(session, "Hi")  # default mode="fast"
+
+            first_call_kwargs = mock_client.messages.create.call_args_list[0][1]
+            self.assertNotIn("temperature", first_call_kwargs)
+            self.assertEqual(
+                first_call_kwargs["thinking"], {"type": "disabled"}
+            )
 
     def test_truncated_response_appends_notice(self):
         """A max_tokens stop_reason appends a visible truncation notice (non-stream)."""
@@ -5109,6 +5207,14 @@ class WarmCacheToolMatchTests(TestCase):
         self.assertNotIn("bulk_link_drive_files", tool_names)
         # System prompt is the frozen static block real requests send.
         self.assertEqual(len(kwargs["system"]), 1)
+        # Thinking config must mirror fast mode's pinned config — a thinking
+        # mismatch is a cache invalidator, and Sonnet 5 defaults adaptive
+        # thinking ON when the param is omitted, so a warm without the pin
+        # would write an entry no real fast request can read.
+        from .client import MODE_CONFIGS
+        self.assertEqual(
+            kwargs.get("thinking"), MODE_CONFIGS["fast"].get("thinking")
+        )
 
 
 class SharedClientTests(TestCase):

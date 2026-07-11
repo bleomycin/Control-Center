@@ -58,8 +58,11 @@ TURN_TOUCH_INTERVAL_SECONDS = 30
 # turn work.
 TURN_TOUCH_MAX_SECONDS = DETACHED_DRAIN_BUDGET_SECONDS
 CACHE_CONTROL = {"type": "ephemeral"}
-DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_MAX_TOKENS = 8192
+DEFAULT_MODEL = "claude-sonnet-5"
+# Sonnet 5's tokenizer emits ~30% more tokens for the same text than the
+# 4.x generation, so budgets sized for 4.6 start truncating answers that
+# used to fit. 12288 ≈ the old 8192 ceiling in 4.6-equivalent output.
+DEFAULT_MAX_TOKENS = 12288
 TITLE_MODEL = "claude-haiku-4-5-20251001"
 
 # Ceiling for the NON-streaming path only. The SDK refuses non-streaming
@@ -106,8 +109,9 @@ def _stop_reason_notice(response):
     }.get(getattr(response, "stop_reason", None), "")
 
 # Models that accept the `temperature` sampling parameter. Anthropic removed
-# temperature/top_p/top_k on Opus 4.7 and later — sending temperature to those
-# returns HTTP 400. temperature is attached ONLY for models matching this
+# temperature/top_p/top_k on Opus 4.7+ and Sonnet 5 — sending a non-default
+# value to those returns HTTP 400 (claude-sonnet-5 is intentionally absent
+# from this list). temperature is attached ONLY for models matching this
 # allowlist (prefix match, so dated ids like "...-20251001" are covered), so an
 # unrecognized or future model fails SAFE: temperature is omitted and the model
 # uses its own default rather than erroring. Add a prefix only for a model that
@@ -125,18 +129,33 @@ _EXTRA_RULES = ""
 # Per-message mode configurations.
 # Think/Max force specific models to guarantee adaptive thinking support.
 MODE_CONFIGS = {
-    "fast": {},  # Uses settings as-is
+    # Fast is explicitly a NON-thinking mode, and that must be pinned, not
+    # inherited: Sonnet 5 turns adaptive thinking ON by default with
+    # display "omitted" — which streams no thinking_delta events, so a long
+    # silent think would starve the SSE keepalive and trip the client's 90s
+    # watchdog. {"type": "disabled"} keeps fast's immediate-text behavior on
+    # every model in the settings quick-pick (verified live 2026-07-10:
+    # Sonnet 5/4.6, Haiku 4.5, Opus 4.8 all accept it). Caveat: a hand-typed
+    # always-on-thinking model (e.g. claude-fable-5) rejects "disabled" with
+    # a loud 400 — pick think/max modes for those. Model/max_tokens still
+    # come from settings.
+    "fast": {
+        "thinking": {"type": "disabled"},
+    },
     # display must stay pinned to "summarized" on every thinking mode: Opus
-    # 4.7+ default to "omitted", which streams NO thinking_delta events while
-    # the model thinks — and the SSE keepalive (client watchdog kills the
-    # stream after 90s of silence) is driven by those deltas. Same cost
-    # either way; "summarized" matches the Opus 4.6 streaming behavior the
-    # keepalive architecture was built against.
+    # 4.7+ and Sonnet 5 default to "omitted", which streams NO thinking_delta
+    # events while the model thinks — and the SSE keepalive (client watchdog
+    # kills the stream after 90s of silence) is driven by those deltas. Same
+    # cost either way; "summarized" matches the Opus 4.6 streaming behavior
+    # the keepalive architecture was built against.
     "think": {
-        "model": "claude-sonnet-4-6",
+        "model": "claude-sonnet-5",
         "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": "high"},
-        "max_tokens": 16384,
+        # Sonnet 5's tokenizer counts ~30% higher than 4.6, and thinking
+        # shares this budget with the visible output — 24576 ≈ the old
+        # 16384 in 4.6-equivalent output.
+        "max_tokens": 24576,
     },
     "max": {
         "model": "claude-opus-4-8",
@@ -153,10 +172,23 @@ MODE_CONFIGS = {
 def _model_accepts_temperature(model_name):
     """True if ``model_name`` accepts the temperature sampling parameter.
 
-    Opus 4.7+ removed temperature/top_p/top_k (HTTP 400 if sent). Unrecognized
-    models fail safe — temperature is omitted and the model uses its default.
+    Opus 4.7+ and Sonnet 5 removed temperature/top_p/top_k (HTTP 400 if sent).
+    Unrecognized models fail safe — temperature is omitted and the model uses
+    its default.
     """
     return bool(model_name) and model_name.startswith(TEMPERATURE_CAPABLE_PREFIXES)
+
+
+def _thinking_active(mode_config):
+    """True when the mode's thinking config actually enables thinking.
+
+    Fast mode pins ``{"type": "disabled"}`` — that config must still be SENT
+    (Sonnet 5 defaults adaptive thinking ON), but thinking is off, so sampling
+    params like temperature remain valid alongside it. Only an enabling
+    thinking config (adaptive) excludes temperature.
+    """
+    thinking = mode_config.get("thinking")
+    return bool(thinking) and thinking.get("type") != "disabled"
 
 
 # Process-wide Anthropic client cache. Constructing a fresh client per turn
@@ -1114,7 +1146,7 @@ def send_message(session, user_text, mode="fast", effort=""):
     # at position 0 of the cache prefix, where any change is a full miss.
     active_tools = _get_active_tools(api_messages, session=session)
     effective_effort = mode_config.get("output_config", {}).get("effort", "")
-    logger.info(f"send mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
+    logger.info(f"send mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if _thinking_active(mode_config) else 'no'}")
 
     for iteration in range(MAX_TOOL_ITERATIONS):
         try:
@@ -1131,11 +1163,12 @@ def send_message(session, user_text, mode="fast", effort=""):
             )
             if "thinking" in mode_config:
                 create_kwargs["thinking"] = mode_config["thinking"]
-                # temperature is incompatible with thinking — omit it
-            elif _model_accepts_temperature(model_name):
+            # temperature is incompatible with ACTIVE thinking (a pinned
+            # "disabled" config still allows it), and models that dropped
+            # sampling params (Opus 4.7+, Sonnet 5) must not receive it at
+            # all (400) — the allowlist omits it for those.
+            if not _thinking_active(mode_config) and _model_accepts_temperature(model_name):
                 create_kwargs["temperature"] = float(assistant_settings.temperature)
-            # else: model dropped sampling params (Opus 4.7+) — omit temperature
-            # to avoid a 400; the model uses its own default.
             if "output_config" in mode_config:
                 create_kwargs["output_config"] = mode_config["output_config"]
             response = client.messages.create(**create_kwargs)
@@ -1652,7 +1685,7 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
     active_tools = _get_active_tools(api_messages, session=session)
 
     effective_effort = mode_config.get("output_config", {}).get("effort", "")
-    logger.info(f"stream mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if 'thinking' in mode_config else 'no'}")
+    logger.info(f"stream mode={mode} effort={effective_effort} model={model_name} thinking={'yes' if _thinking_active(mode_config) else 'no'}")
 
     # Streaming tool loop: every API call is streamed.
     # Text tokens are yielded live during the final (non-tool) response.
@@ -1677,21 +1710,33 @@ def _stream_message_impl(session, user_text, mode="fast", effort="", turn=None):
                 )
                 if "thinking" in mode_config:
                     stream_kwargs["thinking"] = mode_config["thinking"]
-                    # temperature is incompatible with thinking — omit it
-                elif _model_accepts_temperature(model_name):
+                # temperature is incompatible with ACTIVE thinking (a pinned
+                # "disabled" config still allows it), and models that dropped
+                # sampling params (Opus 4.7+, Sonnet 5) must not receive it
+                # at all (400) — the allowlist omits it for those.
+                if not _thinking_active(mode_config) and _model_accepts_temperature(model_name):
                     stream_kwargs["temperature"] = float(assistant_settings.temperature)
-                # else: model dropped sampling params (Opus 4.7+) — omit
-                # temperature to avoid a 400; the model uses its own default.
                 if "output_config" in mode_config:
                     stream_kwargs["output_config"] = mode_config["output_config"]
 
+                request_started = time.monotonic()
                 with client.messages.stream(**stream_kwargs) as stream:
                     # Capture the request id at stream OPEN (it comes from the
                     # response headers), not only after get_final_message() —
                     # a call killed mid-stream must still be correlatable
                     # with Anthropic's logs.
                     req_id = getattr(stream, "request_id", None)
+                    open_seconds = time.monotonic() - request_started
                     logger.info(f"stream open model={model_name} request_id={req_id}")
+                    if open_seconds >= 10:
+                        # Anthropic-side queueing / silent SDK-internal retry.
+                        # Nothing to do locally, but the 2026-07-10 incident
+                        # (45s to first byte on a fast turn) took log
+                        # archaeology to attribute — make it one line.
+                        logger.warning(
+                            "slow stream open: %.1fs model=%s request_id=%s",
+                            open_seconds, model_name, req_id,
+                        )
                     _record_request_id(turn, req_id)
 
                     # Stream text tokens to client as they arrive.

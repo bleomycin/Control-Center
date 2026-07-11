@@ -726,6 +726,10 @@ def warm_cache(request):
     not raw TOOL_DEFINITIONS): tools are position 0 of the cache key, so a
     warm with the wrong array writes an entry no real request can read —
     every drawer-open paid a full 2x (1h TTL) cache write for nothing.
+    The thinking config must match fast mode's for the same reason: a
+    thinking-config difference is a cache invalidator (Wave-4 soak), and on
+    Sonnet 5 OMITTING it means adaptive-on-by-default — not the pinned
+    "disabled" that real fast requests send.
     max_tokens=0 is the supported pre-warm form: prefill runs (writing the
     cache at the system breakpoint, whose entry covers the tools+system
     prefix as one unit) and returns immediately with no output tokens
@@ -733,18 +737,22 @@ def warm_cache(request):
     """
     try:
         from .client import (
+            MODE_CONFIGS,
             _build_system_prompt,
             _get_active_tools,
             _get_client_and_model,
         )
         client, model_name = _get_client_and_model()
-        client.messages.create(
+        create_kwargs = dict(
             model=model_name,
             max_tokens=0,
             system=_build_system_prompt(),
             tools=_get_active_tools([]),
             messages=[{"role": "user", "content": "hi"}],
         )
+        if "thinking" in MODE_CONFIGS["fast"]:
+            create_kwargs["thinking"] = MODE_CONFIGS["fast"]["thinking"]
+        client.messages.create(**create_kwargs)
     except Exception:
         pass
     return JsonResponse({"ok": True})

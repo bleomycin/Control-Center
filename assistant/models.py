@@ -9,11 +9,11 @@ class AssistantSettings(models.Model):
     # Suggested model ids for the settings datalist (a free-text field — any
     # valid Anthropic model id can be typed). Not a field `choices=` kwarg,
     # so editing this list never needs a migration. Current ids confirmed
-    # 2026-07-04; think/max modes pin their own models in client.MODE_CONFIGS
+    # 2026-07-10; think/max modes pin their own models in client.MODE_CONFIGS
     # regardless of this setting.
     MODEL_CHOICES = [
-        ("claude-sonnet-4-6", "Claude Sonnet 4.6 (recommended)"),
-        ("claude-sonnet-5", "Claude Sonnet 5 (newest Sonnet)"),
+        ("claude-sonnet-5", "Claude Sonnet 5 (recommended)"),
+        ("claude-sonnet-4-6", "Claude Sonnet 4.6 (previous generation)"),
         ("claude-haiku-4-5-20251001", "Claude Haiku 4.5 (fastest, cheapest)"),
         ("claude-opus-4-8", "Claude Opus 4.8 (most capable)"),
     ]
@@ -23,8 +23,10 @@ class AssistantSettings(models.Model):
         help_text="Your name, so the assistant knows not to create a stakeholder for you.",
     )
     api_key = models.CharField(max_length=255, blank=True, default="")
-    model = models.CharField(max_length=100, default="claude-sonnet-4-6")
-    max_tokens = models.PositiveIntegerField(default=8192)
+    model = models.CharField(max_length=100, default="claude-sonnet-5")
+    # Sized for Sonnet 5's tokenizer (~30% more tokens per text than 4.x);
+    # 12288 ≈ the old 8192 in 4.6-equivalent output.
+    max_tokens = models.PositiveIntegerField(default=12288)
     temperature = models.DecimalField(
         max_digits=3, decimal_places=2, default=0.0,
         help_text="0.0 = deterministic, 1.0 = default, 2.0 = maximum creativity",

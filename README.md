@@ -1060,12 +1060,12 @@ An AI-powered assistant that can query and modify all data in the system using t
 
 ### Setup
 
-Requires an Anthropic API key. Configure at `/assistant/settings/` or set the `ANTHROPIC_API_KEY` environment variable. Default model: Claude Sonnet 4.6.
+Requires an Anthropic API key. Configure at `/assistant/settings/` or set the `ANTHROPIC_API_KEY` environment variable. Default model: Claude Sonnet 5.
 
 | Setting | Default | Range |
 |---------|---------|-------|
-| Model | `claude-sonnet-4-6` | Any Anthropic model ID |
-| Max Tokens | 8,192 | 256 – 16,384 |
+| Model | `claude-sonnet-5` | Any Anthropic model ID |
+| Max Tokens | 12,288 | 256 – 16,384 |
 | Temperature | 0.0 | 0.0 – 2.0 |
 
 ### Tools

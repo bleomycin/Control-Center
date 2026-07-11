@@ -28,7 +28,7 @@ class AssistantSettingsForm(TailwindFormMixin, forms.ModelForm):
         max_length=100,
         widget=forms.TextInput(attrs={
             "list": "model-choices",
-            "placeholder": "claude-sonnet-4-6",
+            "placeholder": "claude-sonnet-5",
         }),
         help_text="Select a model or type a custom model ID.",
     )
@@ -52,7 +52,7 @@ class AssistantSettingsForm(TailwindFormMixin, forms.ModelForm):
         if not _MODEL_ID_RE.match(model):
             raise forms.ValidationError(
                 "That doesn't look like an Anthropic model ID — expected "
-                "something like 'claude-sonnet-4-6'. Pick one from the list "
+                "something like 'claude-sonnet-5'. Pick one from the list "
                 "or check the ID."
             )
         return model

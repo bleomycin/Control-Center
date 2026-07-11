@@ -122,6 +122,20 @@ class Command(BaseCommand):
             self.stderr.write(self.style.ERROR("No API key configured."))
             return
 
+        # send_message only attaches temperature for allowlisted models
+        # (Opus 4.7+/Sonnet 5 removed sampling params) — on any other model
+        # every run would silently use the identical default config and the
+        # benchmark's recommendation would be noise. Refuse instead.
+        from assistant.client import _model_accepts_temperature
+        if not _model_accepts_temperature(settings.model):
+            self.stderr.write(self.style.ERROR(
+                f"Model {settings.model!r} does not accept the temperature "
+                "parameter, so this benchmark cannot vary anything. Point "
+                "Settings > Assistant at a temperature-capable model "
+                "(e.g. claude-sonnet-4-6) first."
+            ))
+            return
+
         original_temp = settings.temperature
         self._cleanup()
 

@@ -250,16 +250,24 @@ class Command(BaseCommand):
         tools = _get_active_tools([])
         messages = [{"role": "user", "content": "Say hi."}]
 
-        r1 = client.messages.create(
-            model=model_name, max_tokens=50, temperature=0.0,
+        # Mirror real fast-mode request shape: pinned thinking config (a
+        # thinking mismatch is a cache invalidator, and Sonnet 5 defaults
+        # adaptive thinking ON when the param is omitted), and temperature
+        # only for models that still accept it (Sonnet 5 / Opus 4.7+ 400).
+        from assistant.client import MODE_CONFIGS, _model_accepts_temperature
+        create_kwargs = dict(
+            model=model_name, max_tokens=50,
             system=system, tools=tools, messages=messages,
         )
+        if "thinking" in MODE_CONFIGS["fast"]:
+            create_kwargs["thinking"] = MODE_CONFIGS["fast"]["thinking"]
+        if _model_accepts_temperature(model_name):
+            create_kwargs["temperature"] = 0.0
+
+        r1 = client.messages.create(**create_kwargs)
         creation = getattr(r1.usage, "cache_creation_input_tokens", 0) or 0
 
-        r2 = client.messages.create(
-            model=model_name, max_tokens=50, temperature=0.0,
-            system=system, tools=tools, messages=messages,
-        )
+        r2 = client.messages.create(**create_kwargs)
         read = getattr(r2.usage, "cache_read_input_tokens", 0) or 0
 
         details = (
@@ -272,8 +280,20 @@ class Command(BaseCommand):
         return False, f"No cache hit (cache_read={read})", details
 
     def test_temperature_passed(self):
-        """A1: Verify temperature=0.0 produces deterministic responses."""
-        from assistant.client import send_message
+        """A1: Verify temperature reaches the API on capable models.
+
+        On models without sampling params (Opus 4.7+/Sonnet 5) send_message
+        omits temperature by design — nothing to verify, so report a skip
+        instead of a hollow pass.
+        """
+        from assistant.client import send_message, _model_accepts_temperature
+        from assistant.models import AssistantSettings
+
+        model = AssistantSettings.load().model
+        if not _model_accepts_temperature(model):
+            return True, f"skipped — {model} has no temperature param", (
+                "send_message omits temperature for this model by design"
+            )
 
         session = self._create_session("temperature")
         r1 = send_message(session, "What is 2+2? Reply with ONLY the number, nothing else.")
